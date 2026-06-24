@@ -1,0 +1,52 @@
+{
+  "name": "omp-developer-cost-status",
+  "version": "0.1.0",
+  "description": "Developer time cost statusline plugin for OMP/OpenCode.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./tui": {
+      "import": "./src/tui.tsx",
+      "types": "./src/tui.tsx"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
+  },
+  "engines": {
+    "opencode": ">=1.17.0"
+  },
+  "keywords": [
+    "omp",
+    "opencode",
+    "plugin",
+    "statusline",
+    "developer-cost"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klondikemarlen/omp-developer-cost-status.git"
+  },
+  "homepage": "https://github.com/klondikemarlen/omp-developer-cost-status#readme",
+  "bugs": {
+    "url": "https://github.com/klondikemarlen/omp-developer-cost-status/issues"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.17.9",
+    "@opentui/solid": "^0.3.4",
+    "solid-js": "^1.9.9"
+  },
+  "devDependencies": {
+    "@opentui/core": "^0.3.4",
+    "@opentui/keymap": "^0.3.4",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.2"
+  }
+}
