@@ -16,13 +16,19 @@ OMP plugin that adds a developer-time cost meter to the footer status line.
 
 ## Behavior
 
-The plugin writes footer status via OMP's extension UI status API.
+The plugin writes status via `ctx.ui.setStatus(...)`.
 
-Display style:
+Current OMP limitation:
+
+- plugin status renders on the separate hook-status line below the main prompt status bar
+- it does **not** render inline beside the built-in usage/cost segment
+- inline placement would require an upstream OMP status-line extension point or an OMP fork
+
+Display style for the current plugin API:
 
 - format: `$4.76 (dev)`
 - lowercase suffix in parentheses
-- dim footer styling
+- dim hook-status styling
 
 Billing behavior:
 
@@ -30,7 +36,6 @@ Billing behavior:
 - only full elapsed windows are billed
 - if you resume the same session id later, the plugin reloads the last persisted state and keeps adding to it
 - a new session id starts a new meter
-
 ## Defaults
 
 The plugin ships with generic Canadian defaults:
@@ -75,13 +80,20 @@ For local development from a checkout:
 git clone git@github.com:klondikemarlen/omp-developer-cost-status.git
 cd omp-developer-cost-status
 npm install
-omp install "$PWD"
+omp install /absolute/path/to/omp-developer-cost-status
+```
+
+Example:
+
+```bash
+omp install /home/marlen/code/klondikemarlen/omp-developer-cost-status
 ```
 
 OMP symlinks a local path install and watches it for changes.
 
-After install, restart OMP if it is already running.
+After install, restart OMP if it is already running, or run `/reload-plugins`.
 
+Then run `/developer-cost-status` once to confirm the extension loaded.
 ## Configure plugin settings
 
 Inspect current settings:
@@ -120,6 +132,13 @@ The plugin registers a slash command for checking the current meter:
 ```text
 /developer-cost-status
 ```
+
+## Troubleshooting
+
+- `omp plugin list` should show `omp-developer-cost-status`.
+- `omp plugin config list omp-developer-cost-status` should show the current settings.
+- If the plugin was already installed in a running OMP session, run `/reload-plugins` or restart OMP before checking the status line.
+- The status text is rendered by `ctx.ui.setStatus(...)`, so it appears on OMP's separate hook-status line rather than inline beside the built-in usage/cost segment.
 
 ## Development
 
