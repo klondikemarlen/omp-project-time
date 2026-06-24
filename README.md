@@ -27,6 +27,8 @@ It matches the built-in subagent cost style as closely as the current plugin API
 
 It does **not** render immediately after the built-in `... · $4.76 (sub)` text. OpenCode renders that built-in usage block inside the prompt component itself, while this plugin renders in the prompt row's separate right-aligned plugin slot.
 
+Billing is tracked per parent session id. If you later resume the same session id, the plugin reloads that saved total and keeps adding to it. Starting a new session id starts a new meter.
+
 ## Defaults
 
 The plugin now works out of the box with generic Canadian defaults:
