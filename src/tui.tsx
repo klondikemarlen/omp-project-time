@@ -17,6 +17,35 @@ const STORAGE_KEY_PREFIX = "developer-cost:session:"
 
 const SETTLE_INTERVAL_MS = 15_000
 
+function storageKey(sessionId: string): string {
+  return `${STORAGE_KEY_PREFIX}${sessionId}`
+}
+
+function sameDeveloperCostState(left: DeveloperCostState, right: DeveloperCostState): boolean {
+  return (
+    left.totalCost === right.totalCost &&
+    left.activeStartAtMs === right.activeStartAtMs &&
+    left.activeUntilMs === right.activeUntilMs &&
+    left.billedWindows === right.billedWindows &&
+    left.lastPromptAtMs === right.lastPromptAtMs
+  )
+}
+
+function stateOrEmpty(
+  states: Map<string, DeveloperCostState>,
+  sessionId: string,
+): DeveloperCostState {
+  return states.get(sessionId) ?? emptyDeveloperCostState()
+}
+
+function isParentUserPrompt(api: TuiApi, sessionId: string, role: string): boolean {
+  if (role !== "user") return false
+
+  return !api.state.session.get(sessionId)?.parentID
+}
+
+type TuiApi = Parameters<TuiPlugin>[0]
+
 type StatusTheme = Pick<TuiThemeCurrent, "textMuted">
 
 function StatusChip(props: {
@@ -56,7 +85,7 @@ const tui: TuiPlugin = async (api, options) => {
   const bump = () => setRevision((value) => value + 1)
 
   async function persistSessionState(sessionId: string, state: DeveloperCostState) {
-    api.kv.set(`${STORAGE_KEY_PREFIX}${sessionId}`, state)
+    api.kv.set(storageKey(sessionId), state)
     sessionStates.set(sessionId, state)
     bump()
   }
@@ -67,13 +96,15 @@ const tui: TuiPlugin = async (api, options) => {
     const existing = loadingSessions.get(sessionId)
     if (existing) return existing
 
-    const task = Promise.resolve().then(() => {
-      const stored = api.kv.get(`${STORAGE_KEY_PREFIX}${sessionId}`)
-      sessionStates.set(sessionId, parseDeveloperCostState(stored) ?? emptyDeveloperCostState())
-      bump()
-    }).finally(() => {
-      loadingSessions.delete(sessionId)
-    })
+    const task = Promise.resolve()
+      .then(() => {
+        const stored = api.kv.get(storageKey(sessionId))
+        sessionStates.set(sessionId, parseDeveloperCostState(stored) ?? emptyDeveloperCostState())
+        bump()
+      })
+      .finally(() => {
+        loadingSessions.delete(sessionId)
+      })
 
     loadingSessions.set(sessionId, task)
     return task
@@ -85,9 +116,9 @@ const tui: TuiPlugin = async (api, options) => {
 
     for (const [sessionId, state] of sessionStates) {
       const nextState = settleDeveloperCostState(state, now, config)
-      if (JSON.stringify(nextState) === JSON.stringify(state)) continue
+      if (sameDeveloperCostState(nextState, state)) continue
 
-      api.kv.set(`${STORAGE_KEY_PREFIX}${sessionId}`, nextState)
+      api.kv.set(storageKey(sessionId), nextState)
       sessionStates.set(sessionId, nextState)
       changed = true
     }
@@ -112,13 +143,10 @@ const tui: TuiPlugin = async (api, options) => {
   api.lifecycle.onDispose(
     api.event.on("message.updated", (event) => {
       const info = event.properties.info
-      if (info.role !== "user") return
-
-      const session = api.state.session.get(info.sessionID)
-      if (session?.parentID) return
+      if (!isParentUserPrompt(api, info.sessionID, info.role)) return
 
       void ensureSessionLoaded(info.sessionID).then(() => {
-        const currentState = sessionStates.get(info.sessionID) ?? emptyDeveloperCostState()
+        const currentState = stateOrEmpty(sessionStates, info.sessionID)
         const promptAtMs = info.time?.created ?? Date.now()
         const nextState = recordDeveloperPrompt(currentState, promptAtMs, config)
 
