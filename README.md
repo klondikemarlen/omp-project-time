@@ -6,12 +6,13 @@ OMP plugin that adds a developer-time cost meter to the footer status line.
 
 **WHY this plugin exists:** OMP shows model and tool activity, but it does not track what the developer's own active time costs while they drive a session.
 
-**WHAT this plugin produces:** A footer status segment like `$3.13 (dev)` that stays active for 5 minutes after each prompt and keeps ticking while that window is still open.
+**WHAT this plugin produces:** A footer status segment like `$3.13 (dev)` that stays active for 5 minutes after each prompt and refreshes on a configurable cadence.
 
 **Decision Rules:**
 - **Prompt-driven billing:** Only real agent prompts start or extend the timer.
 - **Five-minute liveness:** Each prompt keeps the meter active for `activeWindowMinutes`.
-- **Live display, settled billing:** The number updates continuously while active, but persisted billing still settles in 5-minute windows.
+- **Configurable refresh:** The visible number refreshes every `refreshIntervalSeconds` so teams can slow it down if constant motion is distracting.
+- **Live display, settled billing:** The number updates during an active window, but persisted billing still settles in 5-minute windows.
 - **Session-scoped meter:** Billing is keyed to the current top-level session id. Resume the same session and the meter continues.
 - **Top-level only:** Subagent and artifact sessions do not get their own developer meter.
 
@@ -28,9 +29,8 @@ Current OMP limitation:
 Display style:
 
 - format: `$3.13 (dev)`
-- lowercase suffix in parentheses
 - dim hook-status styling
-- updates every second while the session is active
+- refreshes every `refreshIntervalSeconds` while the session is active
 
 Billing behavior:
 
@@ -47,6 +47,7 @@ The plugin ships with simple defaults:
 - `monthlySalary`: `6500`
 - `hoursPerWeek`: `40`
 - `activeWindowMinutes`: `5`
+- `refreshIntervalSeconds`: `5`
 - `label`: `dev`
 
 That yields a default 5-minute developer cost of about `$3.13`.
@@ -63,6 +64,7 @@ Default example:
 monthlySalary = 6500
 hoursPerWeek = 40
 activeWindowMinutes = 5
+refreshIntervalSeconds = 5
 
 windowRate = $3.13
 ```
@@ -115,6 +117,7 @@ Set custom working time assumptions:
 ```bash
 omp plugin config set omp-developer-cost-status hoursPerWeek 37.5
 omp plugin config set omp-developer-cost-status activeWindowMinutes 5
+omp plugin config set omp-developer-cost-status refreshIntervalSeconds 10
 omp plugin config set omp-developer-cost-status label dev
 ```
 

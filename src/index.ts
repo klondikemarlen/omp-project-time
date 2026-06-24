@@ -6,6 +6,7 @@ import {
   formatDeveloperCost,
   parseDeveloperCostConfig,
   recordDeveloperPrompt,
+  refreshIntervalMs,
   settleDeveloperCostState,
   type DeveloperCostConfig,
   type DeveloperCostOptions,
@@ -15,7 +16,7 @@ import { DEVELOPER_COST_STATE_ENTRY, loadPersistedDeveloperCostState } from "./s
 
 const PLUGIN_NAME = "omp-developer-cost-status"
 const STATUS_KEY = "developer-cost-status"
-const SETTLE_INTERVAL_MS = 1_000
+const DEFAULT_REFRESH_INTERVAL_MS = refreshIntervalMs(parseDeveloperCostConfig())
 
 type RuntimeState = {
   activeContext?: ExtensionContext
@@ -98,31 +99,16 @@ export default function developerCostStatusExtension(pi: ExtensionApi) {
   const runtimeState: RuntimeState = {}
   const sessionStates = new Map<string, DeveloperCostState>()
 
-  const timer = setInterval(() => {
-    if (
-      runtimeState.activeContext === undefined ||
-      runtimeState.activeSessionId === undefined ||
-      runtimeState.activeConfig === undefined
-    ) {
-      return
-    }
+  const scheduleNextRefresh = (waitMs = DEFAULT_REFRESH_INTERVAL_MS): void => {
+    const timer = setTimeout(async () => {
+      const nextWaitMs = await refreshActiveStatus(sessionStates, runtimeState)
+      scheduleNextRefresh(nextWaitMs)
+    }, waitMs)
 
-    const currentState = stateForSession(
-      sessionStates,
-      runtimeState.activeContext,
-      runtimeState.activeSessionId,
-    )
-    const settledState = settleDeveloperCostState(
-      currentState,
-      Date.now(),
-      runtimeState.activeConfig,
-    )
+    timer.unref?.()
+  }
 
-    sessionStates.set(runtimeState.activeSessionId, settledState)
-    updateStatus(runtimeState.activeContext, settledState, runtimeState.activeConfig)
-  }, SETTLE_INTERVAL_MS)
-
-  timer.unref?.()
+  scheduleNextRefresh()
 
   pi.registerCommand("developer-cost-status", {
     description: "Show the developer cost meter for the current session",
@@ -213,6 +199,32 @@ async function activateSession(
   runtimeState.activeConfig = config
 
   updateStatus(ctx, settledState, config)
+}
+
+async function refreshActiveStatus(
+  sessionStates: Map<string, DeveloperCostState>,
+  runtimeState: RuntimeState,
+): Promise<number> {
+  if (
+    runtimeState.activeContext === undefined ||
+    runtimeState.activeSessionId === undefined
+  ) {
+    return DEFAULT_REFRESH_INTERVAL_MS
+  }
+
+  const config = await loadConfig(runtimeState.activeContext)
+  const currentState = stateForSession(
+    sessionStates,
+    runtimeState.activeContext,
+    runtimeState.activeSessionId,
+  )
+  const settledState = settleDeveloperCostState(currentState, Date.now(), config)
+
+  sessionStates.set(runtimeState.activeSessionId, settledState)
+  runtimeState.activeConfig = config
+  updateStatus(runtimeState.activeContext, settledState, config)
+
+  return refreshIntervalMs(config)
 }
 
 function clearActiveStatus(runtimeState: RuntimeState, ctx: ExtensionContext): void {

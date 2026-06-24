@@ -7,6 +7,7 @@ import {
   formatDeveloperCost,
   parseDeveloperCostConfig,
   recordDeveloperPrompt,
+  refreshIntervalMs,
   settleDeveloperCostState,
   windowRate,
 } from "../src/billing.js"
@@ -19,7 +20,12 @@ test("parses the default configuration", () => {
   assert.equal(config.monthlySalary, 6_500)
   assert.equal(config.hoursPerWeek, 40)
   assert.equal(config.activeWindowMinutes, 5)
+  assert.equal(config.refreshIntervalSeconds, 5)
   assert.equal(config.label, "dev")
+})
+
+test("computes the configured refresh interval", () => {
+  assert.equal(refreshIntervalMs(config), 5_000)
 })
 
 test("computes the five minute developer rate", () => {

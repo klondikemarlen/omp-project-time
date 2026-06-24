@@ -1,6 +1,6 @@
 {
   "name": "omp-developer-cost-status",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Developer time cost status line plugin for OMP.",
   "type": "module",
   "license": "MIT",
@@ -50,6 +50,12 @@
         "default": 5,
         "min": 1,
         "description": "How long one prompt keeps the developer meter active."
+      },
+      "refreshIntervalSeconds": {
+        "type": "number",
+        "default": 5,
+        "min": 1,
+        "description": "How often the status text refreshes while the meter is active."
       },
       "label": {
         "type": "string",
