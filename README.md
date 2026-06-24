@@ -1,37 +1,39 @@
 # omp-developer-cost-status
 
-OpenCode/OMP TUI plugin that adds developer time cost to the session status line.
+OMP plugin that adds a developer-time cost meter to the footer status line.
 
 ## Intent
 
-**WHY this plugin exists:** Agent cost shows model spend. It does not show what the developer's own active time costs while driving the session.
+**WHY this plugin exists:** OMP shows model and tool activity, but it does not track what the developer's own active time costs while they drive a session.
 
-**WHAT this plugin produces:** A session status-line segment like `$3.33 (dev)` that increments in 5-minute active windows.
+**WHAT this plugin produces:** A footer status segment like `$3.33 (dev)` that accrues in 5-minute active windows and resumes with the same session id.
 
 **Decision Rules:**
-- **Prompt-driven activity:** A session becomes active when the user sends a direct prompt into that session.
-- **Five-minute extension:** Each prompt extends activity by 5 minutes by default.
-- **Full windows only:** Cost is added only after a full active window elapses. Partial windows do not bill.
-- **No subagent billing:** Subagent sessions are ignored. Only the user-driven parent session is tracked.
+- **Prompt-driven billing:** Only real agent prompts bill time. Slash commands and shell shortcuts do not.
+- **Session-scoped meter:** Billing is keyed to the current top-level session id. Resume the same session and the meter continues.
+- **Top-level only:** Subagent and artifact sessions do not get their own developer meter.
 - **Public-safe defaults:** The built-in defaults are generic Canadian full-stack developer values, not a personal salary.
 
-## Status-line behavior
+## Behavior
 
-The plugin renders on the `session_prompt_right` TUI slot.
+The plugin writes footer status via OMP's extension UI status API.
 
-It matches the built-in subagent cost style as closely as the current plugin API allows:
+Display style:
 
-- display format: `$4.76 (dev)`
+- format: `$4.76 (dev)`
 - lowercase suffix in parentheses
-- muted text styling
+- dim footer styling
 
-It does **not** render immediately after the built-in `... · $4.76 (sub)` text. OpenCode renders that built-in usage block inside the prompt component itself, while this plugin renders in the prompt row's separate right-aligned plugin slot.
+Billing behavior:
 
-Billing is tracked per parent session id. If you later resume the same session id, the plugin reloads that saved total and keeps adding to it. Starting a new session id starts a new meter.
+- each prompt activates billing for `activeWindowMinutes`
+- only full elapsed windows are billed
+- if you resume the same session id later, the plugin reloads the last persisted state and keeps adding to it
+- a new session id starts a new meter
 
 ## Defaults
 
-The plugin now works out of the box with generic Canadian defaults:
+The plugin ships with generic Canadian defaults:
 
 - `annualSalary`: `80000`
 - `hoursPerWeek`: `40`
@@ -61,84 +63,65 @@ windowRate = $3.33
 
 ## Install
 
-This plugin uses OpenCode's `plugin` config, not the legacy single-file `omp plugin install` flow used by older `omp.extensions` packages.
+From GitHub:
 
-For this private repository, the simplest install is a local checkout.
+```bash
+omp install github:klondikemarlen/omp-developer-cost-status
+```
+
+For local development from a checkout:
 
 ```bash
 git clone git@github.com:klondikemarlen/omp-developer-cost-status.git
 cd omp-developer-cost-status
 npm install
+omp install "$PWD"
 ```
 
-Then add the plugin directory to `~/.config/opencode/opencode.json` or your project `opencode.json`:
+OMP symlinks a local path install and watches it for changes.
 
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    "/absolute/path/to/omp-developer-cost-status"
-  ]
-}
+After install, restart OMP if it is already running.
+
+## Configure plugin settings
+
+Inspect current settings:
+
+```bash
+omp plugin config list omp-developer-cost-status
 ```
 
-Restart OMP/OpenCode after changing plugin config.
+Set a custom salary:
 
-### Override the defaults
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    [
-      "/absolute/path/to/omp-developer-cost-status",
-      {
-        "annualSalary": 95000,
-        "hoursPerWeek": 37.5,
-        "weeksPerYear": 48,
-        "activeWindowMinutes": 5,
-        "currencyCode": "CAD",
-        "label": "dev"
-      }
-    ]
-  ]
-}
+```bash
+omp plugin config set omp-developer-cost-status annualSalary 95000
 ```
 
-## How plugin installation works
+Set custom working time assumptions:
 
-OpenCode supports two plugin loading paths:
+```bash
+omp plugin config set omp-developer-cost-status hoursPerWeek 37.5
+omp plugin config set omp-developer-cost-status weeksPerYear 48
+```
 
-1. Local plugin directories or files
-2. NPM package specs in `opencode.json`
+Optional settings:
 
-NPM plugins are installed automatically at startup. This repo is private and not published to npm, so the recommended path is a local checkout referenced from `opencode.json`.
+```bash
+omp plugin config set omp-developer-cost-status activeWindowMinutes 5
+omp plugin config set omp-developer-cost-status currencyCode CAD
+omp plugin config set omp-developer-cost-status label dev
+```
 
-## Configuration
+The extension also accepts the legacy `annualSalaryUsd` field if older persisted data or tests still use it.
 
-All options are optional.
+## Status command
 
-Primary options:
+The plugin registers a slash command for checking the current meter:
 
-- `annualSalary` — defaults to `80000`
-- `hoursPerWeek` — defaults to `40`
-- `weeksPerYear` — defaults to `50`
-
-Other options:
-
-- `activeWindowMinutes` — defaults to `5`
-- `currencyCode` — defaults to `CAD`
-- `label` — defaults to `dev`
-
-Backward compatibility:
-
-- `annualSalaryUsd` is still accepted as a legacy alias for `annualSalary`
-
-If a provided numeric value is non-positive, that field falls back to its default.
+```text
+/developer-cost-status
+```
 
 ## Development
-
-Runtime loading uses the source `src/tui.tsx` entrypoint directly. `npm run build` is a typecheck, not a bundling step.
 
 ```bash
 npm install

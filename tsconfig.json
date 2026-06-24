@@ -3,16 +3,10 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "outDir": "dist",
-    "rootDir": "src",
     "strict": true,
-    "declaration": true,
-    "sourceMap": true,
-    "jsx": "preserve",
-    "jsxImportSource": "@opentui/solid",
     "types": ["node"],
     "skipLibCheck": true,
     "noEmitOnError": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": ["src/**/*.ts", "test/**/*.ts"]
 }

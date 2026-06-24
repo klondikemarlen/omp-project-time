@@ -44,7 +44,7 @@ const CANADIAN_LOCALE = "en-CA"
 const MINUTES_PER_HOUR = 60
 const MS_PER_MINUTE = 60 * 1000
 
-export function parseDeveloperCostConfig(options: DeveloperCostOptions | undefined): DeveloperCostConfig {
+export function parseDeveloperCostConfig(options?: DeveloperCostOptions): DeveloperCostConfig {
   return {
     annualSalary: parseAnnualSalary(options),
     hoursPerWeek: parsePositiveNumber(options?.hoursPerWeek) ?? DEFAULT_HOURS_PER_WEEK,

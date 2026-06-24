@@ -1,7 +1,7 @@
 {
   "name": "omp-developer-cost-status",
-  "version": "0.1.0",
-  "description": "Developer time cost statusline plugin for OMP/OpenCode.",
+  "version": "0.2.0",
+  "description": "Developer time cost status line plugin for OMP.",
   "type": "module",
   "license": "MIT",
   "files": [
@@ -9,22 +9,13 @@
     "README.md",
     "LICENSE"
   ],
-  "exports": {
-    "./tui": {
-      "import": "./src/tui.tsx",
-      "types": "./src/tui.tsx"
-    }
-  },
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test \"test/**/*.test.ts\""
   },
-  "engines": {
-    "opencode": ">=1.17.0"
-  },
   "keywords": [
     "omp",
-    "opencode",
+    "oh-my-pi",
     "plugin",
     "statusline",
     "developer-cost"
@@ -37,14 +28,51 @@
   "bugs": {
     "url": "https://github.com/klondikemarlen/omp-developer-cost-status/issues"
   },
+  "omp": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "settings": {
+      "annualSalary": {
+        "type": "number",
+        "default": 80000,
+        "min": 1,
+        "description": "Annual developer salary used for the active-time meter."
+      },
+      "hoursPerWeek": {
+        "type": "number",
+        "default": 40,
+        "min": 1,
+        "description": "Working hours per week used for the active-time meter."
+      },
+      "weeksPerYear": {
+        "type": "number",
+        "default": 50,
+        "min": 1,
+        "description": "Working weeks per year used for the active-time meter."
+      },
+      "activeWindowMinutes": {
+        "type": "number",
+        "default": 5,
+        "min": 1,
+        "description": "How long one prompt keeps the developer meter active."
+      },
+      "currencyCode": {
+        "type": "string",
+        "default": "CAD",
+        "description": "ISO currency code used when rendering the meter."
+      },
+      "label": {
+        "type": "string",
+        "default": "dev",
+        "description": "Lowercase suffix shown in the status line, such as dev."
+      }
+    }
+  },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.17.9",
-    "@opentui/solid": "^0.3.4",
-    "solid-js": "^1.9.9"
+    "@oh-my-pi/pi-coding-agent": "^16.1.16"
   },
   "devDependencies": {
-    "@opentui/core": "^0.3.4",
-    "@opentui/keymap": "^0.3.4",
     "@types/node": "^24.0.0",
     "tsx": "^4.20.6",
     "typescript": "^5.8.2"
