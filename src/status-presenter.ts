@@ -3,7 +3,7 @@ import {
   formatDeveloperCost,
   type DeveloperCostConfig,
   type DeveloperCostState,
-} from "./billing.js"
+} from "./billing/index.js"
 import type { ExtensionContext } from "./extension-types.js"
 
 export const STATUS_KEY = "developer-cost-status"
