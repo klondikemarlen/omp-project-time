@@ -40,15 +40,22 @@ const MS_PER_MINUTE = SECONDS_PER_MINUTE * MS_PER_SECOND
 const MS_PER_HOUR = MINUTES_PER_HOUR * MS_PER_MINUTE
 
 export function parseDeveloperCostConfig(options?: DeveloperCostOptions): DeveloperCostConfig {
+  const monthlySalary = parsePositiveNumber(options?.monthlySalary) ?? DEFAULT_MONTHLY_SALARY
+  const hoursPerWeek = parsePositiveNumber(options?.hoursPerWeek) ?? DEFAULT_HOURS_PER_WEEK
+  const weeksPerYear = parsePositiveNumber(options?.weeksPerYear) ?? DEFAULT_WEEKS_PER_YEAR
+  const activeWindowMinutes =
+    parsePositiveNumber(options?.activeWindowMinutes) ?? DEFAULT_ACTIVE_WINDOW_MINUTES
+  const refreshIntervalSeconds =
+    parsePositiveNumber(options?.refreshIntervalSeconds) ?? DEFAULT_REFRESH_INTERVAL_SECONDS
+  const label = parseNonEmptyString(options?.label)?.toLowerCase() ?? DEFAULT_LABEL
+
   return {
-    monthlySalary: parsePositiveNumber(options?.monthlySalary) ?? DEFAULT_MONTHLY_SALARY,
-    hoursPerWeek: parsePositiveNumber(options?.hoursPerWeek) ?? DEFAULT_HOURS_PER_WEEK,
-    weeksPerYear: parsePositiveNumber(options?.weeksPerYear) ?? DEFAULT_WEEKS_PER_YEAR,
-    activeWindowMinutes:
-      parsePositiveNumber(options?.activeWindowMinutes) ?? DEFAULT_ACTIVE_WINDOW_MINUTES,
-    refreshIntervalSeconds:
-      parsePositiveNumber(options?.refreshIntervalSeconds) ?? DEFAULT_REFRESH_INTERVAL_SECONDS,
-    label: parseNonEmptyString(options?.label)?.toLowerCase() ?? DEFAULT_LABEL,
+    monthlySalary,
+    hoursPerWeek,
+    weeksPerYear,
+    activeWindowMinutes,
+    refreshIntervalSeconds,
+    label,
   }
 }
 
@@ -65,12 +72,17 @@ export function parseDeveloperCostState(value: unknown): DeveloperCostState | un
   const totalCost = parseDecimalString(candidate.totalCost)
   if (totalCost === undefined) return undefined
 
+  const activeStartAtMs = parseOptionalNumber(candidate.activeStartAtMs)
+  const activeUntilMs = parseOptionalNumber(candidate.activeUntilMs)
+  const lastSettledAtMs = parseOptionalNumber(candidate.lastSettledAtMs)
+  const lastPromptAtMs = parseOptionalNumber(candidate.lastPromptAtMs)
+
   return {
     totalCost,
-    activeStartAtMs: parseOptionalNumber(candidate.activeStartAtMs),
-    activeUntilMs: parseOptionalNumber(candidate.activeUntilMs),
-    lastSettledAtMs: parseOptionalNumber(candidate.lastSettledAtMs),
-    lastPromptAtMs: parseOptionalNumber(candidate.lastPromptAtMs),
+    activeStartAtMs,
+    activeUntilMs,
+    lastSettledAtMs,
+    lastPromptAtMs,
   }
 }
 
