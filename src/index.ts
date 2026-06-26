@@ -1,4 +1,4 @@
-import { loadDeveloperCostConfigFromFiles } from "./config-loader.js"
+import { loadDeveloperCostConfigFromFiles } from "./load-developer-cost-config-from-files.js"
 import { DeveloperCostStatusRuntime } from "./developer-cost-status-runtime.js"
 import type { ExtensionApi, ExtensionOptions } from "./extension-types.js"
 

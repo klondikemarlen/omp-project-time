@@ -3,7 +3,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { parseDeveloperCostConfig, type DeveloperCostConfig } from "../src/billing.js"
+import { parseDeveloperCostConfig } from "../src/billing/parse-developer-cost-config.js"
+import type { ConfigLoader } from "../src/extension-types.js"
 import developerCostStatusExtension, { type ExtensionApi } from "../src/index.js"
 import { DEVELOPER_COST_STATE_ENTRY } from "../src/session-state.js"
 
@@ -26,6 +27,21 @@ test("records prompts and status for top-level sessions", async () => {
   assert.equal(runtime.entries.length, 1)
   assert.equal(runtime.entries[0]?.customType, DEVELOPER_COST_STATE_ENTRY)
   assert.equal(runtime.statusText, "dim:$0.00 (dev)")
+})
+
+test("passes context cwd to the config loader", async () => {
+  const loadedCwds: string[] = []
+  const loadConfig: ConfigLoader = async (cwd) => {
+    loadedCwds.push(cwd)
+
+    return parseDeveloperCostConfig()
+  }
+  const runtime = createExtensionRuntime({ loadConfig })
+  const ctx = createContext(runtime, { parentSession: undefined })
+
+  await runtime.handlers.get("before_agent_start")?.({ prompt: "hello" } as never, ctx as never)
+
+  assert.deepEqual(loadedCwds, [ctx.cwd])
 })
 
 test("restores persisted state from full session history", async () => {
@@ -239,9 +255,8 @@ test("clears status when session switch config load fails", async () => {
 })
 
 type RuntimeOptions = {
-  loadConfig?: () => Promise<DeveloperCostConfig>
+  loadConfig?: ConfigLoader
 }
-
 
 function createExtensionRuntime(options: RuntimeOptions = {}): Runtime {
   const runtime: Runtime = {

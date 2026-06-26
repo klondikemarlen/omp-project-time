@@ -3,10 +3,12 @@ import {
   recordDeveloperPrompt,
   refreshIntervalMs,
   settleDeveloperCostState,
-  type DeveloperCostConfig,
-  type DeveloperCostState,
-} from "./billing.js"
-import { loadDeveloperCostConfig } from "./config-loader.js"
+} from "./billing/index.js"
+import type {
+  DeveloperCostConfig,
+  DeveloperCostState,
+} from "./billing/index.js"
+import { loadDeveloperCostConfig } from "./load-developer-cost-config.js"
 import {
   clearStatus,
   errorMessage,

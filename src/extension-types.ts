@@ -1,4 +1,4 @@
-import type { DeveloperCostConfig } from "./billing.js"
+import type { DeveloperCostConfig } from "./billing/index.js"
 
 export type SessionHeaderLike = {
   parentSession?: unknown
