@@ -111,17 +111,13 @@ omp install github:klondikemarlen/omp-developer-cost-status
 For local development from a checkout:
 
 ```bash
-git clone git@github.com:klondikemarlen/omp-developer-cost-status.git
+git clone https://github.com/klondikemarlen/omp-developer-cost-status.git
 cd omp-developer-cost-status
 npm install
 omp install /absolute/path/to/omp-developer-cost-status
 ```
 
-Example:
-
-```bash
-omp install /home/marlen/code/klondikemarlen/omp-developer-cost-status
-```
+Replace `/absolute/path/to/omp-developer-cost-status` with your checkout path.
 
 OMP symlinks a local path install and watches it for changes.
 
@@ -181,6 +177,18 @@ npm test
 npm run build
 npm pack --dry-run
 ```
+
+## Development workflow
+
+For public user-facing changes, use the GitHub feature issue and pull request templates:
+
+1. Create a GitHub issue with the user story and acceptance criteria.
+2. Create a branch named for the issue.
+3. Open a pull request linked to the issue.
+4. Review the diff and run the smallest tests that cover the change.
+5. Merge only after the PR is reviewed and checks pass.
+6. For published changes, merge first, then bump the package version and changelog on `main`.
+7. Reinstall from the remote source and verify the installed plugin.
 
 ## Troubleshooting
 
