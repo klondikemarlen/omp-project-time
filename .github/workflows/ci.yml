@@ -1,4 +1,4 @@
-name: CI
+name: Continuous Integration
 
 on:
   pull_request:
@@ -8,6 +8,7 @@ on:
 
 jobs:
   test:
+    name: Test, typecheck, and package
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
