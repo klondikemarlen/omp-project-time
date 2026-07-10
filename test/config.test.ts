@@ -6,22 +6,23 @@ import test from "node:test"
 
 import { loadDeveloperCostConfigFromFiles } from "../src/index.js"
 
-const PLUGIN_NAME = "omp-developer-cost-status"
+const PLUGIN_NAME = "omp-developer-attention-status"
+const LEGACY_PLUGIN_NAME = "omp-developer-cost-status"
 
-test("loads updated plugin settings from disk", async () => {
+test("loads canonical plugin settings from disk", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
   const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
   const projectOverrides = path.join(directory, "missing-overrides.json")
 
   try {
     await writePluginSettings(pluginsLockfile, {
-      monthlySalary: 6_500,
+      monthlySalary: 7_500,
       label: "first",
     })
 
     const firstConfig = await loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides)
 
-    assert.equal(firstConfig.monthlySalary, 6_500)
+    assert.equal(firstConfig.monthlySalary, 7_500)
     assert.equal(firstConfig.label, "first")
 
     await writePluginSettings(pluginsLockfile, {
@@ -59,6 +60,68 @@ test("project overrides win over global plugin settings", async () => {
 
     assert.equal(config.monthlySalary, 9_000)
     assert.equal(config.label, "project")
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("loads legacy-only plugin settings after the package identity migration", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
+  const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
+  const projectOverrides = path.join(directory, "missing-overrides.json")
+
+  try {
+    await writePluginLockfile(pluginsLockfile, {
+      [LEGACY_PLUGIN_NAME]: {
+        monthlySalary: 7_500,
+        label: "legacy",
+      },
+    })
+
+    const config = await loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides)
+
+    assert.equal(config.monthlySalary, 7_500)
+    assert.equal(config.label, "legacy")
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("applies legacy and canonical settings in migration precedence order", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
+  const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
+  const projectOverrides = path.join(directory, "plugin-overrides.json")
+
+  try {
+    await writePluginLockfile(pluginsLockfile, {
+      [LEGACY_PLUGIN_NAME]: {
+        monthlySalary: 1_000,
+        hoursPerWeek: 35,
+      },
+      [PLUGIN_NAME]: {
+        monthlySalary: 2_000,
+        hoursPerWeek: 36,
+        weeksPerYear: 50,
+      },
+    })
+    await writePluginLockfile(projectOverrides, {
+      [LEGACY_PLUGIN_NAME]: {
+        monthlySalary: 3_000,
+        weeksPerYear: 51,
+        activeWindowMinutes: 4,
+      },
+      [PLUGIN_NAME]: {
+        monthlySalary: 4_000,
+        activeWindowMinutes: 5,
+      },
+    })
+
+    const config = await loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides)
+
+    assert.equal(config.monthlySalary, 4_000)
+    assert.equal(config.hoursPerWeek, 36)
+    assert.equal(config.weeksPerYear, 51)
+    assert.equal(config.activeWindowMinutes, 5)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

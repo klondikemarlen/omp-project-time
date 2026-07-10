@@ -1,4 +1,4 @@
-# omp-developer-cost-status
+# omp-developer-attention-status
 
 OMP plugin that adds a developer attention and time-cost meter to the footer status line.
 
@@ -10,7 +10,7 @@ developer attention consumed while they drive a session.
 **WHAT this plugin produces:** A compact footer status segment like `$0.16 (dev)` that stays
 active after each prompt, plus an on-demand summary of developer cost, active time, and prompts.
 
-Canonical feature requirements live in [`spec/developer-cost-status.yml`](spec/developer-cost-status.yml).
+Canonical feature requirements live in [`spec/developer-attention-status.yml`](spec/developer-attention-status.yml).
 
 **Decision Rules:**
 - **Prompt-driven billing:** Only user agent prompts start or extend the timer.
@@ -114,19 +114,19 @@ activeWindowMinutes = 5
 From GitHub:
 
 ```bash
-omp install github:klondikemarlen/omp-developer-cost-status
+omp install github:klondikemarlen/omp-developer-attention-status
 ```
 
 For local development from a checkout:
 
 ```bash
-git clone https://github.com/klondikemarlen/omp-developer-cost-status.git
-cd omp-developer-cost-status
+git clone https://github.com/klondikemarlen/omp-developer-attention-status.git
+cd omp-developer-attention-status
 npm install
-omp install /absolute/path/to/omp-developer-cost-status
+omp install /absolute/path/to/omp-developer-attention-status
 ```
 
-Replace `/absolute/path/to/omp-developer-cost-status` with your checkout path.
+Replace `/absolute/path/to/omp-developer-attention-status` with your checkout path.
 
 OMP symlinks a local path install and watches it for changes.
 
@@ -134,36 +134,55 @@ After install, restart OMP if it is already running, or run `/reload-plugins`.
 
 Then run `/developer-cost-status` once to confirm the extension loaded.
 
+## Migrate from `omp-developer-cost-status`
+
+The package and configuration key changed to `omp-developer-attention-status`. Stop OMP before
+migrating: loading both packages at once registers duplicate lifecycle handlers and can double-bill.
+
+1. Record existing global settings with `omp plugin config list omp-developer-cost-status`.
+2. Run `omp plugin uninstall omp-developer-cost-status`.
+3. Run `omp install github:klondikemarlen/omp-developer-attention-status`.
+4. Reapply each recorded setting with `omp plugin config set omp-developer-attention-status <key> <value>`.
+
+The new package reads legacy settings as a fallback while those keys still exist; canonical
+`omp-developer-attention-status` settings override them. The old uninstaller removes its global
+settings, so record them before uninstalling. Copy an old project
+`.omp/plugin-overrides.json` setting key to `omp-developer-attention-status` when needed.
+
+Existing `developer-cost-status.state` session entries, the shared
+`~/.omp/developer-cost-status/spread-billing.json` ledger, the configurable `label`, and the
+`/developer-cost-status` command remain unchanged. No accumulated session state is reset.
+
 ## Runtime support
 
 - Node.js: `>=20.6.0`
 - OMP: tested against `@oh-my-pi/pi-coding-agent` `^16.1.16`
 
-The package ships its canonical spec in `spec/developer-cost-status.yml` so installed artifacts carry
-the same behavior contract as the repository.
+The package ships its canonical spec in `spec/developer-attention-status.yml` so installed artifacts
+carry the same behavior contract as the repository.
 
 ## Configure plugin settings
 
 Inspect current settings:
 
 ```bash
-omp plugin config list omp-developer-cost-status
+omp plugin config list omp-developer-attention-status
 ```
 
 Set a custom salary:
 
 ```bash
-omp plugin config set omp-developer-cost-status monthlySalary 9000
+omp plugin config set omp-developer-attention-status monthlySalary 9000
 ```
 
 Set custom working time assumptions:
 
 ```bash
-omp plugin config set omp-developer-cost-status hoursPerWeek 37.5
-omp plugin config set omp-developer-cost-status weeksPerYear 49
-omp plugin config set omp-developer-cost-status activeWindowMinutes 5
-omp plugin config set omp-developer-cost-status refreshIntervalSeconds 10
-omp plugin config set omp-developer-cost-status label dev
+omp plugin config set omp-developer-attention-status hoursPerWeek 37.5
+omp plugin config set omp-developer-attention-status weeksPerYear 49
+omp plugin config set omp-developer-attention-status activeWindowMinutes 5
+omp plugin config set omp-developer-attention-status refreshIntervalSeconds 10
+omp plugin config set omp-developer-attention-status label dev
 ```
 
 Setting changes are picked up on the next status refresh while a session is active. With the
@@ -177,9 +196,11 @@ restart after changing plugin code or install state.
 /developer-cost-status summary
 ```
 
-The default command shows the compact current meter total for the active top-level session.
-`summary` reports its session id, developer cost, active time, prompt count, and the last prompt's
-age and timestamp. It does not infer corrections, nudges, or outcomes.
+The package name is `omp-developer-attention-status`; `/developer-cost-status` remains unchanged to
+preserve existing command usage and persisted session data. The default command shows the compact
+current meter total for the active top-level session. `summary` reports its session id, developer
+cost, active time, prompt count, and the last prompt's age and timestamp. It does not infer
+corrections, nudges, or outcomes.
 
 ## Development
 
@@ -204,7 +225,7 @@ For public user-facing changes, use the GitHub feature issue and pull request te
 
 ## Troubleshooting
 
-- `omp plugin list` should show `omp-developer-cost-status`.
-- `omp plugin config list omp-developer-cost-status` should show the current settings.
+- `omp plugin list` should show `omp-developer-attention-status`.
+- `omp plugin config list omp-developer-attention-status` should show the current settings.
 - The status text is rendered by `ctx.ui.setStatus(...)`, so it appears on OMP's separate
   hook-status line rather than inline beside the built-in usage/cost segment.

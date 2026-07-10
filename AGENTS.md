@@ -1,4 +1,4 @@
-# omp-developer-cost-status Agent Guidance
+# omp-developer-attention-status Agent Guidance
 
 ## Code Style
 

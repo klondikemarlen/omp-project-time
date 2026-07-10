@@ -1,4 +1,4 @@
-feature: developer-cost-status
+feature: developer-attention-status
 status: stable
 requirements:
   - id: prompt_driven_activity

@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add persisted developer attention metrics and `/developer-cost-status summary`.
 - Divide overlapping top-level session cost across the active sessions.
 
+### Changed
+
+- Rename the package and repository to `omp-developer-attention-status`.
+
 ## [1.0.1] - 2026-07-03
 
 ### Added
