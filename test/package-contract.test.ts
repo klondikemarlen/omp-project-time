@@ -4,8 +4,10 @@ import test from "node:test"
 
 type PackageJson = {
   name?: string
-  dependencies?: Record<string, string>
   files?: string[]
+  scripts?: {
+    build?: string
+  }
   omp?: {
     extensions?: string[]
   }
@@ -18,19 +20,13 @@ test("package ships the OMP entrypoint and canonical spec", async () => {
 
   assert.equal(packageJson.name, "omp-developer-attention-status")
 
-  assert.deepEqual(packageJson.omp?.extensions, ["./src/index.ts"])
-  assert.ok(packageJson.files?.includes("spec"), "expected spec/ in package files")
-  assert.equal(
-    packageJson.dependencies?.["proper-lockfile"],
-    undefined,
-    "OMP's Bun validator cannot resolve the CJS dependency chain reached through proper-lockfile",
-  )
-
-  const ledgerSource = await readFile(new URL("../src/spread-billing-ledger.ts", import.meta.url), "utf8")
-  assert.doesNotMatch(
-    ledgerSource,
-    /\bproper-lockfile\b/,
-    "the published entrypoint must not reach proper-lockfile during OMP validation",
+  assert.deepEqual(packageJson.omp?.extensions, ["./dist/index.js"])
+  assert.ok(packageJson.files?.includes("dist"), "expected dist/ in package files")
+  assert.ok(packageJson.files?.includes("THIRD_PARTY_NOTICES.txt"), "expected third-party notices in package files")
+  assert.match(
+    packageJson.scripts?.build ?? "",
+    /\besbuild\s+src\/index\.ts\b.*\s--bundle\b.*\s--format=esm\b.*\s--outfile=dist\/index\.js\b/,
+    "expected build script to bundle src/index.ts as ESM at dist/index.js",
   )
 
   const canonicalSpecUrl = new URL("../spec/developer-attention-status.yml", import.meta.url)

@@ -1,7 +1,7 @@
-import { mkdir, readFile, rename, rmdir, stat, utimes, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
-import { setTimeout as delay } from "node:timers/promises"
+import { lock } from "proper-lockfile"
 
 import {
   parseDeveloperCostState,
@@ -23,11 +23,6 @@ type LedgerState = {
 
 type UpdateKind = "prompt" | "settle"
 
-// ponytail: ledger writes are short; use OS advisory locks if they become long-running.
-const LOCK_STALE_MS = 60_000
-const LOCK_UPDATE_MS = 30_000
-const LOCK_RETRY_MIN_MS = 100
-const LOCK_RETRY_MAX_MS = 1_000
 
 export class SpreadBillingLedger {
   private readonly filePath: string
@@ -127,40 +122,28 @@ export class SpreadBillingLedger {
 
   private async withLock<T>(operation: () => Promise<T>): Promise<T> {
     const parentPath = path.dirname(this.filePath)
-    const lockPath = `${this.filePath}.lock`
     await mkdir(parentPath, { recursive: true })
-    const lock = await acquireLock(lockPath)
-
-    let renewal: Promise<void> | undefined
-    let renewalError: Error | undefined
-    const renewalTimer = setInterval(() => {
-      if (renewal !== undefined) return
-
-      renewal = renewLock(lock)
-        .catch((error: unknown) => {
-          renewalError ??= asError(error)
-        })
-        .finally(() => {
-          renewal = undefined
-        })
-    }, LOCK_UPDATE_MS)
-    renewalTimer.unref()
+    const release = await lock(this.filePath, {
+      realpath: false,
+      stale: 60_000,
+      update: 30_000,
+      retries: {
+        forever: true,
+        factor: 1.5,
+        minTimeout: 100,
+        maxTimeout: 1_000,
+      },
+    })
     let operationFailed = false
 
     try {
-      const result = await operation()
-      await renewal
-      if (renewalError !== undefined) throw renewalError
-      await renewLock(lock)
-      return result
+      return await operation()
     } catch (error) {
       operationFailed = true
       throw error
     } finally {
-      clearInterval(renewalTimer)
-      await renewal
       try {
-        await releaseLock(lock)
+        await release()
       } catch (error) {
         if (!operationFailed) throw error
       }
@@ -288,84 +271,4 @@ function isStoredConfig(value: unknown): value is DeveloperCostConfig {
     typeof label === "string" &&
     label.length > 0
   )
-}
-
-type LedgerLock = {
-  path: string
-  updatedAtMs: number
-}
-
-async function acquireLock(lockPath: string): Promise<LedgerLock> {
-  let retryDelayMs = LOCK_RETRY_MIN_MS
-
-  while (true) {
-    try {
-      await mkdir(lockPath)
-      return updateLockTimestamp(lockPath)
-    } catch (error) {
-      if (errorCode(error) !== "EEXIST") throw error
-    }
-
-    let lockModifiedAtMs: number
-    try {
-      const lockStats = await stat(lockPath)
-      lockModifiedAtMs = lockStats.mtimeMs
-    } catch (error) {
-      if (errorCode(error) === "ENOENT") continue
-      throw error
-    }
-
-    if (Date.now() - lockModifiedAtMs >= LOCK_STALE_MS) {
-      try {
-        await rmdir(lockPath)
-      } catch (error) {
-        if (errorCode(error) !== "ENOENT") throw error
-      }
-      continue
-    }
-
-    await delay(retryDelayMs)
-    retryDelayMs = Math.min(retryDelayMs * 1.5, LOCK_RETRY_MAX_MS)
-  }
-}
-
-async function renewLock(lock: LedgerLock): Promise<void> {
-  await assertLockOwner(lock)
-  const updatedLock = await updateLockTimestamp(lock.path)
-  lock.updatedAtMs = updatedLock.updatedAtMs
-}
-
-async function releaseLock(lock: LedgerLock): Promise<void> {
-  await assertLockOwner(lock)
-  await rmdir(lock.path)
-}
-
-async function assertLockOwner(lock: LedgerLock): Promise<void> {
-  const lockStats = await stat(lock.path)
-  if (lockStats.mtimeMs !== lock.updatedAtMs) {
-    throw new Error("Developer cost status spread billing lock is no longer owned.")
-  }
-}
-
-async function updateLockTimestamp(lockPath: string): Promise<LedgerLock> {
-  const now = new Date()
-  await utimes(lockPath, now, now)
-  const lockStats = await stat(lockPath)
-
-  return {
-    path: lockPath,
-    updatedAtMs: lockStats.mtimeMs,
-  }
-}
-
-
-function errorCode(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("code" in error)) return undefined
-
-  const { code } = error
-  return typeof code === "string" ? code : undefined
-}
-
-function asError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error))
 }
