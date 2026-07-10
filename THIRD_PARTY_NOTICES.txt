@@ -1,4 +1,4 @@
-This distribution bundles the following third-party packages in dist/index.js.
+This distribution installs the following third-party runtime dependencies beside dist/index.js.
 
 proper-lockfile 4.1.2
 ---------------------

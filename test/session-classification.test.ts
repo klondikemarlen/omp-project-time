@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { isTopLevelSession } from "../src/session-classification.js"
+import { isTopLevelSession } from "../src/extension/session-classification.js"
 
 test("treats sessions without a parent as top-level", () => {
   assert.equal(isTopLevelSession({ getHeader: () => ({}) }), true)

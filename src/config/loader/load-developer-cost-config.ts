@@ -1,0 +1,11 @@
+import type { DeveloperCostConfig } from "../../billing/index.js"
+import { pluginsLockfilePath } from "../plugins-lockfile-path.js"
+import { projectPluginOverridesPath } from "../project-plugin-overrides-path.js"
+import { loadDeveloperCostConfigFromFiles } from "./load-developer-cost-config-from-files.js"
+
+export function loadDeveloperCostConfig(cwd: string): Promise<DeveloperCostConfig> {
+  const pluginsLockfile = pluginsLockfilePath()
+  const projectPluginOverrides = projectPluginOverridesPath(cwd)
+
+  return loadDeveloperCostConfigFromFiles(pluginsLockfile, projectPluginOverrides)
+}

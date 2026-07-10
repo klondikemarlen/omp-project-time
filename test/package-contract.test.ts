@@ -25,8 +25,8 @@ test("package ships the OMP entrypoint and canonical spec", async () => {
   assert.ok(packageJson.files?.includes("THIRD_PARTY_NOTICES.txt"), "expected third-party notices in package files")
   assert.match(
     packageJson.scripts?.build ?? "",
-    /\besbuild\s+src\/index\.ts\b.*\s--bundle\b.*\s--format=esm\b.*\s--outfile=dist\/index\.js\b/,
-    "expected build script to bundle src/index.ts as ESM at dist/index.js",
+    /\brm -rf dist\s+&&\s+tsc --noEmit -p tsconfig\.json\s+&&\s+tsc -p tsconfig\.build\.json\b/,
+    "expected build script to emit readable ESM modules at dist/",
   )
 
   const canonicalSpecUrl = new URL("../spec/developer-attention-status.yml", import.meta.url)

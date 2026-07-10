@@ -202,6 +202,30 @@ current meter total for the active top-level session. `summary` reports its sess
 cost, active time, prompt count, and the last prompt's age and timestamp. It does not infer
 corrections, nudges, or outcomes.
 
+## Local project time log
+
+The plugin records top-level developer-attention intervals automatically in Git repositories. There
+is no time-log command and no user-entered project label. It resolves the current repository in the
+background, uses a sanitized remote repository name when available (otherwise `local-repository`),
+and stores a one-way repository identity hash so same-named repositories stay distinct.
+
+The owner-only default artifacts are:
+
+```text
+~/.omp/developer-attention-status/time-log.json
+~/.omp/developer-attention-status/time-log.json.summary.json
+```
+
+The raw ledger contains automatic intervals. The summary artifact is refreshed after every recorded
+interval and contains 5-, 10-, and 15-minute date/repository rollups, allocation time (the sum of
+repository intervals, including intentional overlap), and wall-clock time (merged elapsed
+intervals). The plugin skips attribution outside a Git repository without affecting developer-cost
+tracking.
+
+Repository resolution never persists the working-directory path, raw remote URL, credentials,
+prompts, assignments, transcripts, tool output, artifacts, session files, file paths, or model
+metadata.
+
 ## Development
 
 ```bash

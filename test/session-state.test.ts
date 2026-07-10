@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { loadPersistedDeveloperCostState } from "../src/session-state.js"
+import { loadPersistedDeveloperCostState } from "../src/extension/session-state.js"
 
 test("returns an empty state when no persisted entry exists", () => {
   const state = loadPersistedDeveloperCostState([])

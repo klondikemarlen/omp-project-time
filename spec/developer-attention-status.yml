@@ -42,6 +42,14 @@ requirements:
     requirement: Divide each elapsed active-cost interval equally across every simultaneously active top-level session, including sessions in independent plugin runners.
     persistence: Keep shared settled session state so resumed sessions cannot double-count or lose prior overlap intervals.
     rationale: One developer cannot spend the same real-world time at full cost in multiple sessions simultaneously.
+  - id: local_project_time_log
+    title: Local project time log
+    requirement: Automatically record top-level developer-attention intervals for the active Git repository, deduplicate persisted interval sources, and refresh local 5-, 10-, and 15-minute date/repository summary artifacts without user commands.
+    rationale: Repository attribution should run in the background while preserving simultaneous project allocation and wall-clock totals.
+  - id: time_log_privacy
+    title: Time log privacy boundary
+    requirement: Resolve Git repository identity transiently, persist only a sanitized project label and one-way repository hash, and do not persist working-directory paths, raw remote URLs, credentials, prompts, assignments, transcripts, tool output, artifacts, session files, or model metadata.
+    rationale: Automatic attribution must not turn local source-control metadata into sensitive activity logging.
 non_requirements:
   - id: no_model_cost_replacement
     description: This plugin does not replace OMP model/tool usage cost; it adds developer-time cost.

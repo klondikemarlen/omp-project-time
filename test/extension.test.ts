@@ -1,17 +1,26 @@
 import assert from "node:assert/strict"
+import { execFile } from "node:child_process"
 import { randomUUID } from "node:crypto"
+import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { promisify } from "node:util"
 import { mock, test } from "node:test"
 
-import { parseDeveloperCostConfig } from "../src/billing/parse-developer-cost-config.js"
-import { emptyDeveloperCostState } from "../src/billing/empty-developer-cost-state.js"
-import { parseDeveloperCostState } from "../src/billing/parse-developer-cost-state.js"
-import type { DeveloperCostState } from "../src/billing/index.js"
-import { SpreadBillingLedger } from "../src/spread-billing-ledger.js"
-import type { ConfigLoader } from "../src/extension-types.js"
+import {
+  emptyDeveloperCostState,
+  parseDeveloperCostConfig,
+  parseDeveloperCostState,
+  type DeveloperCostState,
+} from "../src/billing/index.js"
+import { SpreadBillingLedger } from "../src/billing/infrastructure/spread-ledger.js"
+import type { ConfigLoader } from "../src/extension/types.js"
+import { DEVELOPER_COST_STATE_ENTRY } from "../src/extension/session-state.js"
 import developerCostStatusExtension, { type ExtensionApi } from "../src/index.js"
-import { DEVELOPER_COST_STATE_ENTRY } from "../src/session-state.js"
+import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js"
+import { resolveGitRepository } from "../src/time-log/infrastructure/git-repository.js"
+
+const execFileAsync = promisify(execFile)
 
 type RegisteredHandler = (event: never, ctx: never) => Promise<void>
 type RegisteredCommand = { handler: (args: string, ctx: never) => Promise<void> }
@@ -133,6 +142,253 @@ test("reports a detailed attention summary without changing the compact status",
   } finally {
     mock.restoreAll()
   }
+})
+
+test("records Git repository attention time without a manual command", async () => {
+  const start = Date.UTC(2026, 0, 1)
+  await withGitRepository("https://token@github.com/acme/attention.git", async (cwd) => {
+    const timeLogPath = temporaryLedgerPath()
+    const runtime = createExtensionRuntime({ timeLogPath })
+    const ctx = createContext(runtime, { cwd, parentSession: undefined })
+    let nowMs = start
+    mock.method(Date, "now", () => nowMs)
+
+    try {
+      assert.equal(runtime.commands.has("developer-time-log"), false)
+      await runtime.handlers.get("before_agent_start")?.({ prompt: "start" } as never, ctx as never)
+
+      const turnEndHandler = runtime.handlers.get("turn_end")
+      const shutdownHandler = runtime.handlers.get("session_shutdown")
+      assert.ok(turnEndHandler)
+      assert.ok(shutdownHandler)
+      nowMs = start + 60_000
+      await turnEndHandler({ type: "turn_end" } as never, ctx as never)
+      nowMs = start + 2 * 60_000
+      await turnEndHandler({ type: "turn_end" } as never, ctx as never)
+      await shutdownHandler({} as never, ctx as never)
+
+      const entries = await new TimeLogLedger(timeLogPath).entries()
+      assert.equal(JSON.stringify(entries).includes("token"), false)
+      assert.deepEqual(
+        entries.map(({ id: _id, createdAtMs: _createdAtMs, repositoryId, ...entry }) => ({
+          ...entry,
+          repositoryIdMatches: /^[a-f0-9]{64}$/.test(repositoryId),
+        })),
+        [
+          {
+            project: "attention",
+            startAtMs: start,
+            endAtMs: start + 2 * 60_000,
+            repositoryIdMatches: true,
+          },
+        ],
+      )
+    } finally {
+      mock.restoreAll()
+    }
+  })
+})
+
+test("records full overlapping repository intervals for simultaneous sessions", async () => {
+  const start = Date.UTC(2026, 0, 1)
+  await withGitRepository("https://github.com/acme/attention.git", async (cwd) => {
+    const ledgerPath = temporaryLedgerPath()
+    const timeLogPath = temporaryLedgerPath()
+    const first = createExtensionRuntime({ ledgerPath, loadConfig: loadFullRateConfig, timeLogPath })
+    const second = createExtensionRuntime({ ledgerPath, loadConfig: loadFullRateConfig, timeLogPath })
+    const firstContext = createContext(first, { cwd, parentSession: undefined, sessionId: "first" })
+    const secondContext = createContext(second, { cwd, parentSession: undefined, sessionId: "second" })
+    let nowMs = start
+    mock.method(Date, "now", () => nowMs)
+
+    try {
+      await first.handlers.get("before_agent_start")?.({ prompt: "first" } as never, firstContext as never)
+      await second.handlers.get("before_agent_start")?.({ prompt: "second" } as never, secondContext as never)
+      nowMs = start + 60_000
+      await Promise.all([
+        first.handlers.get("turn_end")?.({ type: "turn_end" } as never, firstContext as never),
+        second.handlers.get("turn_end")?.({ type: "turn_end" } as never, secondContext as never),
+      ])
+      await Promise.all([
+        first.handlers.get("session_shutdown")?.({} as never, firstContext as never),
+        second.handlers.get("session_shutdown")?.({} as never, secondContext as never),
+      ])
+
+      assert.deepEqual(
+        (await new TimeLogLedger(timeLogPath).entries()).map(
+          ({ id: _id, createdAtMs: _createdAtMs, repositoryId: _repositoryId, ...entry }) => entry,
+        ),
+        [
+          { project: "attention", startAtMs: start, endAtMs: start + 60_000 },
+          { project: "attention", startAtMs: start, endAtMs: start + 60_000 },
+        ],
+      )
+    } finally {
+      mock.restoreAll()
+    }
+  })
+})
+
+test("uses a non-sensitive fallback identity for a Git repository without origin", async () => {
+  const start = Date.UTC(2026, 0, 1)
+  await withGitRepository(undefined, async (cwd) => {
+    const repository = await resolveGitRepository(cwd)
+    assert.ok(repository)
+    assert.equal(repository.project, "local-repository")
+    assert.match(repository.repositoryId, /^[a-f0-9]{64}$/)
+    assert.equal(JSON.stringify(repository).includes(path.dirname(cwd)), false)
+
+    const timeLogPath = temporaryLedgerPath()
+    const runtime = createExtensionRuntime({ timeLogPath })
+    const ctx = createContext(runtime, { cwd, parentSession: undefined })
+    let nowMs = start
+    mock.method(Date, "now", () => nowMs)
+
+    try {
+      await runtime.handlers.get("before_agent_start")?.({ prompt: "start" } as never, ctx as never)
+      nowMs = start + 60_000
+      await runtime.handlers.get("turn_end")?.({ type: "turn_end" } as never, ctx as never)
+      await runtime.handlers.get("session_shutdown")?.({} as never, ctx as never)
+
+      const entries = await new TimeLogLedger(timeLogPath).entries()
+      assert.equal(entries[0]?.project, "local-repository")
+      assert.equal(JSON.stringify(entries).includes(path.dirname(cwd)), false)
+    } finally {
+      mock.restoreAll()
+    }
+  })
+})
+
+test("sanitizes remote-derived project labels", async () => {
+  await withGitRepository("git@github.com:acme/%2Fprivate.git", async (cwd) => {
+    const repository = await resolveGitRepository(cwd)
+    assert.ok(repository)
+    assert.equal(repository.project, "2Fprivate")
+    assert.equal(repository.project.includes("%"), false)
+  })
+})
+
+test("retries repository resolution when the working directory becomes a Git repository", async () => {
+  const start = Date.UTC(2026, 0, 1)
+  const cwd = await mkdtemp(path.join(tmpdir(), "developer-cost-extension-test-"))
+  const timeLogPath = temporaryLedgerPath()
+  const runtime = createExtensionRuntime({ timeLogPath })
+  const firstContext = createContext(runtime, {
+    cwd,
+    parentSession: undefined,
+    sessionId: "first-session",
+  })
+  const secondContext = createContext(runtime, {
+    allEntries: [],
+    branchEntries: [],
+    cwd,
+    parentSession: undefined,
+    sessionId: "second-session",
+  })
+  let nowMs = start
+  mock.method(Date, "now", () => nowMs)
+
+  try {
+    await runtime.handlers.get("before_agent_start")?.({ prompt: "outside Git" } as never, firstContext as never)
+    nowMs = start + 60_000
+    await runtime.handlers.get("session_shutdown")?.({} as never, firstContext as never)
+
+    await execFileAsync("git", ["init", cwd])
+    await execFileAsync("git", ["-C", cwd, "remote", "add", "origin", "https://github.com/acme/attention.git"])
+    nowMs = start + 2 * 60_000
+    await runtime.handlers.get("before_agent_start")?.({ prompt: "inside Git" } as never, secondContext as never)
+    nowMs = start + 3 * 60_000
+    await runtime.handlers.get("session_shutdown")?.({} as never, secondContext as never)
+
+    const entries = await new TimeLogLedger(timeLogPath).entries()
+    assert.deepEqual(
+      entries.map(({ id: _id, createdAtMs: _createdAtMs, repositoryId: _repositoryId, ...entry }) => entry),
+      [{ project: "attention", startAtMs: start + 2 * 60_000, endAtMs: start + 3 * 60_000 }],
+    )
+  } finally {
+    mock.restoreAll()
+    await rm(cwd, { recursive: true, force: true })
+    await rm(timeLogPath, { force: true })
+  }
+})
+
+test("keeps billing active when automatic time-log persistence fails", async () => {
+  const start = Date.UTC(2026, 0, 1)
+  await withGitRepository("https://github.com/acme/attention.git", async (cwd) => {
+    const timeLogPath = await mkdtemp(path.join(tmpdir(), "time-log-directory-"))
+    const runtime = createExtensionRuntime({ timeLogPath })
+    let notifyError: (() => void) | undefined
+    const errorReported = new Promise<void>((resolve) => {
+      notifyError = resolve
+    })
+    const ctx = createContext(runtime, {
+      cwd,
+      parentSession: undefined,
+      onNotification: notifyError,
+    })
+    let nowMs = start
+    mock.method(Date, "now", () => nowMs)
+
+    try {
+      const promptHandler = runtime.handlers.get("before_agent_start")
+      const turnEndHandler = runtime.handlers.get("turn_end")
+      assert.ok(promptHandler)
+      assert.ok(turnEndHandler)
+      await promptHandler({ prompt: "start" } as never, ctx as never)
+      nowMs = start + 60_000
+      await assert.doesNotReject(turnEndHandler({ type: "turn_end" } as never, ctx as never))
+      await errorReported
+      await rm(timeLogPath, { recursive: true, force: true })
+      await runtime.handlers.get("session_shutdown")?.({} as never, ctx as never)
+
+      assert.deepEqual(
+        (await new TimeLogLedger(timeLogPath).entries()).map(
+          ({ id: _id, createdAtMs: _createdAtMs, repositoryId, ...entry }) => ({
+            ...entry,
+            repositoryIdMatches: /^[a-f0-9]{64}$/.test(repositoryId),
+          }),
+        ),
+        [{ project: "attention", startAtMs: start, endAtMs: start + 60_000, repositoryIdMatches: true }],
+      )
+    } finally {
+      mock.restoreAll()
+      await rm(timeLogPath, { recursive: true, force: true })
+    }
+  })
+})
+
+test("attributes a repository switch to each repository automatically", async () => {
+  const start = Date.UTC(2026, 0, 1)
+  await withGitRepository("git@github.com:acme/alpha.git", async (alphaCwd) => {
+    await withGitRepository("https://github.com/acme/beta.git", async (betaCwd) => {
+      const timeLogPath = temporaryLedgerPath()
+      const runtime = createExtensionRuntime({ timeLogPath })
+      const alphaContext = createContext(runtime, { cwd: alphaCwd, parentSession: undefined })
+      const betaContext = createContext(runtime, { cwd: betaCwd, parentSession: undefined })
+      let nowMs = start
+      mock.method(Date, "now", () => nowMs)
+
+      try {
+        await runtime.handlers.get("before_agent_start")?.({ prompt: "alpha" } as never, alphaContext as never)
+        nowMs = start + 60_000
+        await runtime.handlers.get("before_agent_start")?.({ prompt: "beta" } as never, betaContext as never)
+        nowMs = start + 2 * 60_000
+        await runtime.handlers.get("turn_end")?.({ type: "turn_end" } as never, betaContext as never)
+        await runtime.handlers.get("session_shutdown")?.({} as never, betaContext as never)
+
+        const entries = await new TimeLogLedger(timeLogPath).entries()
+        assert.deepEqual(
+          entries.map(({ id: _id, createdAtMs: _createdAtMs, repositoryId: _repositoryId, ...entry }) => entry),
+          [
+            { project: "alpha", startAtMs: start, endAtMs: start + 60_000 },
+            { project: "beta", startAtMs: start + 60_000, endAtMs: start + 2 * 60_000 },
+          ],
+        )
+      } finally {
+        mock.restoreAll()
+      }
+    })
+  })
 })
 
 test("reports an unavailable last prompt for an unrenderable persisted timestamp", async () => {
@@ -623,6 +879,7 @@ test("keeps delayed same-session prompt timestamps monotonic in the shared ledge
 type RuntimeOptions = {
   ledgerPath?: string
   loadConfig?: ConfigLoader
+  timeLogPath?: string
 }
 
 function createExtensionRuntime(options: RuntimeOptions = {}): Runtime {
@@ -647,6 +904,7 @@ function createExtensionRuntime(options: RuntimeOptions = {}): Runtime {
   developerCostStatusExtension(pi, {
     ledgerPath: options.ledgerPath ?? temporaryLedgerPath(),
     loadConfig: options.loadConfig ?? (async () => parseDeveloperCostConfig()),
+    timeLogPath: options.timeLogPath ?? temporaryLedgerPath(),
   })
 
   return runtime
@@ -655,6 +913,24 @@ function createExtensionRuntime(options: RuntimeOptions = {}): Runtime {
 function temporaryLedgerPath(): string {
   return path.join(tmpdir(), `developer-cost-extension-test-${randomUUID()}.json`)
 }
+
+async function withGitRepository(
+  remoteUrl: string | undefined,
+  check: (cwd: string) => Promise<void>,
+): Promise<void> {
+  const cwd = await mkdtemp(path.join(tmpdir(), "developer-cost-extension-test-"))
+
+  try {
+    await execFileAsync("git", ["init", cwd])
+    if (remoteUrl !== undefined) {
+      await execFileAsync("git", ["-C", cwd, "remote", "add", "origin", remoteUrl])
+    }
+    await check(cwd)
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+}
+
 
 async function loadFullRateConfig() {
   return parseDeveloperCostConfig({
@@ -682,10 +958,12 @@ function createContext(
     branchEntries?: Runtime["entries"]
     allEntries?: Runtime["entries"]
     sessionId?: string
+    cwd?: string
+    onNotification?: () => void
   },
 ) {
   return {
-    cwd: path.join(tmpdir(), "developer-cost-extension-test"),
+    cwd: options.cwd ?? path.join(tmpdir(), "developer-cost-extension-test"),
     sessionManager: {
       getSessionId() {
         return options.sessionId ?? "session-1"
@@ -705,6 +983,7 @@ function createContext(
     ui: {
       notify(message: string, type?: "info" | "warning" | "error") {
         runtime.notifications.push({ message, type })
+        options.onNotification?.()
       },
       setStatus(_key: string, text: string | undefined) {
         runtime.statusText = text

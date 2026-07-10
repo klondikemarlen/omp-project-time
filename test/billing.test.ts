@@ -3,45 +3,27 @@ import test from "node:test"
 import Big from "big.js"
 
 import * as billing from "../src/billing/index.js"
-import * as billingShim from "../src/billing.js"
 
-import { displayedDeveloperCost } from "../src/billing/displayed-developer-cost.js"
-import { emptyDeveloperCostState } from "../src/billing/empty-developer-cost-state.js"
-import { formatDeveloperCost } from "../src/billing/format-developer-cost.js"
-import { parseDeveloperCostConfig } from "../src/billing/parse-developer-cost-config.js"
-import { parseDeveloperCostState } from "../src/billing/parse-developer-cost-state.js"
-import { recordDeveloperPrompt } from "../src/billing/record-developer-prompt.js"
-import { refreshIntervalMs } from "../src/billing/refresh-interval-ms.js"
-import { settleDeveloperCostState } from "../src/billing/settle-developer-cost-state.js"
-import { windowRate } from "../src/billing/window-rate.js"
+import {
+  displayedDeveloperCost,
+  emptyDeveloperCostState,
+  formatDeveloperCost,
+  parseDeveloperCostConfig,
+  parseDeveloperCostState,
+  recordDeveloperPrompt,
+  refreshIntervalMs,
+  settleDeveloperCostState,
+  windowRate,
+} from "../src/billing/index.js"
 
 const config = parseDeveloperCostConfig()
 
 const windowMs = config.activeWindowMinutes * 60 * 1000
 const refreshMs = refreshIntervalMs(config)
 
-test("exports billing modules through folder index and legacy shim", () => {
-  assert.equal(billing.Billing, billingShim.Billing)
+test("exports billing modules through the billing public surface", () => {
   assert.equal(billing.parseDeveloperCostConfig, parseDeveloperCostConfig)
-  assert.equal(billing.recordDeveloperPrompt, recordDeveloperPrompt)
-  assert.equal(billingShim.parseDeveloperCostConfig, parseDeveloperCostConfig)
-  assert.equal(billingShim.recordDeveloperPrompt, recordDeveloperPrompt)
-})
-
-test("groups billing behavior behind the singleton facade", () => {
-  const billingInstance = billing.Billing.instance
-  const start = Date.UTC(2026, 0, 1, 12, 0, 0)
-  const singletonConfig = billingInstance.parseConfig()
-  const prompted = billingInstance.recordPrompt(
-    billingInstance.emptyState(),
-    start,
-    singletonConfig,
-  )
-  const settled = billingInstance.settleState(prompted, start + refreshMs, singletonConfig)
-
-  assert.equal(billingInstance.refreshIntervalMs(singletonConfig), refreshMs)
-  assert.equal(billingInstance.displayedCost(settled).toFixed(2), "0.16")
-  assert.equal(billingInstance.formatCost(Big("3.125")), "$3.13")
+  assert.equal(billing.windowRate, windowRate)
 })
 
 test("parses the default configuration", () => {

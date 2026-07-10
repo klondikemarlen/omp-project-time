@@ -1,0 +1,6 @@
+export const DEFAULT_MONTHLY_SALARY = 6_500;
+export const DEFAULT_HOURS_PER_WEEK = 40;
+export const DEFAULT_WEEKS_PER_YEAR = 52;
+export const DEFAULT_ACTIVE_WINDOW_MINUTES = 5;
+export const DEFAULT_REFRESH_INTERVAL_SECONDS = 15;
+export const DEFAULT_LABEL = "dev";

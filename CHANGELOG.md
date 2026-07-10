@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add privacy-first background Git repository time tracking with automatic interval and 5/10/15-minute summary artifacts.
+
+### Changed
+
+- Organize automatic repository attention tracking into a focused time-log domain and ship readable ESM modules.
+
 ## [1.0.3] - 2026-07-10
 
 ### Fixed
