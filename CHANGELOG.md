@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-07-13
+
+### Fixed
+
+- Keep shared billing and repository time-log writes within OMP's handler deadline during cross-window lock contention.
+
 ## [1.0.5] - 2026-07-12
 
 ### Changed
