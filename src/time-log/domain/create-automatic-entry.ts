@@ -36,3 +36,5 @@ export function createAutomaticTimeLogEntry(
     endAtMs: settledUntilMs,
   }
 }
+
+export default createAutomaticTimeLogEntry

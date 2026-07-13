@@ -42,3 +42,5 @@ function repositoryIdentity(host, remotePath) {
     project: sanitizedProjectLabel(path.basename(normalizedPath)),
   };
 }
+
+export default repositoryIdentityFromRemoteUrl;

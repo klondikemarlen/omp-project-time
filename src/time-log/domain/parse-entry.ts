@@ -28,3 +28,5 @@ export function parseTimeLogEntry(value: unknown): TimeLogEntry | undefined {
 
   return { id, project, repositoryId, startAtMs, endAtMs, createdAtMs }
 }
+
+export default parseTimeLogEntry

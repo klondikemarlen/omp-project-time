@@ -46,3 +46,5 @@ export function parseDeveloperCostConfig(options?: DeveloperCostOptions): Develo
     label,
   }
 }
+
+export default parseDeveloperCostConfig

@@ -12,3 +12,5 @@ export function isTopLevelSession(sessionManager: SessionManagerWithHeader): boo
 
   return typeof header.parentSession !== "string" || header.parentSession.length === 0
 }
+
+export default isTopLevelSession

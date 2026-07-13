@@ -54,3 +54,5 @@ async function originRemoteUrl(rootPath) {
 function localRepositoryIdentity(rootPath) {
   return { project: "local-repository", value: rootPath };
 }
+
+export default resolveGitRepository;

@@ -12,3 +12,5 @@ export function parseDecimalString(value: unknown): string | undefined {
     return undefined
   }
 }
+
+export default parseDecimalString

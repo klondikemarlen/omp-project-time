@@ -4,3 +4,5 @@ export function sanitizedProjectLabel(value) {
     .replace(/^-+|-+$/g, "");
   return project === "" ? "local-repository" : project;
 }
+
+export default sanitizedProjectLabel;

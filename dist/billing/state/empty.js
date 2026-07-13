@@ -5,3 +5,5 @@ export function emptyDeveloperCostState() {
     activeMilliseconds: 0,
   };
 }
+
+export default emptyDeveloperCostState;

@@ -24,3 +24,5 @@ export function recordDeveloperPrompt(
 
   return nextState
 }
+
+export default recordDeveloperPrompt

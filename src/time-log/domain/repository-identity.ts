@@ -48,3 +48,5 @@ function repositoryIdentity(host: string, remotePath: string): RepositoryIdentit
     project: sanitizedProjectLabel(path.basename(normalizedPath)),
   }
 }
+
+export default repositoryIdentityFromRemoteUrl

@@ -83,3 +83,5 @@ function settleSpreadDeveloperCostState(
 
   return nextState
 }
+
+export default settleSpreadDeveloperCostStates

@@ -13,3 +13,5 @@ export async function readDeveloperCostConfigFile(filePath) {
     );
   }
 }
+
+export default readDeveloperCostConfigFile;

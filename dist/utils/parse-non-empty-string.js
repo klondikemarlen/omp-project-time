@@ -4,3 +4,5 @@ export function parseNonEmptyString(value) {
   if (!trimmed) return undefined;
   return trimmed;
 }
+
+export default parseNonEmptyString;

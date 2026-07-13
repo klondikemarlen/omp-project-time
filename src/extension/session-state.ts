@@ -26,3 +26,5 @@ export function loadPersistedDeveloperCostState(
 
   return emptyDeveloperCostState()
 }
+
+export default loadPersistedDeveloperCostState

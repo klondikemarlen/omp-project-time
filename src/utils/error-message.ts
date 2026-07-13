@@ -3,3 +3,5 @@ export function errorMessage(error: unknown): string {
 
   return String(error)
 }
+
+export default errorMessage

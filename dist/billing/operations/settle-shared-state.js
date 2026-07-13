@@ -68,3 +68,5 @@ function settleSpreadDeveloperCostState(state, config, activeWindows, nowMs) {
   delete nextState.lastSettledAtMs;
   return nextState;
 }
+
+export default settleSpreadDeveloperCostStates;

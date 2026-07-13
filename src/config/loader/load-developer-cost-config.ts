@@ -9,3 +9,5 @@ export function loadDeveloperCostConfig(cwd: string): Promise<DeveloperCostConfi
 
   return loadDeveloperCostConfigFromFiles(pluginsLockfile, projectPluginOverrides)
 }
+
+export default loadDeveloperCostConfig

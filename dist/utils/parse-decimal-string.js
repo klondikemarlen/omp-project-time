@@ -10,3 +10,5 @@ export function parseDecimalString(value) {
     return undefined;
   }
 }
+
+export default parseDecimalString;

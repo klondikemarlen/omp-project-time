@@ -43,3 +43,5 @@ export function parseDeveloperCostConfig(options) {
     label,
   };
 }
+
+export default parseDeveloperCostConfig;

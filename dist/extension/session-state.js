@@ -14,3 +14,5 @@ export function loadPersistedDeveloperCostState(entries) {
   }
   return emptyDeveloperCostState();
 }
+
+export default loadPersistedDeveloperCostState;

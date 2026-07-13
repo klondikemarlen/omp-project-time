@@ -21,3 +21,5 @@ export function recordDeveloperPrompt(state, promptAtMs, config) {
   nextState.lastPromptAtMs = promptAtMs;
   return nextState;
 }
+
+export default recordDeveloperPrompt;

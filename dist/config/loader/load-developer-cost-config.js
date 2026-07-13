@@ -10,3 +10,5 @@ export function loadDeveloperCostConfig(cwd) {
     projectPluginOverrides,
   );
 }
+
+export default loadDeveloperCostConfig;

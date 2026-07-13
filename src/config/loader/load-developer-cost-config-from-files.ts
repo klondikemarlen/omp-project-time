@@ -30,3 +30,5 @@ export async function loadDeveloperCostConfigFromFiles(
 
   return parseDeveloperCostConfig(mergedSettings)
 }
+
+export default loadDeveloperCostConfigFromFiles

@@ -7,3 +7,5 @@ export function emptyDeveloperCostState(): DeveloperCostState {
     activeMilliseconds: 0,
   }
 }
+
+export default emptyDeveloperCostState

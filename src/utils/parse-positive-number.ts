@@ -5,3 +5,5 @@ export function parsePositiveNumber(value: unknown): number | undefined {
 
   return value
 }
+
+export default parsePositiveNumber

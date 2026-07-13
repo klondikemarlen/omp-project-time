@@ -14,3 +14,5 @@ export async function readDeveloperCostConfigFile<T>(filePath: string): Promise<
     throw new Error(`Unable to read developer cost config at ${filePath}: ${message}`)
   }
 }
+
+export default readDeveloperCostConfigFile

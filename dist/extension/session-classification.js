@@ -6,3 +6,5 @@ export function isTopLevelSession(sessionManager) {
     header.parentSession.length === 0
   );
 }
+
+export default isTopLevelSession;

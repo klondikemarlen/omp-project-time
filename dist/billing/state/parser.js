@@ -28,3 +28,5 @@ export function parseDeveloperCostState(value) {
     lastPromptAtMs,
   };
 }
+
+export default parseDeveloperCostState;

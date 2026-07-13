@@ -6,3 +6,5 @@ export function parseNonEmptyString(value: unknown): string | undefined {
 
   return trimmed
 }
+
+export default parseNonEmptyString

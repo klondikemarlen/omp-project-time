@@ -26,3 +26,5 @@ export function settleDeveloperCostState(state, nowMs, config) {
   delete nextState.lastSettledAtMs;
   return nextState;
 }
+
+export default settleDeveloperCostState;

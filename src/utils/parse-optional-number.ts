@@ -5,3 +5,5 @@ export function parseOptionalNumber(value: unknown): number | undefined {
 
   return value
 }
+
+export default parseOptionalNumber

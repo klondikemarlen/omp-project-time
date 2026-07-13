@@ -32,3 +32,5 @@ export function parseDeveloperCostState(value: unknown): DeveloperCostState | un
     lastPromptAtMs,
   }
 }
+
+export default parseDeveloperCostState

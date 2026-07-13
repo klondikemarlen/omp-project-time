@@ -24,3 +24,5 @@ export function parseTimeLogEntry(value) {
   }
   return { id, project, repositoryId, startAtMs, endAtMs, createdAtMs };
 }
+
+export default parseTimeLogEntry;

@@ -36,3 +36,5 @@ export function settleDeveloperCostState(
 
   return nextState
 }
+
+export default settleDeveloperCostState
