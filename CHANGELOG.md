@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-07-12
+
+### Changed
+
+- Normalize meaningful standalone operations to support matching named and default imports.
+- Replace the local inline-status proposal with [OMP issue #1966](https://github.com/can1357/oh-my-pi/issues/1966).
+
+### Fixed
+
+- Describe bundled third-party runtime dependencies at their actual `dist/vendor/` location.
+
 ## [1.0.4] - 2026-07-12
 
 ### Added
