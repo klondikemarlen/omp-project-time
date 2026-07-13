@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-07-12
+
 ### Added
 
 - Add privacy-first background Git repository time tracking with automatic interval and 5/10/15-minute summary artifacts.
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Organize automatic repository attention tracking into a focused time-log domain and ship readable ESM modules.
 - Format generated JavaScript and separate emitted class members for human-readable package inspection.
 - Consolidate one-use billing timing wrappers into their owning operations and runtime.
+- Use `@/` source imports while rewriting the published ESM module graph to runtime-safe relative specifiers.
 
 ### Fixed
 
