@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Organize automatic repository attention tracking into a focused time-log domain and ship readable ESM modules.
+- Format generated JavaScript and separate emitted class members for human-readable package inspection.
 
 ## [1.0.3] - 2026-07-10
 

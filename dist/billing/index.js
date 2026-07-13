@@ -9,4 +9,4 @@ export { displayedDeveloperCost } from "./presentation/displayed-cost.js";
 export { formatDeveloperCost } from "./presentation/format-cost.js";
 export { recordDeveloperPrompt } from "./operations/record-prompt.js";
 export { settleDeveloperCostState } from "./operations/settle-state.js";
-export { settleSpreadDeveloperCostStates, } from "./operations/settle-shared-state.js";
+export { settleSpreadDeveloperCostStates } from "./operations/settle-shared-state.js";

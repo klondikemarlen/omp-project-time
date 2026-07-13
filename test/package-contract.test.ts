@@ -33,3 +33,22 @@ test("package ships the OMP entrypoint and canonical spec", async () => {
   const canonicalSpec = await readFile(canonicalSpecUrl, "utf8")
   assert.match(canonicalSpec, /^feature: developer-attention-status$/m)
 })
+
+test("ships generated modules with separated declarations", async () => {
+  const ledgerUrl = new URL("../dist/billing/infrastructure/spread-ledger.js", import.meta.url)
+  const ledger = await readFile(ledgerUrl, "utf8")
+
+  assert.match(ledger, /filePath;\n\n  constructor\(/)
+  assert.match(ledger, /}\n\n  async recordPrompt\(/)
+  assert.match(ledger, /}\n}\n\nfunction isStoredConfig\(/)
+
+  const repositoryIdentityUrl = new URL("../dist/time-log/domain/repository-identity.js", import.meta.url)
+  const repositoryIdentity = await readFile(repositoryIdentityUrl, "utf8")
+
+  assert.match(repositoryIdentity, /}\n\nfunction repositoryIdentityFromUrl\(/)
+
+  const refreshIntervalUrl = new URL("../dist/billing/calculation/refresh-interval.js", import.meta.url)
+  const refreshInterval = await readFile(refreshIntervalUrl, "utf8")
+
+  assert.match(refreshInterval, /time-constants\.js";\n\nexport function refreshIntervalMs\(/)
+})

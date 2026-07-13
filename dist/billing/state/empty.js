@@ -1,7 +1,7 @@
 export function emptyDeveloperCostState() {
-    return {
-        totalCost: "0",
-        promptCount: 0,
-        activeMilliseconds: 0,
-    };
+  return {
+    totalCost: "0",
+    promptCount: 0,
+    activeMilliseconds: 0,
+  };
 }

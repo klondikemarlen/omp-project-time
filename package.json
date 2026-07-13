@@ -14,7 +14,7 @@
     "THIRD_PARTY_NOTICES.txt"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc --noEmit -p tsconfig.json && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc --noEmit -p tsconfig.json && tsc -p tsconfig.build.json && prettier --write dist && node scripts/separate-generated-declarations.mjs",
     "test": "node --import tsx --test test/*.test.ts"
   },
   "keywords": [
@@ -84,6 +84,7 @@
     "@types/big.js": "^7.0.0",
     "@types/node": "^24.0.0",
     "@types/proper-lockfile": "^4.1.4",
+    "prettier": "^3.9.5",
     "tsx": "^4.20.6",
     "typescript": "^5.8.2"
   },
