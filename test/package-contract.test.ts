@@ -47,8 +47,8 @@ test("ships generated modules with separated declarations", async () => {
 
   assert.match(repositoryIdentity, /}\n\nfunction repositoryIdentityFromUrl\(/)
 
-  const refreshIntervalUrl = new URL("../dist/billing/calculation/refresh-interval.js", import.meta.url)
-  const refreshInterval = await readFile(refreshIntervalUrl, "utf8")
+  const activeCostUrl = new URL("../dist/billing/calculation/cost-for-active-time.js", import.meta.url)
+  const activeCost = await readFile(activeCostUrl, "utf8")
 
-  assert.match(refreshInterval, /time-constants\.js";\n\nexport function refreshIntervalMs\(/)
+  assert.match(activeCost, /time-constants\.js";\n\nexport function costForActiveMs\(/)
 })

@@ -1,7 +1,5 @@
-import {
-  parseDeveloperCostConfig,
-  refreshIntervalMs,
-} from "../billing/index.js";
+import { parseDeveloperCostConfig } from "../billing/index.js";
+import { MS_PER_SECOND } from "../billing/calculation/time-constants.js";
 import { SpreadBillingLedger } from "../billing/infrastructure/spread-ledger.js";
 import { loadDeveloperCostConfig } from "../config/loader/load-developer-cost-config.js";
 import { AutomaticTimeLogRecorder } from "../time-log/recorder.js";
@@ -18,9 +16,6 @@ import {
   updateStatus,
 } from "./status-presenter.js";
 
-const DEFAULT_REFRESH_INTERVAL_MS = refreshIntervalMs(
-  parseDeveloperCostConfig(),
-);
 export class DeveloperCostStatusRuntime {
   pi;
 
@@ -33,6 +28,13 @@ export class DeveloperCostStatusRuntime {
   runtimeState = {};
 
   sessionStates = new Map();
+
+  static refreshIntervalMs(config) {
+    return config.refreshIntervalSeconds * MS_PER_SECOND;
+  }
+
+  static defaultRefreshIntervalMs =
+    DeveloperCostStatusRuntime.refreshIntervalMs(parseDeveloperCostConfig());
 
   constructor(pi, options = {}) {
     this.pi = pi;
@@ -194,14 +196,14 @@ export class DeveloperCostStatusRuntime {
       this.runtimeState.activeContext === undefined ||
       this.runtimeState.activeSessionId === undefined
     ) {
-      return DEFAULT_REFRESH_INTERVAL_MS;
+      return DeveloperCostStatusRuntime.defaultRefreshIntervalMs;
     }
     const activeContext = this.runtimeState.activeContext;
     const activeSessionId = this.runtimeState.activeSessionId;
     const config = await this.loadConfigForStatus(activeContext);
     if (config === undefined) {
       this.clearActiveStatus(activeContext);
-      return DEFAULT_REFRESH_INTERVAL_MS;
+      return DeveloperCostStatusRuntime.defaultRefreshIntervalMs;
     }
     const currentState = this.stateForSession(activeContext, activeSessionId);
     const settledState = await this.settleAndRecord(
@@ -215,10 +217,12 @@ export class DeveloperCostStatusRuntime {
     this.pi.appendEntry(DEVELOPER_COST_STATE_ENTRY, settledState);
     this.rememberActiveSession(activeContext, activeSessionId, settledState);
     updateStatus(activeContext, settledState, config);
-    return refreshIntervalMs(config);
+    return DeveloperCostStatusRuntime.refreshIntervalMs(config);
   }
 
-  scheduleNextRefresh(waitMs = DEFAULT_REFRESH_INTERVAL_MS) {
+  scheduleNextRefresh(
+    waitMs = DeveloperCostStatusRuntime.defaultRefreshIntervalMs,
+  ) {
     clearTimeout(this.runtimeState.refreshTimer);
     const timer = setTimeout(async () => {
       this.runtimeState.refreshTimer = undefined;

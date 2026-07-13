@@ -3,27 +3,28 @@ import test from "node:test"
 import Big from "big.js"
 
 import * as billing from "../src/billing/index.js"
+import defaultCostForActiveMs from "../src/billing/calculation/cost-for-active-time.js"
 
 import {
+  costForActiveMs,
   displayedDeveloperCost,
   emptyDeveloperCostState,
   formatDeveloperCost,
   parseDeveloperCostConfig,
   parseDeveloperCostState,
   recordDeveloperPrompt,
-  refreshIntervalMs,
   settleDeveloperCostState,
-  windowRate,
 } from "../src/billing/index.js"
 
 const config = parseDeveloperCostConfig()
 
 const windowMs = config.activeWindowMinutes * 60 * 1000
-const refreshMs = refreshIntervalMs(config)
+const refreshMs = config.refreshIntervalSeconds * 1_000
 
 test("exports billing modules through the billing public surface", () => {
+  assert.equal(billing.costForActiveMs, costForActiveMs)
+  assert.equal(defaultCostForActiveMs, costForActiveMs)
   assert.equal(billing.parseDeveloperCostConfig, parseDeveloperCostConfig)
-  assert.equal(billing.windowRate, windowRate)
 })
 
 test("parses the default configuration", () => {
@@ -53,12 +54,9 @@ test("defaults empty and invalid configuration values", () => {
   assert.equal(defaultedConfig.label, "dev")
 })
 
-test("computes the configured refresh interval", () => {
-  assert.equal(refreshIntervalMs(config), 15_000)
-})
 
 test("computes the five minute developer rate", () => {
-  assert.equal(windowRate(config).toFixed(2), "3.13")
+  assert.equal(costForActiveMs(config, windowMs).toFixed(2), "3.13")
 })
 
 test("supports custom working weeks per year", () => {
@@ -69,7 +67,7 @@ test("supports custom working weeks per year", () => {
     activeWindowMinutes: 5,
   })
 
-  assert.equal(windowRate(customConfig).toFixed(2), "3.32")
+  assert.equal(costForActiveMs(customConfig, windowMs).toFixed(2), "3.32")
 })
 
 test("stores cost as a decimal string", () => {

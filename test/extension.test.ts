@@ -15,6 +15,7 @@ import {
 } from "../src/billing/index.js"
 import { SpreadBillingLedger } from "../src/billing/infrastructure/spread-ledger.js"
 import type { ConfigLoader } from "../src/extension/types.js"
+import { DeveloperCostStatusRuntime } from "../src/extension/runtime.js"
 import { DEVELOPER_COST_STATE_ENTRY } from "../src/extension/session-state.js"
 import developerCostStatusExtension, { type ExtensionApi } from "../src/index.js"
 import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js"
@@ -60,6 +61,14 @@ test("persists one attention count for a top-level prompt", async () => {
   } finally {
     mock.restoreAll()
   }
+})
+
+test("converts configured refresh seconds to milliseconds", () => {
+  const runtime = DeveloperCostStatusRuntime as unknown as {
+    refreshIntervalMs(config: { refreshIntervalSeconds: number }): number
+  }
+
+  assert.equal(runtime.refreshIntervalMs({ refreshIntervalSeconds: 3 }), 3_000)
 })
 
 test("feature scenario tracks visible developer cost across prompts and idle time", async () => {

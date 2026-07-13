@@ -1,9 +1,9 @@
 import {
   parseDeveloperCostConfig,
-  refreshIntervalMs,
   type DeveloperCostConfig,
   type DeveloperCostState,
 } from "../billing/index.js"
+import { MS_PER_SECOND } from "../billing/calculation/time-constants.js"
 import { SpreadBillingLedger } from "../billing/infrastructure/spread-ledger.js"
 import { loadDeveloperCostConfig } from "../config/loader/load-developer-cost-config.js"
 import { AutomaticTimeLogRecorder } from "../time-log/recorder.js"
@@ -27,8 +27,6 @@ import type {
   ExtensionOptions,
 } from "./types.js"
 
-const DEFAULT_REFRESH_INTERVAL_MS = refreshIntervalMs(parseDeveloperCostConfig())
-
 type RefreshTimer = NodeJS.Timeout
 
 type RuntimeState = {
@@ -44,6 +42,13 @@ export class DeveloperCostStatusRuntime {
   private readonly timeLogRecorder: AutomaticTimeLogRecorder
   private readonly runtimeState: RuntimeState = {}
   private readonly sessionStates = new Map<string, DeveloperCostState>()
+
+  private static refreshIntervalMs(config: DeveloperCostConfig): number {
+    return config.refreshIntervalSeconds * MS_PER_SECOND
+  }
+
+  private static readonly defaultRefreshIntervalMs =
+    DeveloperCostStatusRuntime.refreshIntervalMs(parseDeveloperCostConfig())
 
   constructor(pi: ExtensionApi, options: ExtensionOptions = {}) {
     this.pi = pi
@@ -202,7 +207,7 @@ export class DeveloperCostStatusRuntime {
       this.runtimeState.activeContext === undefined ||
       this.runtimeState.activeSessionId === undefined
     ) {
-      return DEFAULT_REFRESH_INTERVAL_MS
+      return DeveloperCostStatusRuntime.defaultRefreshIntervalMs
     }
 
     const activeContext = this.runtimeState.activeContext
@@ -210,7 +215,7 @@ export class DeveloperCostStatusRuntime {
     const config = await this.loadConfigForStatus(activeContext)
     if (config === undefined) {
       this.clearActiveStatus(activeContext)
-      return DEFAULT_REFRESH_INTERVAL_MS
+      return DeveloperCostStatusRuntime.defaultRefreshIntervalMs
     }
     const currentState = this.stateForSession(activeContext, activeSessionId)
     const settledState = await this.settleAndRecord(
@@ -226,10 +231,12 @@ export class DeveloperCostStatusRuntime {
     this.rememberActiveSession(activeContext, activeSessionId, settledState)
     updateStatus(activeContext, settledState, config)
 
-    return refreshIntervalMs(config)
+    return DeveloperCostStatusRuntime.refreshIntervalMs(config)
   }
 
-  private scheduleNextRefresh(waitMs = DEFAULT_REFRESH_INTERVAL_MS): void {
+  private scheduleNextRefresh(
+    waitMs = DeveloperCostStatusRuntime.defaultRefreshIntervalMs,
+  ): void {
     clearTimeout(this.runtimeState.refreshTimer)
 
     const timer = setTimeout(async () => {

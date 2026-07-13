@@ -9,3 +9,5 @@ export function costForActiveMs(config: DeveloperCostConfig, activeMs: number): 
 
   return annualSalary.times(activeMs).div(annualMs)
 }
+
+export default costForActiveMs
