@@ -62,10 +62,10 @@ export class TimeLogLedger {
     if (this.usesDefaultPath) await chmod(parentPath, 0o700);
     const release = await lock(this.filePath, {
       realpath: false,
-      stale: 60_000,
-      update: 30_000,
+      stale: 5_000,
+      update: 2_500,
       retries: {
-        retries: 3,
+        retries: 10,
         factor: 1.5,
         minTimeout: 100,
         maxTimeout: 1_000,

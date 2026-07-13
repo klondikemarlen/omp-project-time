@@ -7,6 +7,7 @@ import test from "node:test"
 import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js"
 import type { TimeLogEntry } from "../src/time-log/domain/model.js"
 import { createAutomaticTimeLogEntry } from "../src/time-log/domain/create-automatic-entry.js"
+import { lock } from "../src/vendor/proper-lockfile.js"
 
 const minute = 60_000
 const start = Date.UTC(2026, 0, 1)
@@ -231,5 +232,31 @@ test("writes automatic ledgers with owner-only permissions", async () => {
 
     assert.equal((await stat(ledgerPath)).mode & 0o777, 0o600)
     assert.equal((await stat(`${ledgerPath}.summary.json`)).mode & 0o777, 0o600)
+  })
+})
+
+test("waits for another OMP window to release the time log lock", async () => {
+  await withLedger(async (ledger, ledgerPath) => {
+    const release = await lock(ledgerPath, { realpath: false })
+    const releaseAfterContention = new Promise((resolve) => setTimeout(resolve, 750)).then(() => release())
+
+    try {
+      await ledger.recordAutomatic({
+        project: "github.com/acme/alpha",
+        repositoryId: "repo-alpha",
+        sourceKey: "contended-lock",
+        startAtMs: start,
+        endAtMs: start + minute,
+      })
+    } finally {
+      await releaseAfterContention
+    }
+
+    assertEntries(await ledger.entries(), [{
+      project: "github.com/acme/alpha",
+      repositoryId: "repo-alpha",
+      startAtMs: start,
+      endAtMs: start + minute,
+    }])
   })
 })
