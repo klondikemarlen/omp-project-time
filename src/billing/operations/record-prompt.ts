@@ -1,4 +1,4 @@
-import { activeWindowMs } from "../calculation/active-window.js"
+import { MS_PER_MINUTE } from "../calculation/time-constants.js"
 import type { DeveloperCostConfig } from "../config/model.js"
 import type { DeveloperCostState } from "../state/model.js"
 import { settleDeveloperCostState } from "./settle-state.js"
@@ -9,7 +9,7 @@ export function recordDeveloperPrompt(
   config: DeveloperCostConfig,
 ): DeveloperCostState {
   const nextState = settleDeveloperCostState(state, promptAtMs, config)
-  const windowMs = activeWindowMs(config)
+  const windowMs = config.activeWindowMinutes * MS_PER_MINUTE
 
   if (nextState.activeStartAtMs === undefined || nextState.activeUntilMs === undefined) {
     nextState.activeStartAtMs = promptAtMs

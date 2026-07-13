@@ -8,3 +8,5 @@ export function costForActiveMs(config, activeMs) {
     .times(MS_PER_HOUR);
   return annualSalary.times(activeMs).div(annualMs);
 }
+
+export default costForActiveMs;

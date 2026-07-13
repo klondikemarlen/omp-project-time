@@ -1,7 +1,4 @@
-export { activeWindowMs } from "./calculation/active-window.js"
 export { costForActiveMs } from "./calculation/cost-for-active-time.js"
-export { refreshIntervalMs } from "./calculation/refresh-interval.js"
-export { windowRate } from "./calculation/window-rate.js"
 export type {
   DeveloperCostConfig,
   DeveloperCostOptions,
