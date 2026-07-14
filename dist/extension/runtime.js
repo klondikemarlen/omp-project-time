@@ -9,6 +9,7 @@ import { MS_PER_SECOND } from "../billing/calculation/time-constants.js";
 import { SpreadBillingLedger } from "../billing/infrastructure/spread-ledger.js";
 import { loadDeveloperCostConfig } from "../config/loader/load-developer-cost-config.js";
 import { AutomaticTimeLogRecorder } from "../time-log/recorder.js";
+import { resolveGitRepository } from "../time-log/infrastructure/git-repository.js";
 import { errorMessage } from "../utils/error-message.js";
 import path from "node:path";
 import { isTopLevelSession } from "../extension/session-classification.js";
@@ -20,8 +21,8 @@ import {
 import { SessionStateCoordinator } from "../extension/application/session-state-coordinator.js";
 import {
   clearStatus,
+  dashboardText,
   summaryText,
-  statusText,
   updateStatus,
 } from "../extension/status-presenter.js";
 
@@ -208,10 +209,11 @@ export class ProjectTimeRuntime {
       notifyTimeLogError: (message) =>
         ctx.ui.notify(`Developer time log error: ${message}`, "error"),
     });
+    const project = (await resolveGitRepository(ctx.cwd))?.project;
     const message =
-      args.trim() === "summary"
+      command === "summary"
         ? summaryText(settledState, config, sessionId, nowMs)
-        : statusText(settledState, config);
+        : dashboardText(settledState, config, project);
     ctx.ui.notify(message, "info");
   }
 

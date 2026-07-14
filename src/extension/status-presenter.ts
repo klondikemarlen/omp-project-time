@@ -29,6 +29,26 @@ export function statusText(state: DeveloperCostState, config: DeveloperCostConfi
   return `${text} (${config.label})`
 }
 
+export function dashboardText(
+  state: DeveloperCostState,
+  config: DeveloperCostConfig,
+  project: string | undefined,
+): string {
+  const billablePoliciesConfigured = (
+    config.billableTime.defaultClient !== undefined
+    || config.billableTime.clientsByRepository.size > 0
+  )
+
+  return [
+    "Project Time",
+    `Project: ${project ?? "unavailable"}`,
+    `Developer meter: ${statusText(state, config)}`,
+    `Billable policies: ${billablePoliciesConfigured ? "configured" : "not configured"}`,
+    "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+    "Tip: type /project-time followed by a space to choose a mode.",
+  ].join("\n")
+}
+
 export function summaryText(
   state: DeveloperCostState,
   config: DeveloperCostConfig,

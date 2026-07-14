@@ -20,6 +20,20 @@ export function statusText(state, config) {
   return `${text} (${config.label})`;
 }
 
+export function dashboardText(state, config, project) {
+  const billablePoliciesConfigured =
+    config.billableTime.defaultClient !== undefined ||
+    config.billableTime.clientsByRepository.size > 0;
+  return [
+    "Project Time",
+    `Project: ${project ?? "unavailable"}`,
+    `Developer meter: ${statusText(state, config)}`,
+    `Billable policies: ${billablePoliciesConfigured ? "configured" : "not configured"}`,
+    "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+    "Tip: type /project-time followed by a space to choose a mode.",
+  ].join("\n");
+}
+
 export function summaryText(state, config, sessionId, nowMs) {
   const lastPromptAtMs = state.lastPromptAtMs;
   let lastPrompt = "Last prompt: unavailable";

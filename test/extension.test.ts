@@ -108,6 +108,27 @@ test("offers documented Project Time commands and rejects unsupported arguments"
   }])
 })
 
+test("shows the active Git project in the default Project Time dashboard", async () => {
+  await withGitRepository("https://github.com/Acme/Project.git", async (cwd) => {
+    const runtime = createExtensionRuntime()
+    const context = createContext(runtime, { cwd, parentSession: undefined })
+
+    await runtime.commands.get("project-time")?.handler("", context as never)
+
+    assert.deepEqual(runtime.notifications.at(-1), {
+      message: [
+        "Project Time",
+        "Project: Project",
+        "Developer meter: $0.00 (dev)",
+        "Billable policies: not configured",
+        "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+        "Tip: type /project-time followed by a space to choose a mode.",
+      ].join("\n"),
+      type: "info",
+    })
+  })
+})
+
 test("uses the current repository as the default billable project target", async () => {
   const start = Date.UTC(2026, 0, 1, 12, 0, 0)
   const defaultConfig = async () => parseDeveloperCostConfig({
@@ -141,6 +162,19 @@ test("uses the current repository as the default billable project target", async
       assert.equal(attention.repository, "github.com/acme/project")
       assert.equal(attention.projectId, "github.com/acme/project")
       assert.equal(attention.projectName, "Project Billing")
+
+      await runtime.commands.get("project-time")?.handler("", context as never)
+      assert.deepEqual(runtime.notifications.at(-1), {
+        message: [
+          "Project Time",
+          "Project: Project",
+          "Developer meter: $0.00 (dev)",
+          "Billable policies: configured",
+          "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+          "Tip: type /project-time followed by a space to choose a mode.",
+        ].join("\n"),
+        type: "info",
+      })
 
       await runtime.commands.get("project-time")?.handler("billable preview", context as never)
       const preview = JSON.parse(runtime.notifications.at(-1)?.message ?? "[]")
@@ -400,7 +434,14 @@ test("feature scenario tracks visible developer cost across prompts and idle tim
     setNow(start + 10 * 60 * 1000)
     await runtime.commands.get("project-time")?.handler("", ctx as never)
     assert.deepEqual(runtime.notifications.at(-1), {
-      message: "$8.24 (dev)",
+      message: [
+        "Project Time",
+        "Project: unavailable",
+        "Developer meter: $8.24 (dev)",
+        "Billable policies: not configured",
+        "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+        "Tip: type /project-time followed by a space to choose a mode.",
+      ].join("\n"),
       type: "info",
     })
   } finally {
@@ -754,7 +795,14 @@ test("restores persisted state from full session history", async () => {
 
   assert.deepEqual(runtime.notifications, [
     {
-      message: "$12.34 (dev)",
+      message: [
+        "Project Time",
+        "Project: unavailable",
+        "Developer meter: $12.34 (dev)",
+        "Billable policies: not configured",
+        "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+        "Tip: type /project-time followed by a space to choose a mode.",
+      ].join("\n"),
       type: "info",
     },
   ])

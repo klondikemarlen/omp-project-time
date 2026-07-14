@@ -247,12 +247,13 @@ omp plugin config set omp-project-time billableTime '{"defaultClient":"icefog","
 ```
 
 Type `/project-time ` (including the trailing space) to let OMP offer these modes. The package and
-command are named `omp-project-time` and `/project-time`. The default command shows the compact
-current meter total for the active top-level session. `summary` reports its session id, project time
-cost, active time, prompt count, and the last prompt's age and timestamp. It does not infer
-corrections, nudges, or outcomes. `billable` reports separately grouped attention-token and
-AI-interval units, durations, and snapshotted rates/currencies; its displayed amounts round only at
-the presentation boundary. `billable preview` emits local provider-neutral JSON entries with client
+command are named `omp-project-time` and `/project-time`. The default command posts a visible
+dashboard with the current Git project, developer meter, billable-policy state, and every explicit
+command. `summary` reports its session id, project time cost, active time, prompt count, and the last
+prompt's age and timestamp. It does not infer corrections, nudges, or outcomes.
+`billable` reports separately grouped attention-token and AI-interval units, durations, and
+snapshotted rates/currencies; its displayed amounts round only at the presentation boundary.
+`billable preview` emits local provider-neutral JSON entries with client
 and project attribution, source-specific timestamps, exact durations, snapshotted rates/currencies,
 and the recorded description. It performs no network operation and does not define an
 external-system payload or integration.
