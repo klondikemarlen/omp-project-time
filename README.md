@@ -190,27 +190,37 @@ restart after changing plugin code or install state.
 
 ### Billable clocks
 
-Set `billableTime` to a repository-to-client map. Repository keys use normalized
-`github.com/owner/repository` form; clients use an ISO 4217 currency code and positive decimal
-rates, all of which are snapshotted when each record is written.
+Configure a client policy with ISO 4217 currency and positive decimal rates. Setting
+`defaultClient` makes the active Git repository the billable project target; its project name
+defaults to the repository name. `projects` optionally replaces that displayed name for a specific
+normalized `github.com/owner/repository` identity. `repositories` remains available when a
+repository needs a client policy other than `defaultClient`.
 
 ```json
 {
-  "repositories": {
-    "github.com/icefoganalytics/wrap": "wrap"
-  },
+  "defaultClient": "icefog",
   "clients": {
-    "wrap": {
-      "label": "WRAP",
+    "icefog": {
+      "label": "Ice Fog Analytics",
       "currency": "CAD",
       "attentionRatePerHour": "120",
       "aiRatePerHour": "30"
     }
+  },
+  "projects": {
+    "github.com/icefoganalytics/wrap": "WRAP Support"
+  },
+  "repositories": {
+    "github.com/icefoganalytics/other-project": "icefog"
   }
 }
 ```
 
-Each mapped top-level prompt writes one five-minute attention token and records its AI interval
+`defaultClient` is opt-in: Project Time never infers a rate or currency. New records snapshot the
+client, repository, project identity, project name, rate, and currency. Project attribution stays
+provider-neutral; it is not a Harvest project or task mapping.
+
+Each qualifying top-level prompt writes one five-minute attention token and records its AI interval
 until `turn_end` or shutdown. Records are local append-only files at
 `~/.omp/project-time/attention-tokens.ndjson` and
 `~/.omp/project-time/ai-intervals.ndjson`.
@@ -224,7 +234,7 @@ and model metadata are never persisted.
 Configure it as one JSON string:
 
 ```bash
-omp plugin config set omp-project-time billableTime '{"repositories":{"github.com/icefoganalytics/wrap":"wrap"},"clients":{"wrap":{"label":"WRAP","currency":"CAD","attentionRatePerHour":"120","aiRatePerHour":"30"}}}'
+omp plugin config set omp-project-time billableTime '{"defaultClient":"icefog","clients":{"icefog":{"label":"Ice Fog Analytics","currency":"CAD","attentionRatePerHour":"120","aiRatePerHour":"30"}},"projects":{"github.com/icefoganalytics/wrap":"WRAP Support"}}'
 ```
 
 ## Status command
@@ -236,15 +246,16 @@ omp plugin config set omp-project-time billableTime '{"repositories":{"github.co
 /project-time billable preview
 ```
 
-The package and command are named `omp-project-time` and `/project-time`. The default command shows
-the compact current meter total for the active top-level session. `summary` reports its session id,
-project time cost, active time, prompt count, and the last prompt's age and timestamp. It does not
-infer corrections, nudges, or outcomes.
-`billable` reports separately grouped attention-token and AI-interval units, durations, and
-snapshotted rates/currencies; its displayed amounts round only at the presentation boundary.
-`billable preview` emits local provider-neutral JSON entries with client attribution, source-specific
-timestamps, exact durations, snapshotted rates/currencies, and the recorded description. It performs
-no network operation and does not define an external-system payload or integration.
+Type `/project-time ` (including the trailing space) to let OMP offer these modes. The package and
+command are named `omp-project-time` and `/project-time`. The default command shows the compact
+current meter total for the active top-level session. `summary` reports its session id, project time
+cost, active time, prompt count, and the last prompt's age and timestamp. It does not infer
+corrections, nudges, or outcomes. `billable` reports separately grouped attention-token and
+AI-interval units, durations, and snapshotted rates/currencies; its displayed amounts round only at
+the presentation boundary. `billable preview` emits local provider-neutral JSON entries with client
+and project attribution, source-specific timestamps, exact durations, snapshotted rates/currencies,
+and the recorded description. It performs no network operation and does not define an
+external-system payload or integration.
 
 ## Local project time log
 

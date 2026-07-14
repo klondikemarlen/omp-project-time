@@ -7,6 +7,8 @@ const commonSchema = z.object({
   clientId: z.string().min(1),
   clientLabel: z.string().min(1),
   repository: z.string().min(1),
+  projectId: z.string().min(1).optional(),
+  projectName: z.string().min(1).optional(),
   ratePerHour: positiveRateSchema,
   currency: currencySchema,
 })
@@ -29,7 +31,7 @@ export type BillableRecord = AttentionTokenRecord | AiIntervalRecord
 
 export type BillableAttribution = Pick<
   AttentionTokenRecord,
-  "sessionId" | "clientId" | "clientLabel" | "repository" | "currency"
+  "sessionId" | "clientId" | "clientLabel" | "repository" | "projectId" | "projectName" | "currency"
 >
 export type PendingAiInterval = Omit<AiIntervalRecord, "endedAtMs" | "durationMs" | "terminalReason">
 

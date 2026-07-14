@@ -4,6 +4,8 @@ import type { BillableRecord } from "@/billable-time/domain/record.js"
 type WorkEntryAttributes = {
   clientId: string
   clientLabel: string
+  projectId: string
+  projectName: string
   description: string
   durationMs: number
   ratePerHour: string
@@ -38,6 +40,8 @@ function createBillableWorkEntry(record: BillableRecord, description: string): B
   const attributes: WorkEntryAttributes = {
     clientId: record.clientId,
     clientLabel: record.clientLabel,
+    projectId: record.projectId ?? record.repository,
+    projectName: record.projectName ?? record.repository,
     description,
     durationMs: record.durationMs,
     ratePerHour: record.ratePerHour,

@@ -32,6 +32,8 @@ export class BillableTimeRecorder {
       sessionId,
       mappedClient.repository,
       mappedClient.client,
+      mappedClient.projectId,
+      mappedClient.projectName,
     );
     const attention = createAttentionToken(
       attribution,
@@ -112,19 +114,31 @@ export class BillableTimeRecorder {
 
   async resolveClient(cwd, config) {
     const gitRepository = await resolveGitRepository(cwd);
-    const identity = gitRepository?.identity;
-    if (identity === undefined) return undefined;
-    const repository = normalizeBillableRepository(identity);
-    const client = config.clientsByRepository.get(repository);
-    return client === undefined ? undefined : { repository, client };
+    if (gitRepository === undefined) return undefined;
+    const repository = normalizeBillableRepository(
+      gitRepository.identity ?? gitRepository.repositoryId,
+    );
+    const client =
+      config.clientsByRepository.get(repository) ?? config.defaultClient;
+    if (client === undefined) return undefined;
+    return {
+      repository,
+      client,
+      projectId: repository,
+      projectName:
+        config.projectNamesByRepository.get(repository) ??
+        gitRepository.project,
+    };
   }
 
-  attributionFor(sessionId, repository, client) {
+  attributionFor(sessionId, repository, client, projectId, projectName) {
     return {
       sessionId,
       clientId: client.id,
       clientLabel: client.label,
       repository,
+      projectId,
+      projectName,
       currency: client.currency,
     };
   }

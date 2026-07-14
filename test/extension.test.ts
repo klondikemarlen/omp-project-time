@@ -25,7 +25,14 @@ import { resolveGitRepository } from "../src/time-log/infrastructure/git-reposit
 const execFileAsync = promisify(execFile)
 
 type RegisteredHandler = (event: never, ctx: never) => Promise<void>
-type RegisteredCommand = { handler: (args: string, ctx: never) => Promise<void> }
+type RegisteredCommand = {
+  handler: (args: string, ctx: never) => Promise<void>
+  getArgumentCompletions?: (argumentPrefix: string) => Array<{
+    value: string
+    label: string
+    description?: string
+  }> | null
+}
 type Runtime = {
   commands: Map<string, RegisteredCommand>
   entries: Array<{ type: "custom"; customType: string; data?: unknown }>
@@ -62,6 +69,95 @@ test("persists one attention count for a top-level prompt", async () => {
   } finally {
     mock.restoreAll()
   }
+})
+
+test("offers documented Project Time commands and rejects unsupported arguments", async () => {
+  const runtime = createExtensionRuntime()
+  const command = runtime.commands.get("project-time")
+  assert.ok(command)
+
+  assert.deepEqual(command.getArgumentCompletions?.(""), [
+    {
+      value: "summary",
+      label: "summary",
+      description: "Show session cost, active time, and prompt count",
+    },
+    {
+      value: "billable",
+      label: "billable",
+      description: "Show locally recorded billable clocks",
+    },
+    {
+      value: "billable preview",
+      label: "billable preview",
+      description: "Preview provider-neutral billable entries",
+    },
+  ])
+  assert.deepEqual(command.getArgumentCompletions?.("billable "), [
+    {
+      value: "billable preview",
+      label: "billable preview",
+      description: "Preview provider-neutral billable entries",
+    },
+  ])
+
+  await command.handler("unknown", createContext(runtime, { parentSession: undefined }) as never)
+  assert.deepEqual(runtime.notifications, [{
+    message: "Unknown Project Time command. Use summary, billable, or billable preview.",
+    type: "error",
+  }])
+})
+
+test("uses the current repository as the default billable project target", async () => {
+  const start = Date.UTC(2026, 0, 1, 12, 0, 0)
+  const defaultConfig = async () => parseDeveloperCostConfig({
+    billableTime: {
+      defaultClient: "acme",
+      clients: {
+        acme: {
+          label: "Acme",
+          currency: "USD",
+          attentionRatePerHour: "120",
+          aiRatePerHour: "30",
+        },
+      },
+      projects: {
+        "github.com/acme/project": "Project Billing",
+      },
+    },
+  })
+
+  await withGitRepository("https://github.com/Acme/Project.git", async (cwd) => {
+    const billableTimePath = path.join(cwd, "billable")
+    const runtime = createExtensionRuntime({ billableTimePath, loadConfig: defaultConfig })
+    const context = createContext(runtime, { cwd, parentSession: undefined })
+    mock.method(Date, "now", () => start)
+
+    try {
+      await runtime.handlers.get("before_agent_start")?.({ prompt: "bill current project" } as never, context as never)
+      await runtime.handlers.get("turn_end")?.({ type: "turn_end" } as never, context as never)
+
+      const attention = JSON.parse(await readFile(path.join(billableTimePath, "attention-tokens.ndjson"), "utf8"))
+      assert.equal(attention.repository, "github.com/acme/project")
+      assert.equal(attention.projectId, "github.com/acme/project")
+      assert.equal(attention.projectName, "Project Billing")
+
+      await runtime.commands.get("project-time")?.handler("billable preview", context as never)
+      const preview = JSON.parse(runtime.notifications.at(-1)?.message ?? "[]")
+      assert.deepEqual(
+        preview.map((entry: { project_id: string; project_name: string }) => ({
+          projectId: entry.project_id,
+          projectName: entry.project_name,
+        })),
+        [
+          { projectId: "github.com/acme/project", projectName: "Project Billing" },
+          { projectId: "github.com/acme/project", projectName: "Project Billing" },
+        ],
+      )
+    } finally {
+      mock.restoreAll()
+    }
+  })
 })
 
 test("records billable clocks only for mapped top-level sessions", async () => {
@@ -1134,7 +1230,10 @@ function createExtensionRuntime(options: RuntimeOptions = {}): Runtime {
   }
   const pi: ExtensionApi = {
     registerCommand(name, options) {
-      runtime.commands.set(name, { handler: options.handler as RegisteredCommand["handler"] })
+      runtime.commands.set(name, {
+        handler: options.handler as RegisteredCommand["handler"],
+        getArgumentCompletions: options.getArgumentCompletions,
+      })
     },
     on(event, handler) {
       runtime.handlers.set(event, handler as RegisteredHandler)

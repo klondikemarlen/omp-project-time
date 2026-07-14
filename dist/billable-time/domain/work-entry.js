@@ -13,6 +13,8 @@ function createBillableWorkEntry(record, description) {
   const attributes = {
     clientId: record.clientId,
     clientLabel: record.clientLabel,
+    projectId: record.projectId ?? record.repository,
+    projectName: record.projectName ?? record.repository,
     description,
     durationMs: record.durationMs,
     ratePerHour: record.ratePerHour,

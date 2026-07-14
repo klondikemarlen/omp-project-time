@@ -25,6 +25,28 @@ import {
   updateStatus,
 } from "../extension/status-presenter.js";
 
+const PROJECT_TIME_COMMANDS = [
+  {
+    value: "summary",
+    label: "summary",
+    description: "Show session cost, active time, and prompt count",
+  },
+  {
+    value: "billable",
+    label: "billable",
+    description: "Show locally recorded billable clocks",
+  },
+  {
+    value: "billable preview",
+    label: "billable preview",
+    description: "Preview provider-neutral billable entries",
+  },
+];
+function projectTimeArgumentCompletions(argumentPrefix) {
+  const prefix = argumentPrefix.trimStart().toLowerCase();
+  return PROJECT_TIME_COMMANDS.filter(({ value }) => value.startsWith(prefix));
+}
+
 export class ProjectTimeRuntime {
   pi;
 
@@ -88,8 +110,8 @@ export class ProjectTimeRuntime {
   register() {
     this.scheduleNextRefresh();
     this.pi.registerCommand("project-time", {
-      description:
-        "Show project time or attention summary for the current session",
+      description: "Show Project Time status, summary, or billable records",
+      getArgumentCompletions: projectTimeArgumentCompletions,
       handler: async (args, ctx) => {
         if (!(await this.localDataReady(ctx))) return;
         await this.showCurrentStatus(args, ctx);
@@ -144,7 +166,18 @@ export class ProjectTimeRuntime {
       );
       return;
     }
-    if (args.trim() === "billable preview") {
+    const command = args.trim();
+    if (
+      command !== "" &&
+      !PROJECT_TIME_COMMANDS.some(({ value }) => value === command)
+    ) {
+      ctx.ui.notify(
+        "Unknown Project Time command. Use summary, billable, or billable preview.",
+        "error",
+      );
+      return;
+    }
+    if (command === "billable preview") {
       try {
         const entries = await this.billableTimeRecorder.workEntries();
         ctx.ui.notify(billableWorkEntryPreview(entries), "info");
@@ -153,7 +186,7 @@ export class ProjectTimeRuntime {
       }
       return;
     }
-    if (args.trim() === "billable") {
+    if (command === "billable") {
       try {
         const summaries = await this.billableTimeRecorder.summaries();
         ctx.ui.notify(billableSummaryText(summaries), "info");

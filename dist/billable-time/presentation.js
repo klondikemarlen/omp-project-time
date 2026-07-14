@@ -26,6 +26,8 @@ function workEntryPreview(entry) {
   const shared = {
     client_id: entry.clientId,
     client_label: entry.clientLabel,
+    project_id: entry.projectId,
+    project_name: entry.projectName,
     source_kind: entry.sourceKind,
     duration_ms: entry.durationMs,
     rate_per_hour: entry.ratePerHour,

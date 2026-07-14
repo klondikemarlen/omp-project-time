@@ -196,6 +196,8 @@ test("renders provider-neutral preview entries with separate source clocks", asy
       {
         client_id: "icefog",
         client_label: "Icefog",
+        project_id: repository,
+        project_name: "omp-project-time",
         source_kind: "attention",
         duration_ms: 300_000,
         rate_per_hour: "120",
@@ -206,6 +208,8 @@ test("renders provider-neutral preview entries with separate source clocks", asy
       {
         client_id: "icefog",
         client_label: "Icefog",
+        project_id: repository,
+        project_name: "omp-project-time",
         source_kind: "ai",
         duration_ms: 90_000,
         rate_per_hour: "30",

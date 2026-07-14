@@ -42,7 +42,13 @@ export class BillableTimeRecorder {
     const mappedClient = await this.resolveClient(cwd, config)
     if (mappedClient === undefined) return { started: false, closedInterval }
 
-    const attribution = this.attributionFor(sessionId, mappedClient.repository, mappedClient.client)
+    const attribution = this.attributionFor(
+      sessionId,
+      mappedClient.repository,
+      mappedClient.client,
+      mappedClient.projectId,
+      mappedClient.projectName,
+    )
     const attention = createAttentionToken(attribution, nowMs, mappedClient.client.attentionRatePerHour)
     const interval = startAiInterval(attribution, nowMs, mappedClient.client.aiRatePerHour)
 
@@ -125,20 +131,36 @@ export class BillableTimeRecorder {
 
   private async resolveClient(cwd: string, config: BillableTimeConfig) {
     const gitRepository = await resolveGitRepository(cwd)
-    const identity = gitRepository?.identity
-    if (identity === undefined) return undefined
+    if (gitRepository === undefined) return undefined
 
-    const repository = normalizeBillableRepository(identity)
-    const client = config.clientsByRepository.get(repository)
-    return client === undefined ? undefined : { repository, client }
+    const repository = normalizeBillableRepository(
+      gitRepository.identity ?? gitRepository.repositoryId,
+    )
+    const client = config.clientsByRepository.get(repository) ?? config.defaultClient
+    if (client === undefined) return undefined
+
+    return {
+      repository,
+      client,
+      projectId: repository,
+      projectName: config.projectNamesByRepository.get(repository) ?? gitRepository.project,
+    }
   }
 
-  private attributionFor(sessionId: string, repository: string, client: BillableClient): BillableAttribution {
+  private attributionFor(
+    sessionId: string,
+    repository: string,
+    client: BillableClient,
+    projectId: string,
+    projectName: string,
+  ): BillableAttribution {
     return {
       sessionId,
       clientId: client.id,
       clientLabel: client.label,
       repository,
+      projectId,
+      projectName,
       currency: client.currency,
     }
   }

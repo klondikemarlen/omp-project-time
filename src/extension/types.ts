@@ -39,6 +39,12 @@ export type ExtensionContext = {
   model?: Parameters<typeof generateSessionTitle>[4]
 }
 
+export type CommandCompletion = {
+  value: string
+  label: string
+  description?: string
+}
+
 export type CommandHandler = (args: string, ctx: ExtensionContext) => Promise<void>
 
 export type BeforeAgentStartHandler = (
@@ -72,6 +78,7 @@ export type ExtensionApi = {
     name: string,
     options: {
       description?: string
+      getArgumentCompletions?: (argumentPrefix: string) => CommandCompletion[] | null
       handler: CommandHandler
     },
   ): void

@@ -80,7 +80,7 @@
       "billableTime": {
         "type": "string",
         "default": "{}",
-        "description": "JSON repository-to-client mappings and separately rated billable time policies."
+        "description": "JSON client policies for billable time; defaultClient targets the active Git repository and projects can override its displayed name."
       }
     }
   },

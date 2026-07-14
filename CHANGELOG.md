@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Let an opted-in billable client policy target the active Git repository by default, with
+  provider-neutral project-name overrides and project facts in local previews.
+
+### Fixed
+
+- Offer documented `/project-time` arguments in OMP and report unsupported arguments clearly.
+
 ## [2.0.0] - 2026-07-14
 
 ### Changed
