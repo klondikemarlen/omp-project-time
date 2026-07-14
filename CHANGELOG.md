@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Show current-project developer time and billable record history through `/project-time history`.
+
 ## [2.2.0] - 2026-07-14
 
 ### Added

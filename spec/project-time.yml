@@ -62,6 +62,10 @@ requirements:
     title: Billable clock privacy boundary
     requirement: Do not persist raw prompt text, transcripts, tool output, artifacts, model metadata, or credentials in billable records.
     rationale: Billing records need only attribution, timing, and snapshotted policy data.
+  - id: local_project_history
+    title: Local project tracking history
+    requirement: The history command must display the current Git project, settled developer meter, and recent automatic developer-time intervals and billable records filtered to that repository; it must distinguish disabled billable tracking from zero recorded entries and use only local ledgers.
+    rationale: Users need a quick local confirmation of current-project tracking before they export or reconcile records elsewhere.
 non_requirements:
   - id: no_model_cost_replacement
     description: This plugin does not replace OMP model/tool usage cost; it adds developer-time cost.

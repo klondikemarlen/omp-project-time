@@ -92,6 +92,11 @@ test("offers documented Project Time commands and rejects unsupported arguments"
       label: "billable preview",
       description: "Preview provider-neutral billable entries",
     },
+    {
+      value: "history",
+      label: "history",
+      description: "Show recent local project and billable tracking",
+    },
   ])
   assert.deepEqual(command.getArgumentCompletions?.("billable "), [
     {
@@ -103,7 +108,7 @@ test("offers documented Project Time commands and rejects unsupported arguments"
 
   await command.handler("unknown", createContext(runtime, { parentSession: undefined }) as never)
   assert.deepEqual(runtime.notifications, [{
-    message: "Unknown Project Time command. Use summary, billable, or billable preview.",
+    message: "Unknown Project Time command. Use summary, billable, billable preview, or history.",
     type: "error",
   }])
 })
@@ -121,7 +126,7 @@ test("shows the active Git project in the default Project Time dashboard", async
         "Project: Project",
         "Developer meter: $0.00 (dev)",
         "Billable policies: not configured",
-        "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+        "Commands: /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
         "Tip: type /project-time followed by a space to choose a mode.",
       ].join("\n"),
       type: "info",
@@ -176,7 +181,7 @@ test("uses the current repository as the default billable project target", async
           "Project: Project",
           "Developer meter: $0.00 (dev)",
           "Billable policies: configured",
-          "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+          "Commands: /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
           "Tip: type /project-time followed by a space to choose a mode.",
         ].join("\n"),
         type: "info",
@@ -256,6 +261,69 @@ test("records billable clocks only for mapped top-level sessions", async () => {
     } finally {
       mock.restoreAll()
     }
+  })
+})
+
+test("shows recent local project history with developer and billable state", async () => {
+  const start = Date.UTC(2026, 0, 1, 12, 0, 0)
+  let nowMs = start
+
+  await withGitRepository("https://github.com/Acme/Project.git", async (cwd) => {
+    const billableTimePath = path.join(cwd, "billable")
+    const timeLogPath = temporaryLedgerPath()
+    const runtime = createExtensionRuntime({
+      billableTimePath,
+      loadConfig: loadBillableRateConfig,
+      timeLogPath,
+    })
+    const context = createContext(runtime, { cwd, parentSession: undefined })
+    mock.method(Date, "now", () => nowMs)
+
+    try {
+      await runtime.handlers.get("before_agent_start")?.({ prompt: "history prompt" } as never, context as never)
+      nowMs += 1_000
+      await runtime.handlers.get("turn_end")?.({ type: "turn_end" } as never, context as never)
+      await runtime.handlers.get("session_shutdown")?.({ type: "session_shutdown" } as never, context as never)
+
+      await runtime.commands.get("project-time")?.handler("history", context as never)
+
+      const message = runtime.notifications.at(-1)?.message ?? ""
+      assert.match(message, /^Project Time history\nProject: Project\nDeveloper meter: \$0\.01 \(dev\)$/m)
+      assert.match(message, /Developer time: 1 intervals, 1s/)
+      assert.match(message, /Billable tracking: enabled, 2 records/)
+      assert.match(message, /Recent developer time:\n- 2026-01-01T12:00:01.000Z: 1s/)
+      assert.match(message, /Recent billable records:\n- 2026-01-01T12:00:01.000Z: ai 1s/)
+      assert.match(message, /- 2026-01-01T12:00:00.000Z: attention 5m 0s/)
+    } finally {
+      mock.restoreAll()
+    }
+  })
+})
+
+test("reports billable tracking disabled for an unmapped project", async () => {
+  const loadConfig = async () => parseDeveloperCostConfig({
+    billableTime: {
+      clients: {
+        acme: {
+          label: "Acme",
+          currency: "USD",
+          attentionRatePerHour: "120",
+          aiRatePerHour: "30",
+        },
+      },
+      repositories: {
+        "github.com/acme/other": "acme",
+      },
+    },
+  })
+
+  await withGitRepository("https://github.com/Acme/Project.git", async (cwd) => {
+    const runtime = createExtensionRuntime({ loadConfig })
+    const context = createContext(runtime, { cwd, parentSession: undefined })
+
+    await runtime.commands.get("project-time")?.handler("history", context as never)
+
+    assert.match(runtime.notifications.at(-1)?.message ?? "", /Billable tracking: disabled/)
   })
 })
 
@@ -468,7 +536,7 @@ test("feature scenario tracks visible developer cost across prompts and idle tim
         "Project: unavailable",
         "Developer meter: $8.24 (dev)",
         "Billable policies: not configured",
-        "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+        "Commands: /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
         "Tip: type /project-time followed by a space to choose a mode.",
       ].join("\n"),
       type: "info",
@@ -829,7 +897,7 @@ test("restores persisted state from full session history", async () => {
         "Project: unavailable",
         "Developer meter: $12.34 (dev)",
         "Billable policies: not configured",
-        "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+        "Commands: /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
         "Tip: type /project-time followed by a space to choose a mode.",
       ].join("\n"),
       type: "info",

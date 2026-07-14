@@ -29,8 +29,49 @@ export function dashboardText(state, config, project) {
     `Project: ${project ?? "unavailable"}`,
     `Developer meter: ${statusText(state, config)}`,
     `Billable policies: ${billablePoliciesConfigured ? "configured" : "not configured"}`,
-    "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+    "Commands: /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
     "Tip: type /project-time followed by a space to choose a mode.",
+  ].join("\n");
+}
+
+export function historyText(
+  project,
+  state,
+  config,
+  billableTrackingEnabled,
+  timeEntries,
+  billableRecords,
+) {
+  const developerMilliseconds = timeEntries.reduce(
+    (total, entry) => total + entry.endAtMs - entry.startAtMs,
+    0,
+  );
+  const recentDeveloperTime = [...timeEntries]
+    .sort((left, right) => right.endAtMs - left.endAtMs)
+    .slice(0, 3)
+    .map(
+      (entry) =>
+        `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)}`,
+    );
+  const recentBillableRecords = [...billableRecords]
+    .sort((left, right) => recordTimestamp(right) - recordTimestamp(left))
+    .slice(0, 3)
+    .map((record) => {
+      const category =
+        record.categoryLabel === undefined ? "" : ` / ${record.categoryLabel}`;
+      return `- ${timestampText(recordTimestamp(record))}: ${record.sourceKind}${category} ${durationText(record.durationMs)}`;
+    });
+  const billableState = billableTrackingEnabled
+    ? `enabled, ${billableRecords.length} records`
+    : "disabled";
+  return [
+    "Project Time history",
+    `Project: ${project ?? "unavailable"}`,
+    `Developer meter: ${statusText(state, config)}`,
+    `Developer time: ${timeEntries.length} intervals, ${durationText(developerMilliseconds)}`,
+    `Billable tracking: ${billableState}`,
+    `Recent developer time:${recentDeveloperTime.length === 0 ? " none" : `\n${recentDeveloperTime.join("\n")}`}`,
+    `Recent billable records:${recentBillableRecords.length === 0 ? " none" : `\n${recentBillableRecords.join("\n")}`}`,
   ].join("\n");
 }
 
@@ -51,6 +92,19 @@ export function summaryText(state, config, sessionId, nowMs) {
     `Prompt count: ${state.promptCount}`,
     lastPrompt,
   ].join("\n");
+}
+
+function recordTimestamp(record) {
+  return record.sourceKind === "attention"
+    ? record.emittedAtMs
+    : record.endedAtMs;
+}
+
+function timestampText(milliseconds) {
+  const timestamp = new Date(milliseconds);
+  return Number.isNaN(timestamp.getTime())
+    ? "unknown time"
+    : timestamp.toISOString();
 }
 
 function durationText(milliseconds) {

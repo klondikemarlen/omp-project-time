@@ -10,6 +10,7 @@ import { SpreadBillingLedger } from "../billing/infrastructure/spread-ledger.js"
 import { loadDeveloperCostConfig } from "../config/loader/load-developer-cost-config.js";
 import { AutomaticTimeLogRecorder } from "../time-log/recorder.js";
 import { resolveGitRepository } from "../time-log/infrastructure/git-repository.js";
+import { normalizeBillableRepository } from "../billable-time/domain/repository.js";
 import { errorMessage } from "../utils/error-message.js";
 import path from "node:path";
 import { isTopLevelSession } from "../extension/session-classification.js";
@@ -22,6 +23,7 @@ import { SessionStateCoordinator } from "../extension/application/session-state-
 import {
   clearStatus,
   dashboardText,
+  historyText,
   summaryText,
   updateStatus,
 } from "../extension/status-presenter.js";
@@ -42,6 +44,11 @@ const PROJECT_TIME_COMMANDS = [
     label: "billable preview",
     description: "Preview provider-neutral billable entries",
   },
+  {
+    value: "history",
+    label: "history",
+    description: "Show recent local project and billable tracking",
+  },
 ];
 function projectTimeArgumentCompletions(argumentPrefix) {
   const prefix = argumentPrefix.trimStart().toLowerCase();
@@ -54,6 +61,8 @@ export class ProjectTimeRuntime {
   loadConfig;
 
   sessionStateCoordinator;
+
+  timeLogRecorder;
 
   billableTimeRecorder;
 
@@ -89,12 +98,12 @@ export class ProjectTimeRuntime {
     const ledger = new SpreadBillingLedger(
       options.ledgerPath ?? path.join(dataRoot, "spread-billing.json"),
     );
-    const timeLogRecorder = new AutomaticTimeLogRecorder(
+    this.timeLogRecorder = new AutomaticTimeLogRecorder(
       options.timeLogPath ?? path.join(dataRoot, "time-log.json"),
     );
     this.sessionStateCoordinator = new SessionStateCoordinator(
       ledger,
-      timeLogRecorder,
+      this.timeLogRecorder,
       (customType, data) => this.pi.appendEntry(customType, data),
     );
     this.billableTimeRecorder = new BillableTimeRecorder(
@@ -173,7 +182,7 @@ export class ProjectTimeRuntime {
       !PROJECT_TIME_COMMANDS.some(({ value }) => value === command)
     ) {
       ctx.ui.notify(
-        "Unknown Project Time command. Use summary, billable, or billable preview.",
+        "Unknown Project Time command. Use summary, billable, billable preview, or history.",
         "error",
       );
       return;
@@ -196,6 +205,10 @@ export class ProjectTimeRuntime {
       }
       return;
     }
+    if (command === "history") {
+      await this.showHistory(ctx);
+      return;
+    }
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) return;
     const sessionId = ctx.sessionManager.getSessionId();
@@ -215,6 +228,56 @@ export class ProjectTimeRuntime {
         ? summaryText(settledState, config, sessionId, nowMs)
         : dashboardText(settledState, config, project);
     ctx.ui.notify(message, "info");
+  }
+
+  async showHistory(ctx) {
+    const config = await this.loadConfigForStatus(ctx);
+    if (config === undefined) return;
+    try {
+      const sessionId = ctx.sessionManager.getSessionId();
+      const nowMs = Date.now();
+      const settledState = await this.sessionStateCoordinator.settle({
+        config,
+        cwd: ctx.cwd,
+        entries: ctx.sessionManager.getEntries(),
+        nowMs,
+        sessionId,
+        notifyTimeLogError: (message) =>
+          ctx.ui.notify(`Developer time log error: ${message}`, "error"),
+      });
+      const gitRepository = await resolveGitRepository(ctx.cwd);
+      const billableRepository =
+        gitRepository === undefined
+          ? undefined
+          : normalizeBillableRepository(
+              gitRepository.identity ?? gitRepository.repositoryId,
+            );
+      const billableTrackingEnabled =
+        billableRepository !== undefined &&
+        (config.billableTime.defaultClient !== undefined ||
+          config.billableTime.clientsByRepository.has(billableRepository));
+      const [timeLogEntries, billableRecords] = await Promise.all([
+        this.timeLogRecorder.entries(),
+        this.billableTimeRecorder.records(),
+      ]);
+      ctx.ui.notify(
+        historyText(
+          gitRepository?.project,
+          settledState,
+          config,
+          billableTrackingEnabled,
+          timeLogEntries.filter(
+            (entry) => entry.repositoryId === gitRepository?.repositoryId,
+          ),
+          billableRecords.filter(
+            (record) => record.repository === billableRepository,
+          ),
+        ),
+        "info",
+      );
+    } catch (error) {
+      ctx.ui.notify(`Project history error: ${errorMessage(error)}`, "error");
+    }
   }
 
   async activateSession(ctx) {

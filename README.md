@@ -252,6 +252,7 @@ omp plugin config set omp-project-time billableTime '{"defaultClient":"icefog","
 /project-time summary
 /project-time billable
 /project-time billable preview
+/project-time history
 ```
 
 Type `/project-time ` (including the trailing space) to let OMP offer these modes. The package and
@@ -265,6 +266,9 @@ snapshotted rates/currencies; its displayed amounts round only at the presentati
 and project attribution, source-specific timestamps, exact durations, snapshotted rates/currencies,
 and the recorded description. It performs no network operation and does not define an
 external-system payload or integration.
+`history` reports the current Git project, settled developer meter, and recent local developer-time
+intervals and billable records for that repository. It clearly distinguishes disabled billable tracking
+from no records and does not send data to an external service.
 
 ## Local project time log
 

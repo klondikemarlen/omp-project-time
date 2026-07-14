@@ -49,6 +49,10 @@ export class AutomaticTimeLogRecorder {
     this.sessionActivities.delete(sessionId);
   }
 
+  async entries() {
+    return this.ledger.entries();
+  }
+
   async automaticEntry(settlement, activity) {
     const stateBeforeSettlement = settlement.stateBeforeSettlement;
     if (

@@ -5,6 +5,8 @@ import {
   type DeveloperCostState,
 } from "@/billing/index.js"
 import type { ExtensionContext } from "@/extension/types.js"
+import type { BillableRecord } from "@/billable-time/domain/record.js"
+import type { TimeLogEntry } from "@/time-log/domain/model.js"
 
 export const STATUS_KEY = "project-time"
 
@@ -44,8 +46,46 @@ export function dashboardText(
     `Project: ${project ?? "unavailable"}`,
     `Developer meter: ${statusText(state, config)}`,
     `Billable policies: ${billablePoliciesConfigured ? "configured" : "not configured"}`,
-    "Commands: /project-time summary | /project-time billable | /project-time billable preview",
+    "Commands: /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
     "Tip: type /project-time followed by a space to choose a mode.",
+  ].join("\n")
+}
+
+export function historyText(
+  project: string | undefined,
+  state: DeveloperCostState,
+  config: DeveloperCostConfig,
+  billableTrackingEnabled: boolean,
+  timeEntries: readonly TimeLogEntry[],
+  billableRecords: readonly BillableRecord[],
+): string {
+  const developerMilliseconds = timeEntries.reduce(
+    (total, entry) => total + entry.endAtMs - entry.startAtMs,
+    0,
+  )
+  const recentDeveloperTime = [...timeEntries]
+    .sort((left, right) => right.endAtMs - left.endAtMs)
+    .slice(0, 3)
+    .map((entry) => `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)}`)
+  const recentBillableRecords = [...billableRecords]
+    .sort((left, right) => recordTimestamp(right) - recordTimestamp(left))
+    .slice(0, 3)
+    .map((record) => {
+      const category = record.categoryLabel === undefined ? "" : ` / ${record.categoryLabel}`
+      return `- ${timestampText(recordTimestamp(record))}: ${record.sourceKind}${category} ${durationText(record.durationMs)}`
+    })
+  const billableState = billableTrackingEnabled
+    ? `enabled, ${billableRecords.length} records`
+    : "disabled"
+
+  return [
+    "Project Time history",
+    `Project: ${project ?? "unavailable"}`,
+    `Developer meter: ${statusText(state, config)}`,
+    `Developer time: ${timeEntries.length} intervals, ${durationText(developerMilliseconds)}`,
+    `Billable tracking: ${billableState}`,
+    `Recent developer time:${recentDeveloperTime.length === 0 ? " none" : `\n${recentDeveloperTime.join("\n")}`}`,
+    `Recent billable records:${recentBillableRecords.length === 0 ? " none" : `\n${recentBillableRecords.join("\n")}`}`,
   ].join("\n")
 }
 
@@ -74,6 +114,15 @@ export function summaryText(
     `Prompt count: ${state.promptCount}`,
     lastPrompt,
   ].join("\n")
+}
+
+function recordTimestamp(record: BillableRecord): number {
+  return record.sourceKind === "attention" ? record.emittedAtMs : record.endedAtMs
+}
+
+function timestampText(milliseconds: number): string {
+  const timestamp = new Date(milliseconds)
+  return Number.isNaN(timestamp.getTime()) ? "unknown time" : timestamp.toISOString()
 }
 
 function durationText(milliseconds: number): string {
