@@ -1,6 +1,6 @@
 {
   "name": "omp-project-time",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Project time and billable work plugin for OMP.",
   "type": "module",
   "license": "MIT",

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-07-14
+
 ### Fixed
 
 - Make `/project-time` visibly report the current project, meter, billable-policy state, and
