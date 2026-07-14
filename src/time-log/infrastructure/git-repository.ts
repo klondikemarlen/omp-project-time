@@ -14,6 +14,7 @@ type GitRepositoryIdentity = {
 export type GitRepository = {
   project: string
   repositoryId: string
+  identity?: string
 }
 
 export async function resolveGitRepository(cwd: string): Promise<GitRepository | undefined> {
@@ -25,7 +26,11 @@ export async function resolveGitRepository(cwd: string): Promise<GitRepository |
   const identity = remoteIdentity ?? localRepositoryIdentity(rootPath)
   const repositoryId = createHash("sha256").update(identity.value).digest("hex")
 
-  return { project: identity.project, repositoryId }
+  return {
+    project: identity.project,
+    repositoryId,
+    identity: remoteIdentity?.value,
+  }
 }
 
 async function repositoryRoot(cwd: string): Promise<string | undefined> {

@@ -16,7 +16,11 @@ export async function resolveGitRepository(cwd) {
   const repositoryId = createHash("sha256")
     .update(identity.value)
     .digest("hex");
-  return { project: identity.project, repositoryId };
+  return {
+    project: identity.project,
+    repositoryId,
+    identity: remoteIdentity?.value,
+  };
 }
 
 async function repositoryRoot(cwd) {

@@ -1,3 +1,5 @@
+import { parseBillableTimeConfig } from "@/billable-time/config.js"
+
 import {
   DEFAULT_ACTIVE_WINDOW_MINUTES,
   DEFAULT_HOURS_PER_WEEK,
@@ -18,6 +20,7 @@ export function parseDeveloperCostConfig(options?: DeveloperCostOptions): Develo
   const rawRefreshIntervalSeconds =
     options?.refreshIntervalSeconds ?? DEFAULT_REFRESH_INTERVAL_SECONDS
   const rawLabel = options?.label ?? DEFAULT_LABEL
+  const rawBillableTime = options?.billableTime
 
   const parsedMonthlySalary = parsePositiveNumber(rawMonthlySalary)
   const monthlySalary = parsedMonthlySalary ?? DEFAULT_MONTHLY_SALARY
@@ -37,6 +40,8 @@ export function parseDeveloperCostConfig(options?: DeveloperCostOptions): Develo
   const parsedLabel = parseNonEmptyString(rawLabel)
   const label = parsedLabel?.toLowerCase() ?? DEFAULT_LABEL
 
+  const billableTime = parseBillableTimeConfig(rawBillableTime)
+
   return {
     monthlySalary,
     hoursPerWeek,
@@ -44,6 +49,7 @@ export function parseDeveloperCostConfig(options?: DeveloperCostOptions): Develo
     activeWindowMinutes,
     refreshIntervalSeconds,
     label,
+    billableTime,
   }
 }
 

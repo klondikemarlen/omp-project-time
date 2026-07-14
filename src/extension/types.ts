@@ -72,4 +72,5 @@ export type ExtensionOptions = {
   loadConfig?: ConfigLoader
   ledgerPath?: string
   timeLogPath?: string
+  billableTimePath?: string
 }

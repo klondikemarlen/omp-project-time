@@ -189,11 +189,45 @@ Setting changes are picked up on the next status refresh while a session is acti
 default settings, that means within about 15 seconds. You only need `/reload-plugins` or a
 restart after changing plugin code or install state.
 
+### Billable clocks
+
+Set `billableTime` to a repository-to-client map. Repository keys use normalized
+`github.com/owner/repository` form; rates are positive decimal strings and are snapshotted when
+each record is written.
+
+```json
+{
+  "repositories": {
+    "github.com/icefoganalytics/wrap": "wrap"
+  },
+  "clients": {
+    "wrap": {
+      "label": "WRAP",
+      "currency": "CAD",
+      "attentionRatePerHour": "120",
+      "aiRatePerHour": "30"
+    }
+  }
+}
+```
+
+Each mapped top-level prompt writes one five-minute attention token and records its AI interval
+until `turn_end` or shutdown. Records are local append-only files at
+`~/.omp/developer-attention-status/attention-tokens.ndjson` and
+`~/.omp/developer-attention-status/ai-intervals.ndjson`; raw prompt text is not stored.
+
+Configure it as one JSON string:
+
+```bash
+omp plugin config set omp-developer-attention-status billableTime '{"repositories":{"github.com/icefoganalytics/wrap":"wrap"},"clients":{"wrap":{"label":"WRAP","currency":"CAD","attentionRatePerHour":"120","aiRatePerHour":"30"}}}'
+```
+
 ## Status command
 
 ```text
 /developer-cost-status
 /developer-cost-status summary
+/developer-cost-status billable
 ```
 
 The package name is `omp-developer-attention-status`; `/developer-cost-status` remains unchanged to
@@ -201,6 +235,8 @@ preserve existing command usage and persisted session data. The default command 
 current meter total for the active top-level session. `summary` reports its session id, developer
 cost, active time, prompt count, and the last prompt's age and timestamp. It does not infer
 corrections, nudges, or outcomes.
+`billable` reports separately grouped attention-token and AI-interval units, durations, snapshotted
+rates, currencies, and amounts.
 
 ## Local project time log
 

@@ -76,6 +76,11 @@
         "type": "string",
         "default": "dev",
         "description": "Lowercase suffix shown in the status line, such as dev."
+      },
+      "billableTime": {
+        "type": "string",
+        "default": "{}",
+        "description": "JSON repository-to-client mappings and separately rated billable time policies."
       }
     }
   },

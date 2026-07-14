@@ -1,3 +1,5 @@
+import type { BillableTimeConfig } from "@/billable-time/config.js"
+
 export type DeveloperCostConfig = {
   monthlySalary: number
   hoursPerWeek: number
@@ -5,6 +7,7 @@ export type DeveloperCostConfig = {
   activeWindowMinutes: number
   refreshIntervalSeconds: number
   label: string
+  billableTime: BillableTimeConfig
 }
 
 export type DeveloperCostOptions = {
@@ -14,4 +17,5 @@ export type DeveloperCostOptions = {
   activeWindowMinutes?: unknown
   refreshIntervalSeconds?: unknown
   label?: unknown
+  billableTime?: unknown
 }
