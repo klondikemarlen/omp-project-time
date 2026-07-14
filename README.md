@@ -233,10 +233,10 @@ until `turn_end` or shutdown. Records are local append-only files at
 `~/.omp/project-time/attention-tokens.ndjson` and
 `~/.omp/project-time/ai-intervals.ndjson`.
 
-When an interval first settles, the plugin records an explicit user session title or a bounded
-generated description in `~/.omp/project-time/session-descriptions.ndjson`. If OMP
-has no usable title model, it records `Unlabeled billable work` instead. It refreshes the
-description after compaction and at shutdown. Raw prompt text, transcripts, tool output, artifacts,
+When an interval first settles, the plugin records an explicit user session title. When its host
+exposes title generation, it records a bounded generated description; otherwise it records
+`Unlabeled billable work`. It refreshes the description after compaction and at shutdown.
+Raw prompt text, transcripts, tool output, artifacts,
 and model metadata are never persisted.
 
 Configure it as one JSON string:

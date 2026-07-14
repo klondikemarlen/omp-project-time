@@ -1,7 +1,4 @@
-import {
-  describeBillableSession,
-  type BillableDescriptionContext,
-} from "@/billable-time/description-generator.js"
+import { describeBillableSession } from "@/billable-time/description-generator.js"
 import { BillableTimeRecorder } from "@/billable-time/recorder.js"
 import {
   billableSummaryText,
@@ -480,11 +477,8 @@ export class ProjectTimeRuntime {
   ): Promise<void> {
     if (!refresh && await this.billableTimeRecorder.descriptionFor(sessionId) !== undefined) return
 
-    const generationContext: BillableDescriptionContext = {
+    const generationContext = {
       sessionId,
-      modelRegistry: ctx.modelRegistry,
-      settings: this.pi.pi?.settings,
-      model: ctx.model,
       generateTitle: this.generateTitle,
     }
     const description = await describeBillableSession(

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fall back to `Unlabeled billable work` instead of dynamically loading an unavailable OMP title module.
+
 ## [2.3.0] - 2026-07-14
 
 ### Added

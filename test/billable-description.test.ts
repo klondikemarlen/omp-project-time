@@ -42,6 +42,19 @@ test("generates a description from a non-compacted session", async () => {
   })
 })
 
+test("uses the provider-neutral fallback without a title generator", async () => {
+  const description = await describeBillableSession(
+    null,
+    [{ type: "message", message: { role: "user", content: "Implement notification suppression" } }],
+    { sessionId: "session" },
+  )
+
+  assert.deepEqual(description, {
+    description: "Unlabeled billable work",
+    source: "generated",
+  })
+})
+
 test("persists only the generated description, not its source context", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "billable-description-"))
   const rawPrompt = "Secret raw request that must not be stored"

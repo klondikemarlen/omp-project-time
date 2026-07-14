@@ -477,9 +477,6 @@ export class ProjectTimeRuntime {
       return;
     const generationContext = {
       sessionId,
-      modelRegistry: ctx.modelRegistry,
-      settings: this.pi.pi?.settings,
-      model: ctx.model,
       generateTitle: this.generateTitle,
     };
     const description = await describeBillableSession(
