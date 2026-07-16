@@ -32,22 +32,6 @@ function config(category?: { id: string; label: string }) {
   })
 }
 
-test("ignores legacy currency configuration", () => {
-  const config = parseBillableTimeConfig({
-    defaultClient: "icefog",
-    clients: {
-      icefog: {
-        label: "Icefog",
-        currency: "USD",
-        attentionRatePerHour: "120",
-        aiRatePerHour: "30",
-      },
-    },
-  })
-
-  assert.equal(config.defaultClient?.label, "Icefog")
-  assert.equal("currency" in (config.defaultClient ?? {}), false)
-})
 
 test("records separate five-minute attention tokens and AI intervals", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "billable-time-"))
@@ -63,10 +47,8 @@ test("records separate five-minute attention tokens and AI intervals", async () 
 
     assert.equal(attention.durationMs, 300_000)
     assert.equal(attention.ratePerHour, "120")
-    assert.equal("currency" in attention, false)
     assert.equal(interval.durationMs, 90_000)
     assert.equal(interval.ratePerHour, "30")
-    assert.equal("currency" in interval, false)
     assert.equal(interval.terminalReason, "turn_end")
   } finally {
     await rm(root, { recursive: true, force: true })

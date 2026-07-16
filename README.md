@@ -132,12 +132,11 @@ After install, restart OMP if it is already running, or run `/reload-plugins`.
 
 Then run `/project-time` once to confirm the extension loaded.
 
-## CAD-only local data reset
+## Local data reset
 
-Project Time records and presents monetary values in CAD. On its first startup after this release,
-it deletes existing local Project Time, `omp-developer-attention-status`, and developer-cost ledger
-data, then starts a fresh CAD-only ledger. It does not convert or preserve historical records.
-Plugin settings remain in OMP configuration; a legacy billable `currency` field is ignored.
+On its first startup after the major data-model release, Project Time deletes existing local
+Project Time, `omp-developer-attention-status`, and developer-cost ledger data, then starts a fresh
+local schema. It does not convert or preserve historical records.
 
 ## Runtime support
 
