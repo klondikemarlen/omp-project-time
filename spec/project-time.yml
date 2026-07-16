@@ -19,12 +19,16 @@ requirements:
     title: Configurable UI refresh
     requirement: The status UI refreshes every refreshIntervalSeconds while the session is active.
     default: 15 seconds
-    example: With the default rate, each 15-second active refresh adds about CA$0.16 before formatting.
+    example: With the default rate, each 15-second active refresh adds about 0.16 before formatting.
     rationale: refreshIntervalSeconds controls display cadence; it is not the billing window size.
   - id: precise_storage
     title: Precise persisted storage
     requirement: Store tracked values as decimal strings produced from Big.js arithmetic, and format them only at the UI boundary.
     rationale: Avoid floating-point drift and avoid coupling persisted values to display formatting or rounding.
+  - id: cad_locale_format
+    title: Configurable CAD locale formatting
+    requirement: Format every displayed CAD amount with one Intl.NumberFormat formatter using a configured BCP 47 locale; default to en-CA and validate that the runtime supports the locale.
+    rationale: Presentation follows regional monetary conventions without adding currency metadata, conversion, or rounding to persisted tracking values.
   - id: local_data_reset
     title: Local data reset
     requirement: On the first startup after a major tracking-data change, delete legacy Project Time and developer-cost ledger data; write a local schema marker so later starts retain new records.

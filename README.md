@@ -7,7 +7,7 @@ OMP plugin that records project time, developer attention, and separately rated 
 **WHY this plugin exists:** OMP shows model and tool activity, but it does not track the
 developer attention consumed while they drive a session.
 
-**WHAT this plugin produces:** A compact footer status segment like `CA$0.16 (dev)` that stays
+**WHAT this plugin produces:** A compact footer status segment like `CAD 0.16 (dev)` that stays
 active after each prompt, plus an on-demand summary of project time, active time, and prompts.
 
 Canonical feature requirements live in [`spec/project-time.yml`](spec/project-time.yml).
@@ -42,7 +42,7 @@ Current OMP limitation:
 
 Display style:
 
-- format: `CA$3.13 (dev)`
+- format: `CAD 3.13 (dev)` using the configured locale
 - dim hook-status styling
 - refreshes every `refreshIntervalSeconds` while the session is active
 
@@ -69,10 +69,11 @@ The plugin ships with simple CAD defaults:
 - `activeWindowMinutes`: `5`
 - `refreshIntervalSeconds`: `15`
 - `label`: `dev`
+- `locale`: `en-CA`
 
-That yields a default 5-minute developer cost of about `CA$3.13`, or about `CA$0.16` per active
+That yields a default 5-minute developer cost of about `CAD 3.13`, or about `CAD 0.16` per active
 15-second refresh. If you work `49` weeks per year instead, the same defaults produce about
-`CA$3.32` per 5-minute window.
+`CAD 3.32` per 5-minute window.
 
 ## Formula
 
@@ -92,8 +93,8 @@ weeksPerYear = 52
 activeWindowMinutes = 5
 refreshIntervalSeconds = 15
 
-15-second refresh = CA$0.16
-5-minute active window = CA$3.13
+15-second refresh = CAD 0.16
+5-minute active window = CAD 3.13
 ```
 
 49-week example:
@@ -104,7 +105,7 @@ hoursPerWeek = 40
 weeksPerYear = 49
 activeWindowMinutes = 5
 
-5-minute active window = CA$3.32
+5-minute active window = CAD 3.32
 ```
 
 ## Install
@@ -168,11 +169,16 @@ omp plugin config set omp-project-time weeksPerYear 49
 omp plugin config set omp-project-time activeWindowMinutes 5
 omp plugin config set omp-project-time refreshIntervalSeconds 10
 omp plugin config set omp-project-time label dev
+omp plugin config set omp-project-time locale fr-CA
 ```
 
 Setting changes are picked up on the next status refresh while a session is active. With the
 default settings, that means within about 15 seconds. You only need `/reload-plugins` or a
 restart after changing plugin code or install state.
+
+`locale` must be a BCP 47 locale supported by `Intl.NumberFormat`. The default `en-CA` renders
+unambiguous CAD codes (for example, `CAD 3.13`); `fr-CA` renders `3,13 CAD`. This setting changes
+only presentation—stored developer and billable values remain decimal scalars.
 
 ### Billable clocks
 
@@ -245,9 +251,9 @@ dashboard with the current Git project, developer meter, billable-policy state, 
 command. `summary` reports its session id, project time cost, active time, prompt count, and the last
 prompt's age and timestamp. It does not infer corrections, nudges, or outcomes.
 `billable` reports separately grouped attention-token and AI-interval units, durations, and
-snapshotted rates/currencies; its displayed amounts round only at the presentation boundary.
-`billable preview` emits local provider-neutral JSON entries with client
-and project attribution, source-specific timestamps, exact durations, snapshotted rates/currencies,
+snapshotted rates; its CAD rates and displayed amounts use the configured locale and round only at
+the presentation boundary. `billable preview` emits local provider-neutral JSON entries with client
+and project attribution, source-specific timestamps, exact durations, locale-formatted CAD rates,
 and the recorded description. It performs no network operation and does not define an
 external-system payload or integration.
 `history` reports the current Git project, settled developer meter, and recent local developer-time
