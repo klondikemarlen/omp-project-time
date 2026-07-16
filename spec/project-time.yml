@@ -19,12 +19,16 @@ requirements:
     title: Configurable UI refresh
     requirement: The status UI refreshes every refreshIntervalSeconds while the session is active.
     default: 15 seconds
-    example: With the default rate, each 15-second active refresh adds about $0.16 before formatting.
+    example: With the default rate, each 15-second active refresh adds about CA$0.16 before formatting.
     rationale: refreshIntervalSeconds controls display cadence; it is not the billing window size.
   - id: precise_storage
     title: Precise persisted storage
-    requirement: Store accumulated cost as a decimal string produced from Big.js arithmetic, and format currency only at the UI boundary.
-    rationale: Avoid floating-point drift and avoid mixing storage precision with display rounding.
+    requirement: Store currency-neutral cost components as decimal strings produced from Big.js arithmetic, and project them as CAD only at the UI boundary.
+    rationale: Avoid floating-point drift and avoid coupling persisted tracking vectors to presentation currency or display rounding.
+  - id: cad_only_local_reset
+    title: CAD-only local data reset
+    requirement: On the first CAD-only startup, delete legacy Project Time and developer-cost ledger data; write a local marker so later starts retain only new CAD tracking records.
+    rationale: This single-owner plugin intentionally discards incompatible local history instead of converting or preserving currency-bound ledgers.
   - id: session_scope
     title: Session-scoped meter
     requirement: Track and persist cost by top-level session id; resuming the same session continues its meter.
@@ -52,8 +56,8 @@ requirements:
     rationale: Automatic attribution must not turn local source-control metadata into sensitive activity logging.
   - id: billable_clocks
     title: Separate billable attention and AI clocks
-    requirement: For an opted-in default client policy or configured GitHub repository-client mapping, record one fixed five-minute human-attention token and one exact AI interval for each top-level prompt. Attribute each record to the active repository and its configured-or-derived project name; snapshot project, rate, and ISO 4217 currency facts in separate append-only ledgers, derive totals with decimal arithmetic, and round only when presenting a summary.
-    rationale: Human attention and AI runtime are separate billable observations with different rates; project attribution remains provider-neutral and later policy edits must not rewrite history.
+    requirement: For an opted-in default client policy or configured GitHub repository-client mapping, record one fixed five-minute human-attention token and one exact AI interval for each top-level prompt. Attribute each record to the active repository and its configured-or-derived project name; snapshot project and rate as currency-neutral tracking components in separate append-only ledgers, derive totals with decimal arithmetic, and render them as CAD only in summaries.
+    rationale: Human attention and AI runtime are separate billable observations with different rates; project attribution remains provider-neutral and the tracking vector has no currency field.
   - id: billable_categories
     title: Provider-neutral billable categories
     requirement: Allow a configured repository category ID and label to be snapshotted on new billable attention-token and AI-interval records, and preserve category attribution in summaries and previews.

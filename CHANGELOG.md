@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Present developer and billable costs in CAD while keeping persisted tracking components currency-neutral.
+- Reset existing local Project Time tracking data once before recording CAD-only data.
+
+### Removed
+
+- Remove per-client billable currency configuration and persisted currency fields.
+
+
 ## [2.3.2] - 2026-07-15
 
 ### Changed

@@ -7,7 +7,7 @@ OMP plugin that records project time, developer attention, and separately rated 
 **WHY this plugin exists:** OMP shows model and tool activity, but it does not track the
 developer attention consumed while they drive a session.
 
-**WHAT this plugin produces:** A compact footer status segment like `$0.16 (dev)` that stays
+**WHAT this plugin produces:** A compact footer status segment like `CA$0.16 (dev)` that stays
 active after each prompt, plus an on-demand summary of project time, active time, and prompts.
 
 Canonical feature requirements live in [`spec/project-time.yml`](spec/project-time.yml).
@@ -42,7 +42,7 @@ Current OMP limitation:
 
 Display style:
 
-- format: `$3.13 (dev)`
+- format: `CA$3.13 (dev)`
 - dim hook-status styling
 - refreshes every `refreshIntervalSeconds` while the session is active
 
@@ -61,7 +61,7 @@ Billing and attention behavior:
 
 ## Defaults
 
-The plugin ships with simple defaults:
+The plugin ships with simple CAD defaults:
 
 - `monthlySalary`: `6500`
 - `hoursPerWeek`: `40`
@@ -70,11 +70,9 @@ The plugin ships with simple defaults:
 - `refreshIntervalSeconds`: `15`
 - `label`: `dev`
 
-That yields a default 5-minute developer cost of about `$3.13`, or about `$0.16` per active
-15-second refresh.
-
-If you work `49` weeks per year instead, the same defaults produce about `$3.32` per 5-minute
-window.
+That yields a default 5-minute developer cost of about `CA$3.13`, or about `CA$0.16` per active
+15-second refresh. If you work `49` weeks per year instead, the same defaults produce about
+`CA$3.32` per 5-minute window.
 
 ## Formula
 
@@ -94,8 +92,8 @@ weeksPerYear = 52
 activeWindowMinutes = 5
 refreshIntervalSeconds = 15
 
-15-second refresh = $0.16
-5-minute active window = $3.13
+15-second refresh = CA$0.16
+5-minute active window = CA$3.13
 ```
 
 49-week example:
@@ -106,7 +104,7 @@ hoursPerWeek = 40
 weeksPerYear = 49
 activeWindowMinutes = 5
 
-5-minute active window = $3.32
+5-minute active window = CA$3.32
 ```
 
 ## Install
@@ -134,23 +132,12 @@ After install, restart OMP if it is already running, or run `/reload-plugins`.
 
 Then run `/project-time` once to confirm the extension loaded.
 
-## Migrate from `omp-developer-attention-status`
+## CAD-only local data reset
 
-Stop OMP before migrating. Loading both packages at once registers duplicate lifecycle handlers and
-can double-bill.
-
-1. Record global settings with `omp plugin config list omp-developer-attention-status`.
-2. Run `omp plugin uninstall omp-developer-attention-status`.
-3. Run `omp plugin install github:klondikemarlen/omp-project-time`.
-4. Reapply settings with `omp plugin config set omp-project-time <key> <value>`.
-5. Copy each old `.omp/plugin-overrides.json` setting from
-   `omp-developer-attention-status` to `omp-project-time`.
-
-On its first startup, Project Time atomically moves
-`~/.omp/developer-attention-status/` to `~/.omp/project-time/`, including billable ledgers and
-time logs. It also moves the prior shared spread-billing ledger. If both source and destination
-paths exist, it stops with a recovery message instead of merging data. Resolve that conflict
-manually, then restart OMP.
+Project Time records and presents monetary values in CAD. On its first startup after this release,
+it deletes existing local Project Time, `omp-developer-attention-status`, and developer-cost ledger
+data, then starts a fresh CAD-only ledger. It does not convert or preserve historical records.
+Plugin settings remain in OMP configuration; a legacy billable `currency` field is ignored.
 
 ## Runtime support
 
@@ -190,12 +177,12 @@ restart after changing plugin code or install state.
 
 ### Billable clocks
 
-Configure a client policy with ISO 4217 currency and positive decimal rates. Setting
-`defaultClient` makes the active Git repository the billable project target; its project name
-defaults to the repository name. `projects` optionally replaces that displayed name, while
-`categories` assigns a provider-neutral category ID and label to new records for a specific
-normalized `github.com/owner/repository` identity. `repositories` remains available when a
-repository needs a client policy other than `defaultClient`.
+Configure a client policy with positive CAD hourly rates. Setting `defaultClient` makes the active
+Git repository the billable project target; its project name defaults to the repository name.
+`projects` optionally replaces that displayed name, while `categories` assigns a provider-neutral
+category ID and label to new records for a specific normalized `github.com/owner/repository`
+identity. `repositories` remains available when a repository needs a client policy other than
+`defaultClient`.
 
 ```json
 {
@@ -203,7 +190,6 @@ repository needs a client policy other than `defaultClient`.
   "clients": {
     "icefog": {
       "label": "Ice Fog Analytics",
-      "currency": "CAD",
       "attentionRatePerHour": "120",
       "aiRatePerHour": "30"
     }
@@ -223,10 +209,9 @@ repository needs a client policy other than `defaultClient`.
 }
 ```
 
-`defaultClient` is opt-in: Project Time never infers a rate, currency, or category. New records
-snapshot the client, repository, project identity, project name, category, rate, and currency.
-Project and category attribution stay provider-neutral; they are not Harvest project or task
-mappings.
+`defaultClient` is opt-in: Project Time never infers a rate or category. New records snapshot the
+client, repository, project identity, project name, category, and rate. Project and category
+attribution stay provider-neutral; they are not Harvest project or task mappings.
 
 Each qualifying top-level prompt writes one five-minute attention token and records its AI interval
 until `turn_end` or shutdown. Records are local append-only files at
@@ -242,7 +227,7 @@ and model metadata are never persisted.
 Configure it as one JSON string:
 
 ```bash
-omp plugin config set omp-project-time billableTime '{"defaultClient":"icefog","clients":{"icefog":{"label":"Ice Fog Analytics","currency":"CAD","attentionRatePerHour":"120","aiRatePerHour":"30"}},"projects":{"github.com/icefoganalytics/wrap":"WRAP Support"},"categories":{"github.com/icefoganalytics/wrap":{"id":"programming","label":"Programming"}}}'
+omp plugin config set omp-project-time billableTime '{"defaultClient":"icefog","clients":{"icefog":{"label":"Ice Fog Analytics","attentionRatePerHour":"120","aiRatePerHour":"30"}},"projects":{"github.com/icefoganalytics/wrap":"WRAP Support"},"categories":{"github.com/icefoganalytics/wrap":{"id":"programming","label":"Programming"}}}'
 ```
 
 ## Status command
