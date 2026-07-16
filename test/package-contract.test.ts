@@ -22,6 +22,7 @@ test("package ships the OMP entrypoint and canonical spec", async () => {
   assert.deepEqual(packageJson.omp?.extensions, ["./dist/index.js"])
   assert.ok(packageJson.files?.includes("dist"), "expected dist/ in package files")
   assert.ok(packageJson.files?.includes("THIRD_PARTY_NOTICES.txt"), "expected third-party notices in package files")
+  assert.equal(packageJson.dependencies?.["@oh-my-pi/pi-coding-agent"], "^17.0.1")
   assert.equal(packageJson.dependencies?.["big.js"], undefined)
   assert.equal(packageJson.dependencies?.["proper-lockfile"], undefined)
   assert.equal(

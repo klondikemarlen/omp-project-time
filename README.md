@@ -34,10 +34,10 @@ Canonical feature requirements live in [`spec/project-time.yml`](spec/project-ti
 
 The plugin writes status via `ctx.ui.setStatus(...)`.
 
-Current OMP limitation:
+Current OMP behavior (`@oh-my-pi/pi-coding-agent` `17.0.1` or newer):
 
-- plugin status renders on the separate hook-status line below the main prompt status bar
-- it does **not** render inline beside the built-in usage/cost segment
+- each enabled extension's keyed status renders on its own deterministically ordered hook-status line
+- plugin status does **not** render inline beside the built-in usage/cost segment
 - the extra vertical gap belongs to OMP's hook-status layout, not this plugin's text
 
 Display style:
@@ -332,5 +332,6 @@ For public user-facing changes, use the GitHub feature issue and pull request te
 
 - `omp plugin list` should show `omp-project-time`.
 - `omp plugin config list omp-project-time` should show the current settings.
-- The status text is rendered by `ctx.ui.setStatus(...)`, so it appears on OMP's separate
-  hook-status line rather than inline beside the built-in usage/cost segment.
+- The status text is rendered by `ctx.ui.setStatus(...)`. OMP `17.0.1` or newer keeps each enabled
+  plugin's keyed hook status on its own line; it does not render inline beside the built-in usage/cost
+  segment.
