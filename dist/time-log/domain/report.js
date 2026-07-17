@@ -1,6 +1,6 @@
 export function buildReport(entries, sourceKind, mode, weights) {
   const filtered = entries.filter((entry) => entry.sourceKind === sourceKind);
-  if (mode === "raw" || mode === "independent") {
+  if (mode === "raw") {
     return {
       sourceKind,
       mode,

@@ -11,9 +11,7 @@ export function parseTimeLogEntry(value) {
   const startAtMs = candidate.startAtMs;
   const endAtMs = candidate.endAtMs;
   const createdAtMs = candidate.createdAtMs;
-  const attribution =
-    parseAttribution(candidate.attribution) ??
-    parseAttribution(candidate.timesheet);
+  const attribution = parseAttribution(candidate.attribution);
   if (
     typeof id !== "string" ||
     id.length === 0 ||
@@ -45,7 +43,6 @@ export function parseTimeLogEntry(value) {
 }
 
 function parseSourceKind(value) {
-  if (value === undefined) return "human_active";
   if (value === "human_active" || value === "agent_turn_elapsed") return value;
   return undefined;
 }

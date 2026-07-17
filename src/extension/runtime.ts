@@ -20,7 +20,6 @@ import {
   clearStatus,
   dashboardText,
   historyText,
-  settingsText,
   summaryText,
   updateStatus,
 } from "@/extension/status-presenter.js"
@@ -52,11 +51,6 @@ const PROJECT_TIME_COMMANDS = [
     description: "Show active time, prompt count, and last prompt",
   },
   {
-    value: "settings",
-    label: "settings",
-    description: "Show Project Time settings and repository attribution",
-  },
-  {
     value: "history",
     label: "history",
     description: "Show recent human and agent intervals for this project",
@@ -64,7 +58,7 @@ const PROJECT_TIME_COMMANDS = [
   {
     value: "report",
     label: "report",
-    description: "Show raw/independent/split/weighted allocation reports",
+    description: "Show raw, split, or weighted allocation reports",
   },
 ] as const
 
@@ -177,7 +171,7 @@ export class ProjectTimeRuntime {
       && !PROJECT_TIME_COMMANDS.some(({ value }) => value === command)
     ) {
       ctx.ui.notify(
-        "Unknown Project Time command. Use settings, summary, history, or report.",
+        "Unknown Project Time command. Use summary, history, or report.",
         "error",
       )
       return
@@ -188,11 +182,6 @@ export class ProjectTimeRuntime {
 
     if (command === "history") {
       await this.showHistory(ctx, config)
-      return
-    }
-
-    if (command === "settings") {
-      ctx.ui.notify(settingsText(config), "info")
       return
     }
 
@@ -225,7 +214,7 @@ export class ProjectTimeRuntime {
       const entries = await this.timeLogRecorder.entries()
 
       if (reportArgs.mode === "all") {
-        const modes: AllocationMode[] = ["raw", "independent", "split", "weighted"]
+        const modes: AllocationMode[] = ["raw", "split", "weighted"]
         const human: Record<string, unknown> = {}
         const agent: Record<string, unknown> = {}
 
@@ -518,7 +507,6 @@ function parseReportArgs(command: string): ReportArgs {
   let mode: AllocationMode | "all" = "all"
   if (
     modeToken === "raw"
-    || modeToken === "independent"
     || modeToken === "split"
     || modeToken === "weighted"
   ) {

@@ -21,7 +21,7 @@ function entry(
   }
 }
 
-test("raw and independent reports give full per-project attribution", () => {
+test("raw reports retain full per-project attribution", () => {
   const entries = [
     entry({
       sourceKind: "human_active",
@@ -40,22 +40,13 @@ test("raw and independent reports give full per-project attribution", () => {
   ]
 
   const raw = buildReport(entries, "human_active", "raw")
-  const independent = buildReport(entries, "human_active", "independent")
 
   assert.equal(raw.entries.length, 2)
-  assert.equal(independent.entries.length, 2)
   assert.equal(raw.ompActiveUnionMs, 7 * minute)
-  assert.equal(independent.ompActiveUnionMs, 7 * minute)
-
-  const alphaRaw = raw.entries.find((e) => e.repositoryId === "repo-alpha")
-  const betaRaw = raw.entries.find((e) => e.repositoryId === "repo-beta")
-  assert.equal(alphaRaw?.durationMs, 5 * minute)
-  assert.equal(betaRaw?.durationMs, 5 * minute)
-
-  const alphaIndependent = independent.entries.find(
-    (e) => e.repositoryId === "repo-alpha",
-  )
-  assert.equal(alphaIndependent?.durationMs, 5 * minute)
+  const alpha = raw.entries.find((entry) => entry.repositoryId === "repo-alpha")
+  const beta = raw.entries.find((entry) => entry.repositoryId === "repo-beta")
+  assert.equal(alpha?.durationMs, 5 * minute)
+  assert.equal(beta?.durationMs, 5 * minute)
 })
 
 test("split report divides concurrent time equally among active projects", () => {

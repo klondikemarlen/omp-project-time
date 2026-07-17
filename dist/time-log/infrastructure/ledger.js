@@ -3,14 +3,11 @@ import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { lock } from "../../vendor/proper-lockfile.js";
-import { exportTimeEntries } from "../../time-log/domain/summary.js";
 import { recordAutomaticTimeLogEntry } from "../../time-log/domain/record-automatic-entry.js";
 import { parseTimeLogState } from "../../time-log/infrastructure/state-mapper.js";
 
 export class TimeLogLedger {
   filePath;
-
-  summaryPath;
 
   usesDefaultPath;
 
@@ -22,7 +19,6 @@ export class TimeLogLedger {
       "time-log.json",
     );
     this.filePath = filePath ?? defaultPath;
-    this.summaryPath = `${this.filePath}.summary.json`;
     this.usesDefaultPath = filePath === undefined;
   }
 
@@ -30,11 +26,7 @@ export class TimeLogLedger {
     return this.withLock(async () => {
       const state = await this.readState();
       const recorded = recordAutomaticTimeLogEntry(state.entries, input);
-      if (recorded.changed) {
-        await this.writeState(state);
-      } else {
-        await this.writeSummary(state);
-      }
+      if (recorded.changed) await this.writeState(state);
       return recorded.entry;
     });
   }
@@ -106,13 +98,5 @@ export class TimeLogLedger {
     const content = JSON.stringify(state);
     await writeFile(temporaryPath, content, { mode: 0o600 });
     await rename(temporaryPath, this.filePath);
-    await this.writeSummary(state);
-  }
-
-  async writeSummary(state) {
-    const temporaryPath = `${this.summaryPath}.${process.pid}.${randomUUID()}.tmp`;
-    const content = exportTimeEntries(state.entries);
-    await writeFile(temporaryPath, content, { mode: 0o600 });
-    await rename(temporaryPath, this.summaryPath);
   }
 }

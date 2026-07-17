@@ -6,6 +6,7 @@ import test from "node:test"
 
 import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js"
 import type { AutomaticTimeLogInput, TimeLogEntry } from "../src/time-log/domain/model.js"
+import { parseTimeLogEntry } from "../src/time-log/domain/parse-entry.js"
 import { createAutomaticTimeLogEntry } from "../src/time-log/domain/create-automatic-entry.js"
 import { recordAutomaticTimeLogEntry } from "../src/time-log/domain/record-automatic-entry.js"
 import { lock } from "../src/vendor/proper-lockfile.js"
@@ -48,6 +49,26 @@ function assertEntries(
     expected,
   )
 }
+
+test("rejects legacy entries without a source kind", () => {
+  assert.equal(
+    parseTimeLogEntry({
+      id: "legacy-entry",
+      project: "Project A",
+      repositoryId: "repository-a",
+      startAtMs: start,
+      endAtMs: start + minute,
+      createdAtMs: start,
+      timesheet: {
+        projectId: "project-a",
+        projectName: "Project A",
+        categoryId: "development",
+        categoryLabel: "Development",
+      },
+    }),
+    undefined,
+  )
+})
 
 test("limits automatic human intervals to the settled attention duration", () => {
   const entry = createAutomaticTimeLogEntry({
@@ -194,12 +215,7 @@ test("keeps overlapping automatic intervals from separate repositories", async (
     ]
 
     assertEntries(entries, expected)
-    const exported = JSON.parse(await readFile(`${ledgerPath}.summary.json`, "utf8"))
-    assert.deepEqual(Object.keys(exported.summaries), ["5", "10", "15"])
-    assert.equal(exported.summaries[5].allocationMilliseconds, 10 * minute)
-    assert.equal(exported.summaries[5].wallClockMilliseconds, 7 * minute)
-    assert.equal(exported.summaries[10].allocationMilliseconds, 10 * minute)
-    assert.equal(exported.summaries[15].allocationMilliseconds, 10 * minute)
+    await assert.rejects(readFile(`${ledgerPath}.summary.json`, "utf8"))
   })
 })
 
@@ -291,7 +307,6 @@ test("writes automatic ledgers with owner-only permissions", async () => {
     })
 
     assert.equal((await stat(ledgerPath)).mode & 0o777, 0o600)
-    assert.equal((await stat(`${ledgerPath}.summary.json`)).mode & 0o777, 0o600)
   })
 })
 

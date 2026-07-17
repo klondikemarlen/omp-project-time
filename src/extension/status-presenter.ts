@@ -24,19 +24,6 @@ export function statusText(
   return `${durationText(state.activeMilliseconds)} (${config.label})`
 }
 
-export function settingsText(config: ProjectTimeConfig): string {
-  return [
-    "Project Time settings",
-    `Active window: ${config.activeWindowMinutes} minutes`,
-    `Refresh interval: ${config.refreshIntervalSeconds} seconds`,
-    `Label: ${config.label}`,
-    `Repository attribution: ${repositoryAttributionStatus(config)}`,
-    ...configuredRepositoryAttributions(config).map(
-      ([repository, attribution]) =>
-        `- ${repository} → ${attribution.project.label} / ${attribution.category.label}`,
-    ),
-  ].join("\n")
-}
 
 export function dashboardText(
   state: ProjectTimeState,
@@ -48,7 +35,7 @@ export function dashboardText(
     `Project: ${project ?? "unavailable"}`,
     `Current active: ${statusText(state, config)}`,
     `Repository attribution: ${repositoryAttributionStatus(config)}`,
-    "Commands: /project-time settings | /project-time summary | /project-time history | /project-time report",
+    "Commands: /project-time summary | /project-time history | /project-time report",
     "Tip: type /project-time followed by a space to choose a mode.",
   ].join("\n")
 }
@@ -112,9 +99,6 @@ function repositoryAttributionStatus(config: ProjectTimeConfig): string {
   return config.repositoryAttribution.size > 0 ? "configured" : "not configured"
 }
 
-function configuredRepositoryAttributions(config: ProjectTimeConfig) {
-  return [...config.repositoryAttribution.entries()]
-}
 
 function recentEntries(entries: readonly TimeLogEntry[]): string[] {
   return [...entries]

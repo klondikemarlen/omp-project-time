@@ -1,6 +1,6 @@
 import type { TimeLogEntry, TimeLogAttribution, SourceKind } from "@/time-log/domain/model.js"
 
-export type AllocationMode = "raw" | "independent" | "split" | "weighted"
+export type AllocationMode = "raw" | "split" | "weighted"
 
 export type ReportEntry = {
   mode: AllocationMode
@@ -29,7 +29,7 @@ export function buildReport(
 ): Report {
   const filtered = entries.filter((entry) => entry.sourceKind === sourceKind)
 
-  if (mode === "raw" || mode === "independent") {
+  if (mode === "raw") {
     return {
       sourceKind,
       mode,
