@@ -80,12 +80,10 @@ Unmapped repositories still record local intervals with a sanitized project name
 
 ```text
 /project-time
-/project-time settings
 /project-time summary
 /project-time history
 /project-time report
 /project-time report human raw
-/project-time report human independent
 /project-time report human split
 /project-time report human weighted '{"<repository-id>": 2}'
 /project-time report agent split
@@ -96,7 +94,6 @@ Unmapped repositories still record local intervals with a sanitized project name
 `report` emits local JSON. It defaults to both source kinds and all allocation modes:
 
 - `raw`: one total per repository/project/category/task. Concurrent durations remain fully attributed.
-- `independent`: same full-attribution totals, explicitly labelled for independent project accounting.
 - `split`: divides every overlapping interval equally across active repositories.
 - `weighted`: divides overlap by the supplied positive per-repository weights; omitted repositories have weight `1`.
 

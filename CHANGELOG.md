@@ -4,12 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [4.0.1] - 2026-07-17
+
+### Removed
+
+- Remove the unconsumed compacted-ledger artifact, duplicate `independent` report mode, and `/project-time settings` command.
+
+### Changed
+
+- Reject pre-v4 time-log entry shapes instead of carrying unused legacy parsing.
+
 ## [4.0.0] - 2026-07-17
 
 ### Added
 
 - Record immutable, repository-attributed `human_active` and separate `agent_turn_elapsed` intervals for top-level OMP sessions.
-- Add local raw, independent, equal-split, and explicit weighted allocation reports for concurrent work.
+- Add local raw, equal-split, and explicit weighted allocation reports for concurrent work.
 
 ### Changed
 
