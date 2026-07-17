@@ -35,9 +35,9 @@ test("publishes the v5 OMP settings UI", async () => {
     },
     "Repository Attribution": {
       type: "string",
-      default: "",
+      default: "{}",
       description:
-        "Maps normalized repositories to project, category, and optional task JSON.",
+        "Maps normalized repositories to project, category, and optional task JSON. Enter {} to clear attribution.",
     },
   })
 })
@@ -126,6 +126,27 @@ test("loads repository attribution mappings from the current setting", async () 
         category: { id: "development", label: "Development" },
       },
     )
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("treats empty repository attribution as no mapping", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "project-time-config-"))
+  const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
+  const projectOverrides = path.join(directory, "missing-overrides.json")
+
+  try {
+    await writePluginSettings(pluginsLockfile, {
+      "Repository Attribution": "{}",
+    })
+
+    const config = await loadProjectTimeConfigFromFiles(
+      pluginsLockfile,
+      projectOverrides,
+    )
+
+    assert.equal(config.repositoryAttribution.size, 0)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

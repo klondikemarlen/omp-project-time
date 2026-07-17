@@ -27,7 +27,7 @@ The plugin writes only through `ctx.ui.setStatus(...)`. With `@oh-my-pi/pi-codin
 - `Active Window Minutes`: `5`
 - `Refresh Interval Seconds`: `15`
 - `Status Label`: `dev`
-- `Repository Attribution`: empty
+- `Repository Attribution`: `{}`
 
 `Refresh Interval Seconds` controls status display cadence, not interval length. Version 5 replaces the lower-camel-case names; Project Time rejects the retired names instead of silently dropping their values.
 
@@ -63,7 +63,7 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 
 ## Configure repository attribution
 
-OMP renders plugin setting keys as labels, so Project Time uses Title Case names with units. `Repository Attribution` is the one advanced scalar setting: it configures attribution, not billing.
+OMP renders plugin setting keys as labels, so Project Time uses Title Case names with units. `Repository Attribution` is the one advanced scalar setting: it configures attribution, not billing. Enter `{}` to clear an existing mapping.
 
 Each normalized GitHub repository can map to a project, category, and optional task. Mapped values are copied into entries when recorded; changing configuration never rewrites history.
 
