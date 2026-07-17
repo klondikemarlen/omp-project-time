@@ -26,12 +26,14 @@ function createTimeLogEntry(input, createdAtMs) {
   const project = input.project.trim();
   const repositoryId = input.repositoryId.trim();
   const sourceKey = input.sourceKey.trim();
-  const { startAtMs, endAtMs } = input;
+  const { startAtMs, endAtMs, sourceKind, sessionId, attribution } = input;
   if (project.length === 0) throw new Error("Time log project is required.");
-  if (repositoryId.length === 0)
+  if (repositoryId.length === 0) {
     throw new Error("Time log repository identity is required.");
-  if (sourceKey.length === 0)
+  }
+  if (sourceKey.length === 0) {
     throw new Error("Time log source key is required.");
+  }
   if (
     !Number.isFinite(startAtMs) ||
     !Number.isFinite(endAtMs) ||
@@ -41,11 +43,14 @@ function createTimeLogEntry(input, createdAtMs) {
   }
   return {
     id: `auto-${createHash("sha256").update(sourceKey).digest("hex")}`,
+    sourceKind,
     project,
     repositoryId,
+    ...(sessionId === undefined ? {} : { sessionId }),
     startAtMs,
     endAtMs,
     createdAtMs,
+    ...(attribution === undefined ? {} : { attribution }),
   };
 }
 

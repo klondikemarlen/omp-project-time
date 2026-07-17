@@ -1,21 +1,30 @@
-import type { DeveloperCostConfig, DeveloperCostState } from "@/billing/index.js"
+import type { ProjectTimeConfig } from "@/config/project-time-config.js"
 import { errorMessage } from "@/utils/error-message.js"
 import { createAutomaticTimeLogEntry } from "@/time-log/domain/create-automatic-entry.js"
 import { TimeLogLedger } from "@/time-log/infrastructure/ledger.js"
 import type { AutomaticTimeLogInput, TimeLogEntry } from "@/time-log/domain/model.js"
+import type { ProjectTimeState } from "@/time-log/domain/state.js"
 import {
   resolveGitRepository,
   type GitRepository,
 } from "@/infrastructure/git-repository.js"
-import { normalizeBillableRepository } from "@/billable-time/domain/repository.js"
+import { normalizeRepositoryIdentity } from "@/infrastructure/repository-identity.js"
 
 type Settlement = {
-  config: DeveloperCostConfig
+  config: ProjectTimeConfig
   cwd: string
   nowMs: number
   sessionId: string
-  stateBeforeSettlement: DeveloperCostState
-  settledState: DeveloperCostState
+  stateBeforeSettlement: ProjectTimeState
+  settledState: ProjectTimeState
+}
+
+type AgentTurn = {
+  config: ProjectTimeConfig
+  cwd: string
+  endAtMs: number
+  sessionId: string
+  startAtMs: number
 }
 
 type ErrorNotifier = (message: string) => void
@@ -28,26 +37,72 @@ export class AutomaticTimeLogRecorder {
     Promise<GitRepository | undefined>
   >()
   private readonly sessionActivities = new Map<string, SessionActivity>()
+
   constructor(timeLogPath?: string) {
     this.ledger = new TimeLogLedger(timeLogPath)
   }
 
-  recordPromptStart(sessionId: string, cwd: string, promptAtMs: number): void {
-    this.sessionActivities.set(
-      sessionId,
-      new SessionActivity(this.repositoryFor(cwd), promptAtMs),
-    )
+  recordPromptStart(
+    sessionId: string,
+    cwd: string,
+    promptAtMs: number,
+    config: ProjectTimeConfig,
+    notifyError: ErrorNotifier,
+  ): void {
+    const repository = this.repositoryFor(cwd)
+    const activity = this.sessionActivityFor(sessionId)
+
+    if (activity.agentTurnStartAtMs !== undefined) {
+      this.closeAgentTurn(
+        activity,
+        {
+          config,
+          cwd,
+          endAtMs: promptAtMs,
+          sessionId,
+          startAtMs: activity.agentTurnStartAtMs,
+        },
+        notifyError,
+      )
+    }
+
+    activity.setPromptStart(repository, promptAtMs)
   }
 
-  recordSettlement(settlement: Settlement, notifyError: ErrorNotifier): void {
+  recordSettlement(
+    settlement: Settlement,
+    notifyError: ErrorNotifier,
+  ): void {
     const activity = this.sessionActivityFor(settlement.sessionId)
     activity.enqueue(
-      () => this.automaticEntry(settlement, activity),
+      () => this.humanEntry(settlement, activity),
       (entry) => this.ledger.recordAutomatic(entry),
       () => {
         this.lastErrorMessage = undefined
       },
       (error) => this.reportError(error, notifyError),
+    )
+  }
+
+  recordAgentTurnEnd(
+    sessionId: string,
+    endAtMs: number,
+    config: ProjectTimeConfig,
+    notifyError: ErrorNotifier,
+  ): void {
+    const activity = this.sessionActivities.get(sessionId)
+    if (activity === undefined || activity.agentTurnStartAtMs === undefined) return
+
+    this.closeAgentTurn(
+      activity,
+      {
+        config,
+        cwd: "",
+        endAtMs,
+        sessionId,
+        startAtMs: activity.agentTurnStartAtMs,
+      },
+      notifyError,
     )
   }
 
@@ -70,22 +125,39 @@ export class AutomaticTimeLogRecorder {
     return this.ledger.entries()
   }
 
-  private async automaticEntry(
+  private closeAgentTurn(
+    activity: SessionActivity,
+    turn: AgentTurn,
+    notifyError: ErrorNotifier,
+  ): void {
+    const startAtMs = activity.agentTurnStartAtMs
+    const agentRepository = activity.agentRepository
+    if (startAtMs === undefined) return
+
+    activity.agentTurnStartAtMs = undefined
+    activity.agentRepository = undefined
+
+    activity.enqueue(
+      () => this.agentEntry({ ...turn, startAtMs, repository: agentRepository }),
+      (entry) => this.ledger.recordAutomatic(entry),
+      () => {
+        this.lastErrorMessage = undefined
+      },
+      (error) => this.reportError(error, notifyError),
+    )
+  }
+
+  private async humanEntry(
     settlement: Settlement,
     activity: SessionActivity,
   ): Promise<AutomaticTimeLogInput | undefined> {
     const stateBeforeSettlement = settlement.stateBeforeSettlement
     if (
-      stateBeforeSettlement.activeStartAtMs === undefined ||
-      stateBeforeSettlement.activeUntilMs === undefined
+      stateBeforeSettlement.activeStartAtMs === undefined
+      || stateBeforeSettlement.activeUntilMs === undefined
     ) {
       return undefined
     }
-
-    const settledMilliseconds =
-      settlement.settledState.activeMilliseconds -
-      stateBeforeSettlement.activeMilliseconds
-    if (settledMilliseconds <= 0) return undefined
 
     const repository = await this.repositoryForSettlement(settlement, activity)
     if (repository === undefined) return undefined
@@ -97,27 +169,33 @@ export class AutomaticTimeLogRecorder {
       repository,
       sessionId: settlement.sessionId,
       sourceStartedAtMs,
-      stateBeforeSettlement: settlement.stateBeforeSettlement,
+      stateBeforeSettlement,
       settledState: settlement.settledState,
     })
     if (entry === undefined) return undefined
 
-    const identity = repository.identity
-    if (identity === undefined) return entry
-    const policy = settlement.config.billableTime.policiesByRepository.get(
-      normalizeBillableRepository(identity),
-    )
-    if (policy === undefined) return entry
+    return this.withAttribution(entry, repository, settlement.config)
+  }
 
-    return {
-      ...entry,
-      timesheet: {
-        projectId: policy.project.id,
-        projectName: policy.project.label,
-        categoryId: policy.category.id,
-        categoryLabel: policy.category.label,
-      },
+  private async agentEntry(
+    turn: AgentTurn & { repository?: Promise<GitRepository | undefined> },
+  ): Promise<AutomaticTimeLogInput | undefined> {
+    if (turn.startAtMs >= turn.endAtMs) return undefined
+
+    const repository = await (turn.repository ?? Promise.resolve(undefined))
+    if (repository === undefined) return undefined
+
+    const entry: AutomaticTimeLogInput = {
+      sourceKind: "agent_turn_elapsed",
+      project: repository.project,
+      repositoryId: repository.repositoryId,
+      sessionId: turn.sessionId,
+      sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent`,
+      startAtMs: turn.startAtMs,
+      endAtMs: turn.endAtMs,
     }
+
+    return this.withAttribution(entry, repository, turn.config)
   }
 
   private async repositoryForSettlement(
@@ -152,13 +230,38 @@ export class AutomaticTimeLogRecorder {
     this.repositoryLookups.set(cwd, repository)
     void repository.then((resolvedRepository) => {
       if (
-        resolvedRepository === undefined &&
-        this.repositoryLookups.get(cwd) === repository
+        resolvedRepository === undefined
+        && this.repositoryLookups.get(cwd) === repository
       ) {
         this.repositoryLookups.delete(cwd)
       }
     })
     return repository
+  }
+
+  private withAttribution(
+    entry: AutomaticTimeLogInput,
+    repository: GitRepository,
+    config: ProjectTimeConfig,
+  ): AutomaticTimeLogInput {
+    const identity = repository.identity
+    if (identity === undefined) return entry
+
+    const attribution = config.repositoryAttribution.get(
+      normalizeRepositoryIdentity(identity),
+    )
+    if (attribution === undefined) return entry
+
+    return {
+      ...entry,
+      attribution: {
+        projectId: attribution.project.id,
+        projectName: attribution.project.label,
+        categoryId: attribution.category.id,
+        categoryLabel: attribution.category.label,
+        ...(attribution.task === undefined ? {} : { task: attribution.task }),
+      },
+    }
   }
 }
 
@@ -166,10 +269,20 @@ class SessionActivity {
   private readonly pendingEntries = new Map<string, AutomaticTimeLogInput>()
   private writeQueue: Promise<void> = Promise.resolve()
 
-  constructor(
-    readonly repository?: Promise<GitRepository | undefined>,
-    readonly startedAtMs?: number,
-  ) {}
+  repository?: Promise<GitRepository | undefined>
+  startedAtMs?: number
+  agentTurnStartAtMs?: number
+  agentRepository?: Promise<GitRepository | undefined>
+
+  setPromptStart(
+    repository: Promise<GitRepository | undefined>,
+    startedAtMs: number,
+  ): void {
+    this.repository = repository
+    this.agentRepository = repository
+    this.startedAtMs = startedAtMs
+    this.agentTurnStartAtMs = startedAtMs
+  }
 
   enqueue(
     createEntry: () => Promise<AutomaticTimeLogInput | undefined>,

@@ -3,11 +3,9 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
-import Big from "big.js"
-
 
 import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js"
-import type { TimeLogEntry } from "../src/time-log/domain/model.js"
+import type { AutomaticTimeLogInput, TimeLogEntry } from "../src/time-log/domain/model.js"
 import { createAutomaticTimeLogEntry } from "../src/time-log/domain/create-automatic-entry.js"
 import { recordAutomaticTimeLogEntry } from "../src/time-log/domain/record-automatic-entry.js"
 import { lock } from "../src/vendor/proper-lockfile.js"
@@ -16,6 +14,7 @@ const minute = 60_000
 const start = Date.UTC(2026, 0, 1)
 
 type ExpectedEntry = {
+  sourceKind: "human_active" | "agent_turn_elapsed"
   endAtMs: number
   project: string
   repositoryId: string
@@ -35,43 +34,10 @@ async function withLedger(
   }
 }
 
-test("limits automatic intervals to the settled attention duration", () => {
-  const entry = createAutomaticTimeLogEntry({
-    nowMs: 6 * minute,
-    repository: { project: "Project A", repositoryId: "repository-a" },
-    sessionId: "session-a",
-    sourceStartedAtMs: 0,
-    stateBeforeSettlement: {
-      totalCost: Big(0),
-      promptCount: 1,
-      activeMilliseconds: 0,
-      activeStartAtMs: 0,
-      activeUntilMs: 5 * minute,
-      lastSettledAtMs: undefined,
-      lastPromptAtMs: 0,
-    },
-    settledState: {
-      totalCost: Big(0),
-      promptCount: 1,
-      activeMilliseconds: minute,
-      activeStartAtMs: 0,
-      activeUntilMs: 5 * minute,
-      lastSettledAtMs: 5 * minute,
-      lastPromptAtMs: 0,
-    },
-  })
-
-  assert.deepEqual(entry, {
-    project: "Project A",
-    repositoryId: "repository-a",
-    sessionId: "session-a",
-    sourceKey: "session-a:repository-a:0",
-    startAtMs: 4 * minute,
-    endAtMs: 5 * minute,
-  })
-})
-
-function assertEntries(entries: readonly TimeLogEntry[], expected: readonly ExpectedEntry[]) {
+function assertEntries(
+  entries: readonly TimeLogEntry[],
+  expected: readonly ExpectedEntry[],
+) {
   for (const entry of entries) {
     assert.notEqual(entry.id, "")
     assert.ok(Number.isFinite(entry.createdAtMs))
@@ -83,37 +49,85 @@ function assertEntries(entries: readonly TimeLogEntry[], expected: readonly Expe
   )
 }
 
+test("limits automatic human intervals to the settled attention duration", () => {
+  const entry = createAutomaticTimeLogEntry({
+    nowMs: 6 * minute,
+    repository: { project: "Project A", repositoryId: "repository-a" },
+    sessionId: "session-a",
+    sourceStartedAtMs: 0,
+    stateBeforeSettlement: {
+      promptCount: 1,
+      activeMilliseconds: 0,
+      activeStartAtMs: 0,
+      activeUntilMs: 5 * minute,
+      lastPromptAtMs: 0,
+    },
+    settledState: {
+      promptCount: 1,
+      activeMilliseconds: minute,
+      activeStartAtMs: 0,
+      activeUntilMs: 5 * minute,
+      lastSettledAtMs: 5 * minute,
+      lastPromptAtMs: 0,
+    },
+  })
+
+  assert.deepEqual(entry, {
+    sourceKind: "human_active",
+    project: "Project A",
+    repositoryId: "repository-a",
+    sessionId: "session-a",
+    sourceKey: "session-a:repository-a:0",
+    startAtMs: 4 * minute,
+    endAtMs: 5 * minute,
+  })
+})
+
 test("extends automatic entries by source key in the domain", () => {
   const entries: TimeLogEntry[] = []
-  const first = recordAutomaticTimeLogEntry(entries, {
-    project: "github.com/acme/alpha",
-    repositoryId: "repo-alpha",
-    sourceKey: "activity-2026-01-01T00:00:00Z",
-    startAtMs: start,
-    endAtMs: start + minute,
-  }, start)
-  const extended = recordAutomaticTimeLogEntry(entries, {
-    project: "github.com/acme/alpha",
-    repositoryId: "repo-alpha",
-    sourceKey: "activity-2026-01-01T00:00:00Z",
-    startAtMs: start + 2 * minute,
-    endAtMs: start + 3 * minute,
-  }, start + minute)
+  const first = recordAutomaticTimeLogEntry(
+    entries,
+    {
+      sourceKind: "human_active",
+      project: "github.com/acme/alpha",
+      repositoryId: "repo-alpha",
+      sourceKey: "activity-2026-01-01T00:00:00Z",
+      startAtMs: start,
+      endAtMs: start + minute,
+    },
+    start,
+  )
+  const extended = recordAutomaticTimeLogEntry(
+    entries,
+    {
+      sourceKind: "human_active",
+      project: "github.com/acme/alpha",
+      repositoryId: "repo-alpha",
+      sourceKey: "activity-2026-01-01T00:00:00Z",
+      startAtMs: start + 2 * minute,
+      endAtMs: start + 3 * minute,
+    },
+    start + minute,
+  )
 
   assert.equal(first.changed, true)
   assert.equal(extended.changed, true)
   assert.equal(extended.entry.id, first.entry.id)
-  assertEntries(entries, [{
-    project: "github.com/acme/alpha",
-    repositoryId: "repo-alpha",
-    startAtMs: start,
-    endAtMs: start + 3 * minute,
-  }])
+  assertEntries(entries, [
+    {
+      sourceKind: "human_active",
+      project: "github.com/acme/alpha",
+      repositoryId: "repo-alpha",
+      startAtMs: start,
+      endAtMs: start + 3 * minute,
+    },
+  ])
 })
 
 test("suppresses automatic intervals deterministically by source key", async () => {
   await withLedger(async (ledger) => {
     const first = await ledger.recordAutomatic({
+      sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
       sourceKey: "activity-2026-01-01T00:00:00Z",
@@ -121,20 +135,22 @@ test("suppresses automatic intervals deterministically by source key", async () 
       endAtMs: start + minute,
     })
     const replay = await ledger.recordAutomatic({
+      sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
       sourceKey: "activity-2026-01-01T00:00:00Z",
-      startAtMs: start + 2 * minute,
-      endAtMs: start + 3 * minute,
+      startAtMs: start,
+      endAtMs: start + minute,
     })
 
     assert.equal(replay.id, first.id)
     assertEntries(await ledger.entries(), [
       {
+        sourceKind: "human_active",
         project: "github.com/acme/alpha",
         repositoryId: "repo-alpha",
         startAtMs: start,
-        endAtMs: start + 3 * minute,
+        endAtMs: start + minute,
       },
     ])
   })
@@ -143,6 +159,7 @@ test("suppresses automatic intervals deterministically by source key", async () 
 test("keeps overlapping automatic intervals from separate repositories", async () => {
   await withLedger(async (ledger, ledgerPath) => {
     await ledger.recordAutomatic({
+      sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
       sourceKey: "alpha-activity",
@@ -150,6 +167,7 @@ test("keeps overlapping automatic intervals from separate repositories", async (
       endAtMs: start + 5 * minute,
     })
     await ledger.recordAutomatic({
+      sourceKind: "human_active",
       project: "github.com/acme/beta",
       repositoryId: "repo-beta",
       sourceKey: "beta-activity",
@@ -158,14 +176,16 @@ test("keeps overlapping automatic intervals from separate repositories", async (
     })
 
     const entries = await ledger.entries()
-    const expected = [
+    const expected: ExpectedEntry[] = [
       {
+        sourceKind: "human_active",
         project: "github.com/acme/alpha",
         repositoryId: "repo-alpha",
         startAtMs: start,
         endAtMs: start + 5 * minute,
       },
       {
+        sourceKind: "human_active",
         project: "github.com/acme/beta",
         repositoryId: "repo-beta",
         startAtMs: start + 2 * minute,
@@ -185,8 +205,9 @@ test("keeps overlapping automatic intervals from separate repositories", async (
 
 test("rejects incomplete automatic identities and non-positive intervals", async () => {
   await withLedger(async (ledger) => {
-    for (const input of [
+    for (const input of ([
       {
+        sourceKind: "human_active",
         project: " ",
         repositoryId: "repo-alpha",
         sourceKey: "activity",
@@ -194,6 +215,7 @@ test("rejects incomplete automatic identities and non-positive intervals", async
         endAtMs: start + minute,
       },
       {
+        sourceKind: "human_active",
         project: "github.com/acme/alpha",
         repositoryId: "repo-alpha",
         sourceKey: " ",
@@ -201,6 +223,7 @@ test("rejects incomplete automatic identities and non-positive intervals", async
         endAtMs: start + minute,
       },
       {
+        sourceKind: "human_active",
         project: "github.com/acme/alpha",
         repositoryId: "repo-alpha",
         sourceKey: "empty-interval",
@@ -208,13 +231,14 @@ test("rejects incomplete automatic identities and non-positive intervals", async
         endAtMs: start,
       },
       {
+        sourceKind: "human_active",
         project: "github.com/acme/alpha",
         repositoryId: "repo-alpha",
         sourceKey: "reversed-interval",
         startAtMs: start + minute,
         endAtMs: start,
       },
-    ]) {
+    ] as const)) {
       await assert.rejects(() => ledger.recordAutomatic(input))
     }
 
@@ -225,6 +249,7 @@ test("rejects incomplete automatic identities and non-positive intervals", async
 test("persists automatic intervals and their deduplication keys", async () => {
   await withLedger(async (ledger, ledgerPath) => {
     const entry = await ledger.recordAutomatic({
+      sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
       sourceKey: "persisted-activity",
@@ -233,6 +258,7 @@ test("persists automatic intervals and their deduplication keys", async () => {
     })
     const reopenedLedger = new TimeLogLedger(ledgerPath)
     const replay = await reopenedLedger.recordAutomatic({
+      sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
       sourceKey: "persisted-activity",
@@ -243,6 +269,7 @@ test("persists automatic intervals and their deduplication keys", async () => {
     assert.equal(replay.id, entry.id)
     assertEntries(await reopenedLedger.entries(), [
       {
+        sourceKind: "human_active",
         project: "github.com/acme/alpha",
         repositoryId: "repo-alpha",
         startAtMs: start + minute,
@@ -255,6 +282,7 @@ test("persists automatic intervals and their deduplication keys", async () => {
 test("writes automatic ledgers with owner-only permissions", async () => {
   await withLedger(async (ledger, ledgerPath) => {
     await ledger.recordAutomatic({
+      sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
       sourceKey: "permission-check",
@@ -270,10 +298,16 @@ test("writes automatic ledgers with owner-only permissions", async () => {
 test("waits for another OMP window to release the time log lock", async () => {
   await withLedger(async (ledger, ledgerPath) => {
     const release = await lock(ledgerPath, { realpath: false })
-    const releaseAfterContention = new Promise((resolve) => setTimeout(resolve, 750)).then(() => release())
+    const releaseAfterContention = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        resolve()
+        void release()
+      }, 750)
+    })
 
     try {
       await ledger.recordAutomatic({
+        sourceKind: "human_active",
         project: "github.com/acme/alpha",
         repositoryId: "repo-alpha",
         sourceKey: "contended-lock",
@@ -284,11 +318,14 @@ test("waits for another OMP window to release the time log lock", async () => {
       await releaseAfterContention
     }
 
-    assertEntries(await ledger.entries(), [{
-      project: "github.com/acme/alpha",
-      repositoryId: "repo-alpha",
-      startAtMs: start,
-      endAtMs: start + minute,
-    }])
+    assertEntries(await ledger.entries(), [
+      {
+        sourceKind: "human_active",
+        project: "github.com/acme/alpha",
+        repositoryId: "repo-alpha",
+        startAtMs: start,
+        endAtMs: start + minute,
+      },
+    ])
   })
 })

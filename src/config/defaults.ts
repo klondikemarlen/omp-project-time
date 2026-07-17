@@ -1,0 +1,3 @@
+export const DEFAULT_ACTIVE_WINDOW_MINUTES = 5
+export const DEFAULT_REFRESH_INTERVAL_SECONDS = 15
+export const DEFAULT_LABEL = "dev"

@@ -1,34 +1,40 @@
-import type { DeveloperCostState } from "@/billing/index.js"
-import type { GitRepository } from "@/infrastructure/git-repository.js"
-import type { AutomaticTimeLogInput } from "@/time-log/domain/model.js"
+import type { ProjectTimeState } from "@/time-log/domain/state.js"
+import type { AutomaticTimeLogInput, Repository } from "@/time-log/domain/model.js"
 
 type AutomaticEntryOptions = {
   nowMs: number
-  repository: GitRepository
+  repository: Repository
   sessionId: string
   sourceStartedAtMs: number
-  stateBeforeSettlement: DeveloperCostState
-  settledState: DeveloperCostState
+  stateBeforeSettlement: ProjectTimeState
+  settledState: ProjectTimeState
 }
 
 export function createAutomaticTimeLogEntry(
   options: AutomaticEntryOptions,
 ): AutomaticTimeLogInput | undefined {
   const stateBeforeSettlement = options.stateBeforeSettlement
-  if (stateBeforeSettlement.activeStartAtMs === undefined || stateBeforeSettlement.activeUntilMs === undefined) {
+  if (
+    stateBeforeSettlement.activeStartAtMs === undefined
+    || stateBeforeSettlement.activeUntilMs === undefined
+  ) {
     return undefined
   }
 
-  const settledMilliseconds = options.settledState.activeMilliseconds - stateBeforeSettlement.activeMilliseconds
+  const settledMilliseconds =
+    options.settledState.activeMilliseconds
+    - stateBeforeSettlement.activeMilliseconds
   if (settledMilliseconds <= 0) return undefined
 
   const settledUntilMs = Math.min(options.nowMs, stateBeforeSettlement.activeUntilMs)
-  const previouslySettledAtMs = stateBeforeSettlement.lastSettledAtMs ?? stateBeforeSettlement.activeStartAtMs
-  const settledFromMs = Math.max(previouslySettledAtMs, stateBeforeSettlement.activeStartAtMs)
-  const startAtMs = Math.max(settledFromMs, settledUntilMs - settledMilliseconds)
+  const startAtMs = Math.max(
+    stateBeforeSettlement.activeStartAtMs,
+    settledUntilMs - settledMilliseconds,
+  )
   if (startAtMs >= settledUntilMs) return undefined
 
   return {
+    sourceKind: "human_active",
     project: options.repository.project,
     repositoryId: options.repository.repositoryId,
     sessionId: options.sessionId,

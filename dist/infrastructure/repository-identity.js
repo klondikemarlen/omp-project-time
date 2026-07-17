@@ -10,6 +10,10 @@ export function repositoryIdentityFromRemoteUrl(remoteUrl) {
   return repositoryIdentity(scpIdentity.host, scpIdentity.path);
 }
 
+export function normalizeRepositoryIdentity(repository) {
+  return repository.replace(/\.git$/i, "").toLowerCase();
+}
+
 function repositoryIdentityFromUrl(remoteUrl) {
   try {
     const parsedUrl = new URL(remoteUrl);

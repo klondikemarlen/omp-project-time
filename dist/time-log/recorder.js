@@ -2,7 +2,7 @@ import { errorMessage } from "../utils/error-message.js";
 import { createAutomaticTimeLogEntry } from "../time-log/domain/create-automatic-entry.js";
 import { TimeLogLedger } from "../time-log/infrastructure/ledger.js";
 import { resolveGitRepository } from "../infrastructure/git-repository.js";
-import { normalizeBillableRepository } from "../billable-time/domain/repository.js";
+import { normalizeRepositoryIdentity } from "../infrastructure/repository-identity.js";
 
 export class AutomaticTimeLogRecorder {
   lastErrorMessage;
@@ -17,22 +17,51 @@ export class AutomaticTimeLogRecorder {
     this.ledger = new TimeLogLedger(timeLogPath);
   }
 
-  recordPromptStart(sessionId, cwd, promptAtMs) {
-    this.sessionActivities.set(
-      sessionId,
-      new SessionActivity(this.repositoryFor(cwd), promptAtMs),
-    );
+  recordPromptStart(sessionId, cwd, promptAtMs, config, notifyError) {
+    const repository = this.repositoryFor(cwd);
+    const activity = this.sessionActivityFor(sessionId);
+    if (activity.agentTurnStartAtMs !== undefined) {
+      this.closeAgentTurn(
+        activity,
+        {
+          config,
+          cwd,
+          endAtMs: promptAtMs,
+          sessionId,
+          startAtMs: activity.agentTurnStartAtMs,
+        },
+        notifyError,
+      );
+    }
+    activity.setPromptStart(repository, promptAtMs);
   }
 
   recordSettlement(settlement, notifyError) {
     const activity = this.sessionActivityFor(settlement.sessionId);
     activity.enqueue(
-      () => this.automaticEntry(settlement, activity),
+      () => this.humanEntry(settlement, activity),
       (entry) => this.ledger.recordAutomatic(entry),
       () => {
         this.lastErrorMessage = undefined;
       },
       (error) => this.reportError(error, notifyError),
+    );
+  }
+
+  recordAgentTurnEnd(sessionId, endAtMs, config, notifyError) {
+    const activity = this.sessionActivities.get(sessionId);
+    if (activity === undefined || activity.agentTurnStartAtMs === undefined)
+      return;
+    this.closeAgentTurn(
+      activity,
+      {
+        config,
+        cwd: "",
+        endAtMs,
+        sessionId,
+        startAtMs: activity.agentTurnStartAtMs,
+      },
+      notifyError,
     );
   }
 
@@ -54,7 +83,24 @@ export class AutomaticTimeLogRecorder {
     return this.ledger.entries();
   }
 
-  async automaticEntry(settlement, activity) {
+  closeAgentTurn(activity, turn, notifyError) {
+    const startAtMs = activity.agentTurnStartAtMs;
+    const agentRepository = activity.agentRepository;
+    if (startAtMs === undefined) return;
+    activity.agentTurnStartAtMs = undefined;
+    activity.agentRepository = undefined;
+    activity.enqueue(
+      () =>
+        this.agentEntry({ ...turn, startAtMs, repository: agentRepository }),
+      (entry) => this.ledger.recordAutomatic(entry),
+      () => {
+        this.lastErrorMessage = undefined;
+      },
+      (error) => this.reportError(error, notifyError),
+    );
+  }
+
+  async humanEntry(settlement, activity) {
     const stateBeforeSettlement = settlement.stateBeforeSettlement;
     if (
       stateBeforeSettlement.activeStartAtMs === undefined ||
@@ -62,10 +108,6 @@ export class AutomaticTimeLogRecorder {
     ) {
       return undefined;
     }
-    const settledMilliseconds =
-      settlement.settledState.activeMilliseconds -
-      stateBeforeSettlement.activeMilliseconds;
-    if (settledMilliseconds <= 0) return undefined;
     const repository = await this.repositoryForSettlement(settlement, activity);
     if (repository === undefined) return undefined;
     const sourceStartedAtMs =
@@ -75,25 +117,27 @@ export class AutomaticTimeLogRecorder {
       repository,
       sessionId: settlement.sessionId,
       sourceStartedAtMs,
-      stateBeforeSettlement: settlement.stateBeforeSettlement,
+      stateBeforeSettlement,
       settledState: settlement.settledState,
     });
     if (entry === undefined) return undefined;
-    const identity = repository.identity;
-    if (identity === undefined) return entry;
-    const policy = settlement.config.billableTime.policiesByRepository.get(
-      normalizeBillableRepository(identity),
-    );
-    if (policy === undefined) return entry;
-    return {
-      ...entry,
-      timesheet: {
-        projectId: policy.project.id,
-        projectName: policy.project.label,
-        categoryId: policy.category.id,
-        categoryLabel: policy.category.label,
-      },
+    return this.withAttribution(entry, repository, settlement.config);
+  }
+
+  async agentEntry(turn) {
+    if (turn.startAtMs >= turn.endAtMs) return undefined;
+    const repository = await (turn.repository ?? Promise.resolve(undefined));
+    if (repository === undefined) return undefined;
+    const entry = {
+      sourceKind: "agent_turn_elapsed",
+      project: repository.project,
+      repositoryId: repository.repositoryId,
+      sessionId: turn.sessionId,
+      sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent`,
+      startAtMs: turn.startAtMs,
+      endAtMs: turn.endAtMs,
     };
+    return this.withAttribution(entry, repository, turn.config);
   }
 
   async repositoryForSettlement(settlement, activity) {
@@ -130,20 +174,45 @@ export class AutomaticTimeLogRecorder {
     });
     return repository;
   }
+
+  withAttribution(entry, repository, config) {
+    const identity = repository.identity;
+    if (identity === undefined) return entry;
+    const attribution = config.repositoryAttribution.get(
+      normalizeRepositoryIdentity(identity),
+    );
+    if (attribution === undefined) return entry;
+    return {
+      ...entry,
+      attribution: {
+        projectId: attribution.project.id,
+        projectName: attribution.project.label,
+        categoryId: attribution.category.id,
+        categoryLabel: attribution.category.label,
+        ...(attribution.task === undefined ? {} : { task: attribution.task }),
+      },
+    };
+  }
 }
 
 class SessionActivity {
-  repository;
-
-  startedAtMs;
-
   pendingEntries = new Map();
 
   writeQueue = Promise.resolve();
 
-  constructor(repository, startedAtMs) {
+  repository;
+
+  startedAtMs;
+
+  agentTurnStartAtMs;
+
+  agentRepository;
+
+  setPromptStart(repository, startedAtMs) {
     this.repository = repository;
+    this.agentRepository = repository;
     this.startedAtMs = startedAtMs;
+    this.agentTurnStartAtMs = startedAtMs;
   }
 
   enqueue(createEntry, persist, onSuccess, onError) {

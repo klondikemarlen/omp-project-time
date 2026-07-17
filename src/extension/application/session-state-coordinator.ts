@@ -1,20 +1,22 @@
+import type { ProjectTimeConfig } from "@/config/project-time-config.js"
 import {
-  serializeDeveloperCostState,
-  type DeveloperCostConfig,
-  type DeveloperCostState,
-} from "@/billing/index.js"
-import { SpreadBillingLedger } from "@/billing/infrastructure/spread-ledger.js"
-import {
-  DEVELOPER_COST_STATE_ENTRY,
-  loadPersistedDeveloperCostState,
+  PROJECT_TIME_STATE_ENTRY,
+  loadPersistedProjectTimeState,
 } from "@/extension/session-state.js"
 import type { SessionEntryLike } from "@/extension/types.js"
+import {
+  emptyProjectTimeState,
+  recordProjectTimePrompt,
+  serializeProjectTimeState,
+  settleProjectTimeState,
+  type ProjectTimeState,
+} from "@/time-log/domain/state.js"
 import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js"
 
 type TimeLogErrorNotifier = (message: string) => void
 
 type SessionUpdate = {
-  config: DeveloperCostConfig
+  config: ProjectTimeConfig
   cwd: string
   entries: readonly SessionEntryLike[]
   nowMs: number
@@ -23,40 +25,44 @@ type SessionUpdate = {
 }
 
 export class SessionStateCoordinator {
-  private readonly states = new Map<string, DeveloperCostState>()
+  private readonly states = new Map<string, ProjectTimeState>()
 
   constructor(
-    private readonly ledger: SpreadBillingLedger,
     private readonly timeLogRecorder: AutomaticTimeLogRecorder,
-    private readonly appendEntry: (customType: string, data: unknown) => void,
+    private readonly appendEntry: (customType: string, data?: unknown) => void,
   ) {}
 
-  stateFor(sessionId: string, entries: readonly SessionEntryLike[]): DeveloperCostState {
-    return this.states.get(sessionId) ?? loadPersistedDeveloperCostState(entries)
+  stateFor(
+    sessionId: string,
+    entries: readonly SessionEntryLike[],
+  ): ProjectTimeState {
+    return this.states.get(sessionId) ?? loadPersistedProjectTimeState(entries)
   }
 
-  async recordPrompt(update: SessionUpdate): Promise<DeveloperCostState> {
+  async recordPrompt(update: SessionUpdate): Promise<ProjectTimeState> {
     const stateBeforePrompt = { ...this.stateFor(update.sessionId, update.entries) }
-    const state = await this.ledger.recordPrompt(
-      update.sessionId,
+    const state = recordProjectTimePrompt(
       stateBeforePrompt,
       update.nowMs,
       update.config,
     )
     this.recordTimeLogSettlement(update, stateBeforePrompt, state)
-    this.timeLogRecorder.recordPromptStart(update.sessionId, update.cwd, update.nowMs)
+    this.timeLogRecorder.recordPromptStart(
+      update.sessionId,
+      update.cwd,
+      update.nowMs,
+      update.config,
+      update.notifyTimeLogError,
+    )
     this.persist(update.sessionId, state)
     return state
   }
 
-  async settle(update: SessionUpdate): Promise<DeveloperCostState> {
-    const stateBeforeSettlement = { ...this.stateFor(update.sessionId, update.entries) }
-    const state = await this.ledger.settle(
-      update.sessionId,
-      stateBeforeSettlement,
-      update.nowMs,
-      update.config,
-    )
+  async settle(update: SessionUpdate): Promise<ProjectTimeState> {
+    const stateBeforeSettlement = {
+      ...this.stateFor(update.sessionId, update.entries),
+    }
+    const state = settleProjectTimeState(stateBeforeSettlement, update.nowMs)
     this.recordTimeLogSettlement(update, stateBeforeSettlement, state)
     this.persist(update.sessionId, state)
     return state
@@ -67,15 +73,15 @@ export class SessionStateCoordinator {
     this.states.delete(sessionId)
   }
 
-  private persist(sessionId: string, state: DeveloperCostState): void {
+  private persist(sessionId: string, state: ProjectTimeState): void {
     this.states.set(sessionId, state)
-    this.appendEntry(DEVELOPER_COST_STATE_ENTRY, serializeDeveloperCostState(state))
+    this.appendEntry(PROJECT_TIME_STATE_ENTRY, serializeProjectTimeState(state))
   }
 
   private recordTimeLogSettlement(
     update: SessionUpdate,
-    stateBeforeSettlement: DeveloperCostState,
-    settledState: DeveloperCostState,
+    stateBeforeSettlement: ProjectTimeState,
+    settledState: ProjectTimeState,
   ): void {
     this.timeLogRecorder.recordSettlement(
       {

@@ -14,19 +14,13 @@ export function createAutomaticTimeLogEntry(options) {
     options.nowMs,
     stateBeforeSettlement.activeUntilMs,
   );
-  const previouslySettledAtMs =
-    stateBeforeSettlement.lastSettledAtMs ??
-    stateBeforeSettlement.activeStartAtMs;
-  const settledFromMs = Math.max(
-    previouslySettledAtMs,
-    stateBeforeSettlement.activeStartAtMs,
-  );
   const startAtMs = Math.max(
-    settledFromMs,
+    stateBeforeSettlement.activeStartAtMs,
     settledUntilMs - settledMilliseconds,
   );
   if (startAtMs >= settledUntilMs) return undefined;
   return {
+    sourceKind: "human_active",
     project: options.repository.project,
     repositoryId: options.repository.repositoryId,
     sessionId: options.sessionId,

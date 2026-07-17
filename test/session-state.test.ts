@@ -1,42 +1,44 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { loadPersistedDeveloperCostState } from "../src/extension/session-state.js"
+import {
+  loadPersistedProjectTimeState,
+  PROJECT_TIME_STATE_ENTRY,
+} from "../src/extension/session-state.js"
 
 test("returns an empty state when no persisted entry exists", () => {
-  const state = loadPersistedDeveloperCostState([])
+  const state = loadPersistedProjectTimeState([])
 
-  assert.equal(state.totalCost.toString(), "0")
-})
-
-test("defaults attention metrics for a legacy persisted cost entry", () => {
-  const state = loadPersistedDeveloperCostState([
-    {
-      type: "custom",
-      customType: "project-time.state",
-      data: { totalCost: "12.34" },
-    },
-  ])
-
-  assert.equal(state.totalCost.toString(), "12.34")
   assert.equal(state.promptCount, 0)
   assert.equal(state.activeMilliseconds, 0)
 })
 
-test("loads the latest persisted developer cost entry", () => {
-  const state = loadPersistedDeveloperCostState([
+test("defaults attention metrics for a legacy persisted cost entry", () => {
+  const state = loadPersistedProjectTimeState([
     {
       type: "custom",
-      customType: "project-time.state",
+      customType: PROJECT_TIME_STATE_ENTRY,
+      data: { totalCost: "12.34" },
+    },
+  ])
+
+  assert.equal(state.promptCount, 0)
+  assert.equal(state.activeMilliseconds, 0)
+})
+
+test("loads the latest persisted project time state", () => {
+  const state = loadPersistedProjectTimeState([
+    {
+      type: "custom",
+      customType: PROJECT_TIME_STATE_ENTRY,
       data: {
-        totalCost: "1.23",
+        promptCount: 1,
       },
     },
     {
       type: "custom",
-      customType: "project-time.state",
+      customType: PROJECT_TIME_STATE_ENTRY,
       data: {
-        totalCost: "4.56",
         promptCount: 7,
         activeMilliseconds: 890,
         activeStartAtMs: 1,
@@ -46,7 +48,6 @@ test("loads the latest persisted developer cost entry", () => {
     },
   ])
 
-  assert.equal(state.totalCost.toString(), "4.56")
   assert.equal(state.promptCount, 7)
   assert.equal(state.activeMilliseconds, 890)
   assert.equal(state.activeStartAtMs, 1)
@@ -55,15 +56,16 @@ test("loads the latest persisted developer cost entry", () => {
 })
 
 test("ignores invalid persisted state", () => {
-  const state = loadPersistedDeveloperCostState([
+  const state = loadPersistedProjectTimeState([
     {
       type: "custom",
-      customType: "project-time.state",
+      customType: PROJECT_TIME_STATE_ENTRY,
       data: {
         totalUsd: 7.89,
       },
     },
   ])
 
-  assert.equal(state.totalCost.toString(), "0")
+  assert.equal(state.promptCount, 0)
+  assert.equal(state.activeMilliseconds, 0)
 })

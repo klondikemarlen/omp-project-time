@@ -1,36 +1,34 @@
-import { serializeDeveloperCostState } from "../../billing/index.js";
 import {
-  DEVELOPER_COST_STATE_ENTRY,
-  loadPersistedDeveloperCostState,
+  PROJECT_TIME_STATE_ENTRY,
+  loadPersistedProjectTimeState,
 } from "../../extension/session-state.js";
+import {
+  recordProjectTimePrompt,
+  serializeProjectTimeState,
+  settleProjectTimeState,
+} from "../../time-log/domain/state.js";
 
 export class SessionStateCoordinator {
-  ledger;
-
   timeLogRecorder;
 
   appendEntry;
 
   states = new Map();
 
-  constructor(ledger, timeLogRecorder, appendEntry) {
-    this.ledger = ledger;
+  constructor(timeLogRecorder, appendEntry) {
     this.timeLogRecorder = timeLogRecorder;
     this.appendEntry = appendEntry;
   }
 
   stateFor(sessionId, entries) {
-    return (
-      this.states.get(sessionId) ?? loadPersistedDeveloperCostState(entries)
-    );
+    return this.states.get(sessionId) ?? loadPersistedProjectTimeState(entries);
   }
 
   async recordPrompt(update) {
     const stateBeforePrompt = {
       ...this.stateFor(update.sessionId, update.entries),
     };
-    const state = await this.ledger.recordPrompt(
-      update.sessionId,
+    const state = recordProjectTimePrompt(
       stateBeforePrompt,
       update.nowMs,
       update.config,
@@ -40,6 +38,8 @@ export class SessionStateCoordinator {
       update.sessionId,
       update.cwd,
       update.nowMs,
+      update.config,
+      update.notifyTimeLogError,
     );
     this.persist(update.sessionId, state);
     return state;
@@ -49,12 +49,7 @@ export class SessionStateCoordinator {
     const stateBeforeSettlement = {
       ...this.stateFor(update.sessionId, update.entries),
     };
-    const state = await this.ledger.settle(
-      update.sessionId,
-      stateBeforeSettlement,
-      update.nowMs,
-      update.config,
-    );
+    const state = settleProjectTimeState(stateBeforeSettlement, update.nowMs);
     this.recordTimeLogSettlement(update, stateBeforeSettlement, state);
     this.persist(update.sessionId, state);
     return state;
@@ -68,8 +63,8 @@ export class SessionStateCoordinator {
   persist(sessionId, state) {
     this.states.set(sessionId, state);
     this.appendEntry(
-      DEVELOPER_COST_STATE_ENTRY,
-      serializeDeveloperCostState(state),
+      PROJECT_TIME_STATE_ENTRY,
+      serializeProjectTimeState(state),
     );
   }
 

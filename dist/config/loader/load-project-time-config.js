@@ -1,0 +1,14 @@
+import { pluginsLockfilePath } from "../../config/plugins-lockfile-path.js";
+import { projectPluginOverridesPath } from "../../config/project-plugin-overrides-path.js";
+import { loadProjectTimeConfigFromFiles } from "./load-project-time-config-from-files.js";
+
+export function loadProjectTimeConfig(cwd) {
+  const pluginsLockfile = pluginsLockfilePath();
+  const projectPluginOverrides = projectPluginOverridesPath(cwd);
+  return loadProjectTimeConfigFromFiles(
+    pluginsLockfile,
+    projectPluginOverrides,
+  );
+}
+
+export default loadProjectTimeConfig;

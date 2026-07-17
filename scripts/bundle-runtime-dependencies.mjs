@@ -3,30 +3,12 @@ import { build } from "esbuild"
 const vendorDirectory = "dist/vendor"
 const requireBanner = 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
 
-await Promise.all([
-  build({
-    allowOverwrite: true,
-    bundle: true,
-    entryPoints: [`${vendorDirectory}/big.js`],
-    format: "esm",
-    outfile: `${vendorDirectory}/big.js`,
-    platform: "node",
-  }),
-  build({
-    allowOverwrite: true,
-    banner: { js: requireBanner },
-    bundle: true,
-    entryPoints: [`${vendorDirectory}/proper-lockfile.js`],
-    format: "esm",
-    outfile: `${vendorDirectory}/proper-lockfile.js`,
-    platform: "node",
-  }),
-  build({
-    allowOverwrite: true,
-    bundle: true,
-    entryPoints: [`${vendorDirectory}/zod.js`],
-    format: "esm",
-    outfile: `${vendorDirectory}/zod.js`,
-    platform: "node",
-  }),
-])
+await build({
+  allowOverwrite: true,
+  banner: { js: requireBanner },
+  bundle: true,
+  entryPoints: [`${vendorDirectory}/proper-lockfile.js`],
+  format: "esm",
+  outfile: `${vendorDirectory}/proper-lockfile.js`,
+  platform: "node",
+})

@@ -1,30 +1,35 @@
+import type { SessionEntryLike } from "@/extension/types.js"
 import {
-  emptyDeveloperCostState,
-  parseDeveloperCostState,
-  type DeveloperCostState,
-} from "@/billing/index.js"
+  emptyProjectTimeState,
+  parseProjectTimeState,
+  serializeProjectTimeState,
+  type ProjectTimeState,
+} from "@/time-log/domain/state.js"
 
-export const DEVELOPER_COST_STATE_ENTRY = "project-time.state"
+export const PROJECT_TIME_STATE_ENTRY = "project-time.state"
 
-type SessionEntryLike = {
+type PersistedSessionEntryLike = SessionEntryLike & {
   type?: unknown
   customType?: unknown
   data?: unknown
 }
 
-export function loadPersistedDeveloperCostState(
-  entries: readonly SessionEntryLike[],
-): DeveloperCostState {
+export function loadPersistedProjectTimeState(
+  entries: readonly PersistedSessionEntryLike[],
+): ProjectTimeState {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index]
     if (entry.type !== "custom") continue
-    if (entry.customType !== DEVELOPER_COST_STATE_ENTRY) continue
+    if (entry.customType !== PROJECT_TIME_STATE_ENTRY) continue
 
-    const state = parseDeveloperCostState(entry.data)
+    const state = parseProjectTimeState(entry.data)
     if (state !== undefined) return state
   }
 
-  return emptyDeveloperCostState()
+  return emptyProjectTimeState()
 }
 
-export default loadPersistedDeveloperCostState
+export { emptyProjectTimeState, parseProjectTimeState, serializeProjectTimeState }
+export type { ProjectTimeState }
+
+export default loadPersistedProjectTimeState

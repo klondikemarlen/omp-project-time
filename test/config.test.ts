@@ -4,37 +4,41 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { loadDeveloperCostConfigFromFiles } from "../src/index.js"
+import { loadProjectTimeConfigFromFiles } from "../src/config/loader/load-project-time-config-from-files.js"
 
 const PLUGIN_NAME = "omp-project-time"
 
 test("loads canonical plugin settings from disk", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
+  const directory = await mkdtemp(path.join(tmpdir(), "project-time-config-"))
   const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
   const projectOverrides = path.join(directory, "missing-overrides.json")
 
   try {
     await writePluginSettings(pluginsLockfile, {
-      annualGrossSalary: 90_000,
+      activeWindowMinutes: 10,
       label: "first",
-      locale: "fr-CA",
     })
 
-    const firstConfig = await loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides)
+    const firstConfig = await loadProjectTimeConfigFromFiles(
+      pluginsLockfile,
+      projectOverrides,
+    )
 
-    assert.equal(firstConfig.annualGrossSalary, 90_000)
+    assert.equal(firstConfig.activeWindowMinutes, 10)
     assert.equal(firstConfig.label, "first")
-    assert.equal(firstConfig.locale, "fr-CA")
 
     await writePluginSettings(pluginsLockfile, {
-      annualGrossSalary: 108_000,
+      activeWindowMinutes: 3,
       refreshIntervalSeconds: 3,
       label: "second",
     })
 
-    const secondConfig = await loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides)
+    const secondConfig = await loadProjectTimeConfigFromFiles(
+      pluginsLockfile,
+      projectOverrides,
+    )
 
-    assert.equal(secondConfig.annualGrossSalary, 108_000)
+    assert.equal(secondConfig.activeWindowMinutes, 3)
     assert.equal(secondConfig.refreshIntervalSeconds, 3)
     assert.equal(secondConfig.label, "second")
   } finally {
@@ -42,8 +46,8 @@ test("loads canonical plugin settings from disk", async () => {
   }
 })
 
-test("loads repository timesheet mappings from the current setting", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
+test("loads repository attribution mappings from the current setting", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "project-time-config-"))
   const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
   const projectOverrides = path.join(directory, "missing-overrides.json")
 
@@ -59,80 +63,63 @@ test("loads repository timesheet mappings from the current setting", async () =>
       }),
     })
 
-    const config = await loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides)
+    const config = await loadProjectTimeConfigFromFiles(
+      pluginsLockfile,
+      projectOverrides,
+    )
 
-    assert.deepEqual(config.billableTime.policiesByRepository.get("github.com/acme/project"), {
-      project: { id: "acme", label: "Acme" },
-      category: { id: "development", label: "Development" },
-    })
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
-})
-
-test("loads former scalar and billable policy settings", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
-  const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
-  const projectOverrides = path.join(directory, "missing-overrides.json")
-
-  try {
-    await writePluginSettings(pluginsLockfile, {
-      monthlySalary: 6_500,
-      billableTime: JSON.stringify({
-        defaultClient: "acme",
-        clients: {
-          acme: { label: "Acme", attentionRatePerHour: "100", aiRatePerHour: "25" },
-        },
-      }),
-    })
-
-    const config = await loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides)
-
-    assert.equal(config.annualGrossSalary, 78_000)
-    assert.equal(config.billableTime.defaultClient?.id, "acme")
+    assert.deepEqual(
+      config.repositoryAttribution.get("github.com/acme/project"),
+      {
+        project: { id: "acme", label: "Acme" },
+        category: { id: "development", label: "Development" },
+      },
+    )
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
 })
 
 test("project overrides win over global plugin settings", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
+  const directory = await mkdtemp(path.join(tmpdir(), "project-time-config-"))
   const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
   const projectOverrides = path.join(directory, "plugin-overrides.json")
 
   try {
     await writePluginSettings(pluginsLockfile, {
-      annualGrossSalary: 78_000,
+      activeWindowMinutes: 10,
       label: "global",
     })
     await writePluginSettings(projectOverrides, {
-      monthlySalary: 9_000,
+      activeWindowMinutes: 7,
       label: "project",
     })
 
-    const config = await loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides)
+    const config = await loadProjectTimeConfigFromFiles(
+      pluginsLockfile,
+      projectOverrides,
+    )
 
-    assert.equal(config.annualGrossSalary, 108_000)
+    assert.equal(config.activeWindowMinutes, 7)
     assert.equal(config.label, "project")
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
 })
 
-
 test("throws when project override config is malformed", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
+  const directory = await mkdtemp(path.join(tmpdir(), "project-time-config-"))
   const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
   const projectOverrides = path.join(directory, "plugin-overrides.json")
 
   try {
     await writePluginSettings(pluginsLockfile, {
-      annualGrossSalary: 78_000,
+      activeWindowMinutes: 10,
     })
     await writeFile(projectOverrides, "{")
 
     await assert.rejects(
-      loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides),
+      loadProjectTimeConfigFromFiles(pluginsLockfile, projectOverrides),
       /Unable to read Project Time config/,
     )
   } finally {
@@ -141,7 +128,7 @@ test("throws when project override config is malformed", async () => {
 })
 
 test("throws when a config file is malformed", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
+  const directory = await mkdtemp(path.join(tmpdir(), "project-time-config-"))
   const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
   const projectOverrides = path.join(directory, "plugin-overrides.json")
 
@@ -149,7 +136,7 @@ test("throws when a config file is malformed", async () => {
     await writeFile(pluginsLockfile, "{")
 
     await assert.rejects(
-      loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides),
+      loadProjectTimeConfigFromFiles(pluginsLockfile, projectOverrides),
       /Unable to read Project Time config/,
     )
   } finally {
@@ -158,7 +145,7 @@ test("throws when a config file is malformed", async () => {
 })
 
 test("rejects a decoded config document with invalid settings", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
+  const directory = await mkdtemp(path.join(tmpdir(), "project-time-config-"))
   const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
   const projectOverrides = path.join(directory, "plugin-overrides.json")
 
@@ -166,7 +153,7 @@ test("rejects a decoded config document with invalid settings", async () => {
     await writeFile(pluginsLockfile, JSON.stringify({ settings: [] }))
 
     await assert.rejects(
-      loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides),
+      loadProjectTimeConfigFromFiles(pluginsLockfile, projectOverrides),
       /settings must be an object/,
     )
   } finally {
@@ -174,17 +161,23 @@ test("rejects a decoded config document with invalid settings", async () => {
   }
 })
 
-test("rejects unsupported monetary locales", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
+test("rejects invalid repository attribution", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "project-time-config-"))
   const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
-  const projectOverrides = path.join(directory, "plugin-overrides.json")
+  const projectOverrides = path.join(directory, "missing-overrides.json")
 
   try {
-    await writePluginSettings(pluginsLockfile, { locale: "zz-ZZ" })
+    await writePluginSettings(pluginsLockfile, {
+      repositoryBilling: JSON.stringify({
+        repositories: {
+          "github.com/acme/project": { project: "invalid" },
+        },
+      }),
+    })
 
     await assert.rejects(
-      loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides),
-      /locale must be a BCP 47 locale supported by Intl\.NumberFormat/,
+      loadProjectTimeConfigFromFiles(pluginsLockfile, projectOverrides),
+      /Invalid repository attribution/,
     )
   } finally {
     await rm(directory, { recursive: true, force: true })

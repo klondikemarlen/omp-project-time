@@ -1,109 +1,90 @@
-import {
-  displayedDeveloperCost,
-  effectivePaidHourlyCost,
-  formatCadAmount,
-  formatDeveloperCost,
-  type DeveloperCostConfig,
-  type DeveloperCostState,
-} from "@/billing/index.js"
+import type { ProjectTimeConfig } from "@/config/project-time-config.js"
 import type { ExtensionContext } from "@/extension/types.js"
-import type { BillableRecord } from "@/billable-time/domain/record.js"
+import type { ProjectTimeState } from "@/time-log/domain/state.js"
 import type { TimeLogEntry } from "@/time-log/domain/model.js"
 
 export const STATUS_KEY = "project-time"
 
 export function updateStatus(
   ctx: ExtensionContext,
-  state: DeveloperCostState,
-  config: DeveloperCostConfig,
+  state: ProjectTimeState,
+  config: ProjectTimeConfig,
 ): void {
-  ctx.ui.setStatus(
-    STATUS_KEY,
-    ctx.ui.theme.fg("dim", statusText(state, config)),
-  )
+  ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", statusText(state, config)))
 }
 
 export function clearStatus(ctx: ExtensionContext): void {
   ctx.ui.setStatus(STATUS_KEY, undefined)
 }
 
-export function statusText(state: DeveloperCostState, config: DeveloperCostConfig): string {
-  const text = formatDeveloperCost(displayedDeveloperCost(state), config.locale)
-
-  return `${text} (${config.label})`
+export function statusText(
+  state: ProjectTimeState,
+  config: ProjectTimeConfig,
+): string {
+  return `${durationText(state.activeMilliseconds)} (${config.label})`
 }
 
-export function settingsText(config: DeveloperCostConfig): string {
+export function settingsText(config: ProjectTimeConfig): string {
   return [
     "Project Time settings",
-    `Annual gross salary: ${formatCadAmount(`${config.annualGrossSalary}`, config.locale)}`,
-    `Working time: ${config.workingHoursPerWeek}h/week × ${config.workingWeeksPerYear} weeks/year`,
-    `Effective paid hourly cost: ${formatCadAmount(effectivePaidHourlyCost(config), config.locale)}/h`,
-    `Repository timesheet: ${repositoryTimesheetStatus(config)}`,
-    ...configuredRepositoryPolicies(config).map(([repository, policy]) =>
-      `- ${repository} → ${policy.project.label} / ${policy.category.label}`,
+    `Active window: ${config.activeWindowMinutes} minutes`,
+    `Refresh interval: ${config.refreshIntervalSeconds} seconds`,
+    `Label: ${config.label}`,
+    `Repository attribution: ${repositoryAttributionStatus(config)}`,
+    ...configuredRepositoryAttributions(config).map(
+      ([repository, attribution]) =>
+        `- ${repository} → ${attribution.project.label} / ${attribution.category.label}`,
     ),
   ].join("\n")
 }
 
 export function dashboardText(
-  state: DeveloperCostState,
-  config: DeveloperCostConfig,
+  state: ProjectTimeState,
+  config: ProjectTimeConfig,
   project: string | undefined,
 ): string {
-  const repositoryTimesheetConfigured = repositoryTimesheetStatus(config)
-
   return [
     "Project Time",
     `Project: ${project ?? "unavailable"}`,
-    `Developer meter: ${statusText(state, config)}`,
-    `Repository timesheet: ${repositoryTimesheetConfigured}`,
-    "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time timesheet preview | /project-time history",
+    `Current active: ${statusText(state, config)}`,
+    `Repository attribution: ${repositoryAttributionStatus(config)}`,
+    "Commands: /project-time settings | /project-time summary | /project-time history | /project-time report",
     "Tip: type /project-time followed by a space to choose a mode.",
   ].join("\n")
 }
 
 export function historyText(
   project: string | undefined,
-  state: DeveloperCostState,
-  config: DeveloperCostConfig,
-  billableTrackingEnabled: boolean,
-  timeEntries: readonly TimeLogEntry[],
-  billableRecords: readonly BillableRecord[],
+  state: ProjectTimeState,
+  config: ProjectTimeConfig,
+  humanEntries: readonly TimeLogEntry[],
+  agentEntries: readonly TimeLogEntry[],
 ): string {
-  const developerMilliseconds = timeEntries.reduce(
+  const humanMilliseconds = humanEntries.reduce(
     (total, entry) => total + entry.endAtMs - entry.startAtMs,
     0,
   )
-  const recentDeveloperTime = [...timeEntries]
-    .sort((left, right) => right.endAtMs - left.endAtMs)
-    .slice(0, 3)
-    .map((entry) => `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)}`)
-  const recentBillableRecords = [...billableRecords]
-    .sort((left, right) => recordTimestamp(right) - recordTimestamp(left))
-    .slice(0, 3)
-    .map((record) => {
-      const category = record.categoryLabel === undefined ? "" : ` / ${record.categoryLabel}`
-      return `- ${timestampText(recordTimestamp(record))}: ${record.sourceKind}${category} ${durationText(record.durationMs)}`
-    })
-  const billableState = billableTrackingEnabled
-    ? `enabled, ${billableRecords.length} records`
-    : "disabled"
+  const agentMilliseconds = agentEntries.reduce(
+    (total, entry) => total + entry.endAtMs - entry.startAtMs,
+    0,
+  )
+  const recentHuman = recentEntries(humanEntries)
+  const recentAgent = recentEntries(agentEntries)
 
   return [
     "Project Time history",
     `Project: ${project ?? "unavailable"}`,
-    `Developer meter: ${statusText(state, config)}`,
-    `Developer time: ${timeEntries.length} intervals, ${durationText(developerMilliseconds)}`,
-    `Billable tracking: ${billableState}`,
-    `Recent developer time:${recentDeveloperTime.length === 0 ? " none" : `\n${recentDeveloperTime.join("\n")}`}`,
-    `Recent billable records:${recentBillableRecords.length === 0 ? " none" : `\n${recentBillableRecords.join("\n")}`}`,
+    `Current active: ${statusText(state, config)}`,
+    `Human active: ${humanEntries.length} intervals, ${durationText(humanMilliseconds)}`,
+    `Agent elapsed: ${agentEntries.length} intervals, ${durationText(agentMilliseconds)}`,
+    `Recent human active:${recentHuman.length === 0 ? " none" : `\n${recentHuman.join("\n")}`}`,
+    `Recent agent elapsed:${recentAgent.length === 0 ? " none" : `\n${recentAgent.join("\n")}`}`,
   ].join("\n")
 }
 
 export function summaryText(
-  state: DeveloperCostState,
-  config: DeveloperCostConfig,
+  state: ProjectTimeState,
+  config: ProjectTimeConfig,
   sessionId: string,
   nowMs: number,
 ): string {
@@ -121,23 +102,28 @@ export function summaryText(
   return [
     "Project Time summary",
     `Session: ${sessionId}`,
-    `Cost: ${statusText(state, config)}`,
     `Active time: ${durationText(state.activeMilliseconds)}`,
     `Prompt count: ${state.promptCount}`,
     lastPrompt,
   ].join("\n")
 }
 
-function repositoryTimesheetStatus(config: DeveloperCostConfig): string {
-  return config.billableTime.policiesByRepository.size > 0 ? "configured" : "not configured"
+function repositoryAttributionStatus(config: ProjectTimeConfig): string {
+  return config.repositoryAttribution.size > 0 ? "configured" : "not configured"
 }
 
-function configuredRepositoryPolicies(config: DeveloperCostConfig) {
-  return [...config.billableTime.policiesByRepository.entries()]
+function configuredRepositoryAttributions(config: ProjectTimeConfig) {
+  return [...config.repositoryAttribution.entries()]
 }
 
-function recordTimestamp(record: BillableRecord): number {
-  return record.sourceKind === "attention" ? record.emittedAtMs : record.endedAtMs
+function recentEntries(entries: readonly TimeLogEntry[]): string[] {
+  return [...entries]
+    .sort((left, right) => right.endAtMs - left.endAtMs)
+    .slice(0, 3)
+    .map(
+      (entry) =>
+        `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)}`,
+    )
 }
 
 function timestampText(milliseconds: number): string {
@@ -156,4 +142,3 @@ function durationText(milliseconds: number): string {
 
   return `${seconds}s`
 }
-

@@ -1,7 +1,0 @@
-export const DEFAULT_ANNUAL_GROSS_SALARY = 78_000;
-export const DEFAULT_WORKING_HOURS_PER_WEEK = 40;
-export const DEFAULT_WORKING_WEEKS_PER_YEAR = 52;
-export const DEFAULT_ACTIVE_WINDOW_MINUTES = 5;
-export const DEFAULT_REFRESH_INTERVAL_SECONDS = 15;
-export const DEFAULT_LABEL = "dev";
-export const DEFAULT_LOCALE = "en-CA";

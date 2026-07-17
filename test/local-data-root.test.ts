@@ -11,7 +11,7 @@ test("replaces legacy local tracking data once and retains new records", async (
   const oldRoot = path.join(root, "developer-attention-status")
   const newRoot = path.join(root, "project-time")
   const oldSpreadLedgerDirectory = path.join(root, "developer-cost-status")
-  const markerPath = path.join(newRoot, ".project-time-v3")
+  const markerPath = path.join(newRoot, ".project-time-v4")
   const newRecordPath = path.join(newRoot, "attention-tokens.ndjson")
 
   try {
@@ -31,7 +31,7 @@ test("replaces legacy local tracking data once and retains new records", async (
     await assert.rejects(readFile(path.join(oldRoot, "attention-tokens.ndjson")))
     await assert.rejects(readFile(path.join(newRoot, "ai-intervals.ndjson")))
     await assert.rejects(readFile(path.join(oldSpreadLedgerDirectory, "spread-billing.json")))
-    assert.equal(await readFile(markerPath, "utf8"), "project-time-v3\n")
+    assert.equal(await readFile(markerPath, "utf8"), "project-time-v4\n")
     assert.equal((await stat(newRoot)).mode & 0o777, 0o700)
     assert.equal((await stat(markerPath)).mode & 0o777, 0o600)
 
@@ -44,23 +44,24 @@ test("replaces legacy local tracking data once and retains new records", async (
   }
 })
 
-test("keeps records created with the previous reset marker", async () => {
+test("resets records marked by the previous data model", async () => {
   const root = path.join(tmpdir(), `project-time-marker-${Date.now()}`)
   const newRoot = path.join(root, "project-time")
-  const priorMarkerPath = path.join(newRoot, ".cad-only")
-  const markerPath = path.join(newRoot, ".project-time-v3")
-  const recordPath = path.join(newRoot, "attention-tokens.ndjson")
+  const priorMarkerPath = path.join(newRoot, ".project-time-v3")
+  const markerPath = path.join(newRoot, ".project-time-v4")
+  const recordPath = path.join(newRoot, "time-log.json")
 
   try {
     await mkdir(newRoot, { recursive: true, mode: 0o700 })
     await Promise.all([
-      writeFile(priorMarkerPath, "cad-only\n", { mode: 0o600 }),
-      writeFile(recordPath, "attention\n", { mode: 0o600 }),
+      writeFile(priorMarkerPath, "project-time-v3\n", { mode: 0o600 }),
+      writeFile(recordPath, "legacy time log\n", { mode: 0o600 }),
     ])
 
     await prepareProjectTimeDataRoot(newRoot)
-    assert.equal(await readFile(markerPath, "utf8"), "project-time-v3\n")
-    assert.equal(await readFile(recordPath, "utf8"), "attention\n")
+
+    assert.equal(await readFile(markerPath, "utf8"), "project-time-v4\n")
+    await assert.rejects(readFile(recordPath))
     await assert.rejects(readFile(priorMarkerPath))
   } finally {
     await rm(root, { recursive: true, force: true })

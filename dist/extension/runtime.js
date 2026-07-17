@@ -1,29 +1,17 @@
-import { describeBillableSession } from "../billable-time/description-generator.js";
-import { BillableTimeRecorder } from "../billable-time/recorder.js";
-import {
-  billableSummaryText,
-  billableWorkEntryPreview,
-} from "../billable-time/presentation.js";
-import { parseDeveloperCostConfig } from "../billing/index.js";
-import { MS_PER_SECOND } from "../billing/calculation/time-constants.js";
-import { DEFAULT_LOCALE } from "../billing/config/defaults.js";
-import { SpreadBillingLedger } from "../billing/infrastructure/spread-ledger.js";
-import { loadDeveloperCostConfig } from "../config/loader/load-developer-cost-config.js";
-import { AutomaticTimeLogRecorder } from "../time-log/recorder.js";
-import {
-  createTimesheetEntries,
-  timesheetPreview,
-} from "../time-log/timesheet.js";
-import { resolveGitRepository } from "../infrastructure/git-repository.js";
-import { normalizeBillableRepository } from "../billable-time/domain/repository.js";
-import { errorMessage } from "../utils/error-message.js";
 import path from "node:path";
+import { parseProjectTimeConfig } from "../config/project-time-config.js";
+import { errorMessage } from "../utils/error-message.js";
+import { MS_PER_SECOND } from "../utils/time-constants.js";
+import { loadProjectTimeConfig } from "../config/loader/load-project-time-config.js";
+import { resolveGitRepository } from "../infrastructure/git-repository.js";
 import { isTopLevelSession } from "../extension/session-classification.js";
 import {
   defaultProjectTimeDataRoot,
   prepareProjectTimeDataRoot,
 } from "../extension/local-data-root.js";
 import { SessionStateCoordinator } from "../extension/application/session-state-coordinator.js";
+import { AutomaticTimeLogRecorder } from "../time-log/recorder.js";
+import { buildReport } from "../time-log/domain/report.js";
 import {
   clearStatus,
   dashboardText,
@@ -37,32 +25,22 @@ const PROJECT_TIME_COMMANDS = [
   {
     value: "summary",
     label: "summary",
-    description: "Show session cost, active time, and prompt count",
+    description: "Show active time, prompt count, and last prompt",
   },
   {
     value: "settings",
     label: "settings",
-    description: "Explain local cost and billable policy settings",
-  },
-  {
-    value: "billable",
-    label: "billable",
-    description: "Show locally recorded billable clocks",
-  },
-  {
-    value: "billable preview",
-    label: "billable preview",
-    description: "Preview provider-neutral billable entries",
-  },
-  {
-    value: "timesheet preview",
-    label: "timesheet preview",
-    description: "Preview provider-neutral itemized timesheet entries",
+    description: "Show Project Time settings and repository attribution",
   },
   {
     value: "history",
     label: "history",
-    description: "Show recent local project and billable tracking",
+    description: "Show recent human and agent intervals for this project",
+  },
+  {
+    value: "report",
+    label: "report",
+    description: "Show raw/independent/split/weighted allocation reports",
   },
 ];
 function projectTimeArgumentCompletions(argumentPrefix) {
@@ -79,17 +57,11 @@ export class ProjectTimeRuntime {
 
   timeLogRecorder;
 
-  billableTimeRecorder;
-
-  generateTitle;
-
-  localDataPreparation;
-
   usesDefaultDataRoot;
 
   prepareLocalData;
 
-  billableSessionIds = new Set();
+  localDataPreparation;
 
   runtimeState = {};
 
@@ -98,42 +70,31 @@ export class ProjectTimeRuntime {
   }
 
   static defaultRefreshIntervalMs = ProjectTimeRuntime.refreshIntervalMs(
-    parseDeveloperCostConfig(),
+    parseProjectTimeConfig(),
   );
 
   constructor(pi, options = {}) {
     this.pi = pi;
-    this.loadConfig = options.loadConfig ?? loadDeveloperCostConfig;
+    this.loadConfig = options.loadConfig ?? loadProjectTimeConfig;
     const dataRoot = defaultProjectTimeDataRoot();
-    const usesDefaultDataRoot =
+    this.usesDefaultDataRoot =
       options.prepareLocalData !== undefined ||
-      options.ledgerPath === undefined ||
-      options.timeLogPath === undefined ||
-      options.billableTimePath === undefined;
-    const ledger = new SpreadBillingLedger(
-      options.ledgerPath ?? path.join(dataRoot, "spread-billing.json"),
-    );
+      options.timeLogPath === undefined;
     this.timeLogRecorder = new AutomaticTimeLogRecorder(
       options.timeLogPath ?? path.join(dataRoot, "time-log.json"),
     );
     this.sessionStateCoordinator = new SessionStateCoordinator(
-      ledger,
       this.timeLogRecorder,
       (customType, data) => this.pi.appendEntry(customType, data),
     );
-    this.billableTimeRecorder = new BillableTimeRecorder(
-      options.billableTimePath ?? dataRoot,
-    );
-    this.usesDefaultDataRoot = usesDefaultDataRoot;
     this.prepareLocalData =
       options.prepareLocalData ?? prepareProjectTimeDataRoot;
-    this.generateTitle = options.generateTitle;
   }
 
   register() {
     this.scheduleNextRefresh();
     this.pi.registerCommand("project-time", {
-      description: "Show Project Time status, summary, or billable records",
+      description: "Show Project Time status, summary, history, or reports",
       getArgumentCompletions: projectTimeArgumentCompletions,
       handler: async (args, ctx) => {
         if (!(await this.localDataReady(ctx))) return;
@@ -155,13 +116,6 @@ export class ProjectTimeRuntime {
     this.pi.on("turn_end", async (_event, ctx) => {
       if (!(await this.localDataReady(ctx))) return;
       await this.settleCurrentTurn(ctx);
-    });
-    this.pi.on("session_compact", async (event, ctx) => {
-      if (!(await this.localDataReady(ctx))) return;
-      await this.refreshBillableDescription(
-        ctx,
-        event.compactionEntry.shortSummary ?? event.compactionEntry.summary,
-      );
     });
     this.pi.on("session_shutdown", async (_event, ctx) => {
       if (!(await this.localDataReady(ctx))) return;
@@ -190,47 +144,18 @@ export class ProjectTimeRuntime {
       return;
     }
     const command = args.trim();
+    if (command.startsWith("report")) {
+      await this.showReport(command, ctx);
+      return;
+    }
     if (
       command !== "" &&
       !PROJECT_TIME_COMMANDS.some(({ value }) => value === command)
     ) {
       ctx.ui.notify(
-        "Unknown Project Time command. Use settings, summary, billable, billable preview, timesheet preview, or history.",
+        "Unknown Project Time command. Use settings, summary, history, or report.",
         "error",
       );
-      return;
-    }
-    if (command === "timesheet preview") {
-      try {
-        const [intervals, descriptions] = await Promise.all([
-          this.timeLogRecorder.entries(),
-          this.billableTimeRecorder.descriptions(),
-        ]);
-        ctx.ui.notify(
-          timesheetPreview(createTimesheetEntries(intervals, descriptions)),
-          "info",
-        );
-      } catch (error) {
-        ctx.ui.notify(`Timesheet error: ${errorMessage(error)}`, "error");
-      }
-      return;
-    }
-    if (command === "billable preview" || command === "billable") {
-      const locale = await this.loadConfig(ctx.cwd).then(
-        (config) => config.locale,
-        () => DEFAULT_LOCALE,
-      );
-      try {
-        if (command === "billable preview") {
-          const entries = await this.billableTimeRecorder.workEntries();
-          ctx.ui.notify(billableWorkEntryPreview(entries, locale), "info");
-        } else {
-          const summaries = await this.billableTimeRecorder.summaries();
-          ctx.ui.notify(billableSummaryText(summaries, locale), "info");
-        }
-      } catch (error) {
-        ctx.ui.notify(`Billable time error: ${errorMessage(error)}`, "error");
-      }
       return;
     }
     const config = await this.loadConfigForStatus(ctx);
@@ -252,7 +177,7 @@ export class ProjectTimeRuntime {
       nowMs,
       sessionId,
       notifyTimeLogError: (message) =>
-        ctx.ui.notify(`Developer time log error: ${message}`, "error"),
+        ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     });
     const project = (await resolveGitRepository(ctx.cwd))?.project;
     const message =
@@ -260,6 +185,46 @@ export class ProjectTimeRuntime {
         ? summaryText(settledState, config, sessionId, nowMs)
         : dashboardText(settledState, config, project);
     ctx.ui.notify(message, "info");
+  }
+
+  async showReport(command, ctx) {
+    try {
+      const reportArgs = parseReportArgs(command);
+      const entries = await this.timeLogRecorder.entries();
+      if (reportArgs.mode === "all") {
+        const modes = ["raw", "independent", "split", "weighted"];
+        const human = {};
+        const agent = {};
+        for (const mode of modes) {
+          human[mode] = buildReport(
+            entries,
+            "human_active",
+            mode,
+            reportArgs.weights,
+          );
+          agent[mode] = buildReport(
+            entries,
+            "agent_turn_elapsed",
+            mode,
+            reportArgs.weights,
+          );
+        }
+        ctx.ui.notify(JSON.stringify({ human, agent }, null, 2), "info");
+        return;
+      }
+      const report = buildReport(
+        entries,
+        reportArgs.sourceKind,
+        reportArgs.mode,
+        reportArgs.weights,
+      );
+      ctx.ui.notify(JSON.stringify(report, null, 2), "info");
+    } catch (error) {
+      ctx.ui.notify(
+        `Project Time report error: ${errorMessage(error)}`,
+        "error",
+      );
+    }
   }
 
   async showHistory(ctx, config) {
@@ -273,40 +238,38 @@ export class ProjectTimeRuntime {
         nowMs,
         sessionId,
         notifyTimeLogError: (message) =>
-          ctx.ui.notify(`Developer time log error: ${message}`, "error"),
+          ctx.ui.notify(`Project Time log error: ${message}`, "error"),
       });
       const gitRepository = await resolveGitRepository(ctx.cwd);
-      const billableRepository =
-        gitRepository === undefined
-          ? undefined
-          : normalizeBillableRepository(
-              gitRepository.identity ?? gitRepository.repositoryId,
-            );
-      const billableTrackingEnabled =
-        billableRepository !== undefined &&
-        (config.billableTime.defaultClient !== undefined ||
-          config.billableTime.clientsByRepository.has(billableRepository));
-      const [timeLogEntries, billableRecords] = await Promise.all([
+      const repositoryId = gitRepository?.repositoryId;
+      const [timeLogEntries] = await Promise.all([
         this.timeLogRecorder.entries(),
-        this.billableTimeRecorder.records(),
       ]);
+      const humanEntries = timeLogEntries.filter(
+        (entry) =>
+          entry.sourceKind === "human_active" &&
+          entry.repositoryId === repositoryId,
+      );
+      const agentEntries = timeLogEntries.filter(
+        (entry) =>
+          entry.sourceKind === "agent_turn_elapsed" &&
+          entry.repositoryId === repositoryId,
+      );
       ctx.ui.notify(
         historyText(
           gitRepository?.project,
           settledState,
           config,
-          billableTrackingEnabled,
-          timeLogEntries.filter(
-            (entry) => entry.repositoryId === gitRepository?.repositoryId,
-          ),
-          billableRecords.filter(
-            (record) => record.repository === billableRepository,
-          ),
+          humanEntries,
+          agentEntries,
         ),
         "info",
       );
     } catch (error) {
-      ctx.ui.notify(`Project history error: ${errorMessage(error)}`, "error");
+      ctx.ui.notify(
+        `Project Time history error: ${errorMessage(error)}`,
+        "error",
+      );
     }
   }
 
@@ -325,7 +288,7 @@ export class ProjectTimeRuntime {
       nowMs: Date.now(),
       sessionId,
       notifyTimeLogError: (message) =>
-        ctx.ui.notify(`Developer time log error: ${message}`, "error"),
+        ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     });
     this.rememberActiveSession(ctx, sessionId, settledState);
     if (settledState.activeUntilMs === undefined) {
@@ -344,32 +307,6 @@ export class ProjectTimeRuntime {
     }
     const sessionId = ctx.sessionManager.getSessionId();
     const promptAtMs = Date.now();
-    try {
-      const result = await this.billableTimeRecorder.recordPrompt(
-        sessionId,
-        ctx.cwd,
-        promptAtMs,
-        config.billableTime,
-      );
-      if (result.started) this.billableSessionIds.add(sessionId);
-      const gitRepository = await resolveGitRepository(ctx.cwd);
-      const repository =
-        gitRepository === undefined
-          ? undefined
-          : normalizeBillableRepository(
-              gitRepository.identity ?? gitRepository.repositoryId,
-            );
-      if (
-        repository !== undefined &&
-        config.billableTime.policiesByRepository.has(repository)
-      ) {
-        this.billableSessionIds.add(sessionId);
-      }
-      if (result.closedInterval)
-        await this.recordBillableDescription(ctx, sessionId, false);
-    } catch (error) {
-      ctx.ui.notify(`Billable time error: ${errorMessage(error)}`, "error");
-    }
     const nextState = await this.sessionStateCoordinator.recordPrompt({
       config,
       cwd: ctx.cwd,
@@ -377,39 +314,34 @@ export class ProjectTimeRuntime {
       nowMs: promptAtMs,
       sessionId,
       notifyTimeLogError: (message) =>
-        ctx.ui.notify(`Developer time log error: ${message}`, "error"),
+        ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     });
     updateStatus(ctx, nextState, config);
   }
 
-  async settleCurrentTurn(ctx, closeBillableInterval = true) {
+  async settleCurrentTurn(ctx) {
     if (!isTopLevelSession(ctx.sessionManager)) return;
     const sessionId = ctx.sessionManager.getSessionId();
-    if (closeBillableInterval) {
-      try {
-        const closedInterval = await this.billableTimeRecorder.recordTurnEnd(
-          sessionId,
-          Date.now(),
-        );
-        if (closedInterval)
-          await this.recordBillableDescription(ctx, sessionId, false);
-      } catch (error) {
-        ctx.ui.notify(`Billable time error: ${errorMessage(error)}`, "error");
-      }
-    }
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
       this.clearActiveStatus(ctx);
       return;
     }
+    const nowMs = Date.now();
+    this.timeLogRecorder.recordAgentTurnEnd(
+      sessionId,
+      nowMs,
+      config,
+      (message) => ctx.ui.notify(`Project Time log error: ${message}`, "error"),
+    );
     const settledState = await this.sessionStateCoordinator.settle({
       config,
       cwd: ctx.cwd,
       entries: ctx.sessionManager.getEntries(),
-      nowMs: Date.now(),
+      nowMs,
       sessionId,
       notifyTimeLogError: (message) =>
-        ctx.ui.notify(`Developer time log error: ${message}`, "error"),
+        ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     });
     this.rememberActiveSession(ctx, sessionId, settledState);
     updateStatus(ctx, settledState, config);
@@ -417,24 +349,12 @@ export class ProjectTimeRuntime {
 
   async shutdownSession(ctx) {
     const sessionId = ctx.sessionManager.getSessionId();
-    try {
-      const closedInterval = await this.billableTimeRecorder.recordShutdown(
-        sessionId,
-        Date.now(),
-      );
-      if (closedInterval || this.billableSessionIds.has(sessionId)) {
-        await this.recordBillableDescription(ctx, sessionId, true);
-      }
-    } catch (error) {
-      ctx.ui.notify(`Billable time error: ${errorMessage(error)}`, "error");
-    }
     if (isTopLevelSession(ctx.sessionManager)) {
-      await this.settleCurrentTurn(ctx, false);
+      await this.settleCurrentTurn(ctx);
     }
     await this.sessionStateCoordinator.flush(sessionId, (message) =>
-      ctx.ui.notify(`Developer time log error: ${message}`, "error"),
+      ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     );
-    this.billableSessionIds.delete(sessionId);
     if (this.runtimeState.activeSessionId !== sessionId) return;
     this.clearActiveStatus(ctx);
   }
@@ -460,10 +380,7 @@ export class ProjectTimeRuntime {
       nowMs: Date.now(),
       sessionId: activeSessionId,
       notifyTimeLogError: (message) =>
-        activeContext.ui.notify(
-          `Developer time log error: ${message}`,
-          "error",
-        ),
+        activeContext.ui.notify(`Project Time log error: ${message}`, "error"),
     });
     this.rememberActiveSession(activeContext, activeSessionId, settledState);
     updateStatus(activeContext, settledState, config);
@@ -496,45 +413,6 @@ export class ProjectTimeRuntime {
     this.clearActiveStatus(activeContext);
   }
 
-  async refreshBillableDescription(ctx, currentSummary) {
-    if (!isTopLevelSession(ctx.sessionManager)) return;
-    const sessionId = ctx.sessionManager.getSessionId();
-    if (!this.billableSessionIds.has(sessionId)) return;
-    try {
-      await this.recordBillableDescription(
-        ctx,
-        sessionId,
-        true,
-        currentSummary,
-      );
-    } catch (error) {
-      ctx.ui.notify(`Billable time error: ${errorMessage(error)}`, "error");
-    }
-  }
-
-  async recordBillableDescription(ctx, sessionId, refresh, currentSummary) {
-    if (
-      !refresh &&
-      (await this.billableTimeRecorder.descriptionFor(sessionId)) !== undefined
-    )
-      return;
-    const generationContext = {
-      sessionId,
-      generateTitle: this.generateTitle,
-    };
-    const description = await describeBillableSession(
-      ctx.sessionManager.getHeader(),
-      ctx.sessionManager.getBranch?.() ?? ctx.sessionManager.getEntries(),
-      generationContext,
-      currentSummary,
-    );
-    await this.billableTimeRecorder.recordDescription({
-      ...description,
-      sessionId,
-      recordedAtMs: Date.now(),
-    });
-  }
-
   async loadConfigForStatus(ctx) {
     try {
       return await this.loadConfig(ctx.cwd);
@@ -562,4 +440,64 @@ export class ProjectTimeRuntime {
     this.runtimeState.activeContext = undefined;
     this.runtimeState.activeSessionId = undefined;
   }
+}
+
+function parseReportArgs(command) {
+  const tokens = command.trim().split(/\s+/);
+  if (tokens[0] !== "report") throw new Error("Expected a report command.");
+  const rest = tokens.slice(1);
+  let sourceKind = "human_active";
+  if (rest[0] === "agent") {
+    sourceKind = "agent_turn_elapsed";
+    rest.shift();
+  } else if (rest[0] === "human") {
+    rest.shift();
+  }
+  const modeToken = rest[0];
+  let mode = "all";
+  if (
+    modeToken === "raw" ||
+    modeToken === "independent" ||
+    modeToken === "split" ||
+    modeToken === "weighted"
+  ) {
+    mode = modeToken;
+    rest.shift();
+  } else if (modeToken !== undefined) {
+    throw new Error(`Unknown report mode: ${modeToken}`);
+  }
+  let weights;
+  if (mode === "weighted") {
+    const weightsJson = rest.join(" ").trim();
+    if (weightsJson.length > 0) {
+      try {
+        const parsed = JSON.parse(weightsJson);
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
+          throw new Error("Weights must be a JSON object.");
+        }
+        weights = {};
+        for (const [key, value] of Object.entries(parsed)) {
+          if (
+            typeof value !== "number" ||
+            !Number.isFinite(value) ||
+            value <= 0
+          ) {
+            throw new Error(
+              `Weight for ${key} must be a positive finite number.`,
+            );
+          }
+          weights[key] = value;
+        }
+      } catch {
+        throw new Error(
+          "Weights must be valid JSON object mapping repository to weight.",
+        );
+      }
+    }
+  }
+  return { sourceKind, mode, weights };
 }

@@ -1,59 +1,93 @@
-import type { TimeLogEntry, TimesheetAttribution } from "@/time-log/domain/model.js"
+import type { TimeLogEntry, TimeLogAttribution, SourceKind } from "@/time-log/domain/model.js"
 import { isFiniteNumber } from "@/utils/is-finite-number.js"
 
 export function parseTimeLogEntry(value: unknown): TimeLogEntry | undefined {
   if (typeof value !== "object" || value === null) return undefined
 
-  const id = "id" in value ? value.id : undefined
-  const project = "project" in value ? value.project : undefined
-  const repositoryId = "repositoryId" in value ? value.repositoryId : undefined
-  const sessionId = "sessionId" in value ? value.sessionId : undefined
-  const startAtMs = "startAtMs" in value ? value.startAtMs : undefined
-  const endAtMs = "endAtMs" in value ? value.endAtMs : undefined
-  const createdAtMs = "createdAtMs" in value ? value.createdAtMs : undefined
-  const timesheet = "timesheet" in value ? parseTimesheetAttribution(value.timesheet) : undefined
+  const candidate = value as Record<string, unknown>
+  const id = candidate.id
+  const sourceKind = parseSourceKind(candidate.sourceKind)
+  const project = candidate.project
+  const repositoryId = candidate.repositoryId
+  const sessionId = candidate.sessionId
+  const startAtMs = candidate.startAtMs
+  const endAtMs = candidate.endAtMs
+  const createdAtMs = candidate.createdAtMs
+  const attribution = parseAttribution(candidate.attribution) ?? parseAttribution(candidate.timesheet)
 
   if (
-    typeof id !== "string" ||
-    id.length === 0 ||
-    typeof project !== "string" ||
-    project.length === 0 ||
-    typeof repositoryId !== "string" ||
-    repositoryId.length === 0 ||
-    (sessionId !== undefined && (typeof sessionId !== "string" || sessionId.length === 0)) ||
-    !isFiniteNumber(startAtMs) ||
-    !isFiniteNumber(endAtMs) ||
-    startAtMs >= endAtMs ||
-    !isFiniteNumber(createdAtMs) ||
-    ("timesheet" in value && timesheet === undefined)
+    typeof id !== "string"
+    || id.length === 0
+    || sourceKind === undefined
+    || typeof project !== "string"
+    || project.length === 0
+    || typeof repositoryId !== "string"
+    || repositoryId.length === 0
+    || (sessionId !== undefined
+      && (typeof sessionId !== "string" || sessionId.length === 0))
+    || !isFiniteNumber(startAtMs)
+    || !isFiniteNumber(endAtMs)
+    || startAtMs >= endAtMs
+    || !isFiniteNumber(createdAtMs)
   ) {
     return undefined
   }
 
   return {
     id,
+    sourceKind,
     project,
     repositoryId,
     ...(sessionId === undefined ? {} : { sessionId }),
     startAtMs,
     endAtMs,
     createdAtMs,
-    ...(timesheet === undefined ? {} : { timesheet }),
+    ...(attribution === undefined ? {} : { attribution }),
   }
 }
 
-function parseTimesheetAttribution(value: unknown): TimesheetAttribution | undefined {
+function parseSourceKind(value: unknown): SourceKind | undefined {
+  if (value === undefined) return "human_active"
+  if (value === "human_active" || value === "agent_turn_elapsed") return value
+
+  return undefined
+}
+
+function parseAttribution(
+  value: unknown,
+): TimeLogAttribution | undefined {
   if (typeof value !== "object" || value === null) return undefined
 
-  const { projectId, projectName, categoryId, categoryLabel } = value as Record<string, unknown>
-  return (
-    typeof projectId === "string" && projectId.length > 0
-    && typeof projectName === "string" && projectName.length > 0
-    && typeof categoryId === "string" && categoryId.length > 0
-    && typeof categoryLabel === "string" && categoryLabel.length > 0
-  )
-    ? { projectId, projectName, categoryId, categoryLabel }
-    : undefined
+  const {
+    projectId,
+    projectName,
+    categoryId,
+    categoryLabel,
+    task,
+  } = value as Record<string, unknown>
+
+  if (
+    typeof projectId !== "string"
+    || projectId.length === 0
+    || typeof projectName !== "string"
+    || projectName.length === 0
+    || typeof categoryId !== "string"
+    || categoryId.length === 0
+    || typeof categoryLabel !== "string"
+    || categoryLabel.length === 0
+  ) {
+    return undefined
+  }
+
+  return {
+    projectId,
+    projectName,
+    categoryId,
+    categoryLabel,
+    ...(task !== undefined && typeof task === "string" && task.length > 0
+      ? { task }
+      : {}),
+  }
 }
 
 export default parseTimeLogEntry

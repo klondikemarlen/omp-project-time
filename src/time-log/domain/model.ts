@@ -1,23 +1,37 @@
-export type TimesheetAttribution = {
+export type SourceKind = "human_active" | "agent_turn_elapsed"
+
+export type TimeLogAttribution = {
   projectId: string
   projectName: string
   categoryId: string
   categoryLabel: string
+  task?: string
+}
+
+export type Repository = {
+  project: string
+  repositoryId: string
 }
 
 export type AutomaticTimeLogInput = {
-  endAtMs: number
+  sourceKind: SourceKind
   project: string
   repositoryId: string
   sessionId?: string
   sourceKey: string
   startAtMs: number
-  timesheet?: TimesheetAttribution
+  endAtMs: number
+  attribution?: TimeLogAttribution
 }
 
-export type TimeLogEntry = Omit<AutomaticTimeLogInput, "sourceKey" | "sessionId" | "timesheet"> & {
-  createdAtMs: number
+export type TimeLogEntry = {
   id: string
+  sourceKind: SourceKind
+  project: string
+  repositoryId: string
   sessionId?: string
-  timesheet?: TimesheetAttribution
+  startAtMs: number
+  endAtMs: number
+  createdAtMs: number
+  attribution?: TimeLogAttribution
 }
