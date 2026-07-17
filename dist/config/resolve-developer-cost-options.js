@@ -19,12 +19,10 @@ function normalizeLegacySettings(settings) {
     settings.workingHoursPerWeek ?? settings.hoursPerWeek;
   const workingWeeksPerYear =
     settings.workingWeeksPerYear ?? settings.weeksPerYear;
-  const billablePolicies = settings.billablePolicies ?? settings.billableTime;
   return {
     ...settings,
     ...(annualGrossSalary === undefined ? {} : { annualGrossSalary }),
     ...(workingHoursPerWeek === undefined ? {} : { workingHoursPerWeek }),
     ...(workingWeeksPerYear === undefined ? {} : { workingWeeksPerYear }),
-    ...(billablePolicies === undefined ? {} : { billablePolicies }),
   };
 }

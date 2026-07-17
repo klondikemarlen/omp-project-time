@@ -1,4 +1,4 @@
-import type { DeveloperCostState } from "@/billing/index.js"
+import type { DeveloperCostConfig, DeveloperCostState } from "@/billing/index.js"
 import { errorMessage } from "@/utils/error-message.js"
 import { createAutomaticTimeLogEntry } from "@/time-log/domain/create-automatic-entry.js"
 import { TimeLogLedger } from "@/time-log/infrastructure/ledger.js"
@@ -7,8 +7,10 @@ import {
   resolveGitRepository,
   type GitRepository,
 } from "@/infrastructure/git-repository.js"
+import { normalizeBillableRepository } from "@/billable-time/domain/repository.js"
 
 type Settlement = {
+  config: DeveloperCostConfig
   cwd: string
   nowMs: number
   sessionId: string
@@ -90,7 +92,7 @@ export class AutomaticTimeLogRecorder {
 
     const sourceStartedAtMs =
       activity.startedAtMs ?? stateBeforeSettlement.activeStartAtMs
-    return createAutomaticTimeLogEntry({
+    const entry = createAutomaticTimeLogEntry({
       nowMs: settlement.nowMs,
       repository,
       sessionId: settlement.sessionId,
@@ -98,6 +100,24 @@ export class AutomaticTimeLogRecorder {
       stateBeforeSettlement: settlement.stateBeforeSettlement,
       settledState: settlement.settledState,
     })
+    if (entry === undefined) return undefined
+
+    const identity = repository.identity
+    if (identity === undefined) return entry
+    const policy = settlement.config.billableTime.policiesByRepository.get(
+      normalizeBillableRepository(identity),
+    )
+    if (policy === undefined) return entry
+
+    return {
+      ...entry,
+      timesheet: {
+        projectId: policy.project.id,
+        projectName: policy.project.label,
+        categoryId: policy.category.id,
+        categoryLabel: policy.category.label,
+      },
+    }
   }
 
   private async repositoryForSettlement(

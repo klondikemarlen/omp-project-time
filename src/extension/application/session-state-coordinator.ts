@@ -79,6 +79,7 @@ export class SessionStateCoordinator {
   ): void {
     this.timeLogRecorder.recordSettlement(
       {
+        config: update.config,
         cwd: update.cwd,
         nowMs: update.nowMs,
         sessionId: update.sessionId,

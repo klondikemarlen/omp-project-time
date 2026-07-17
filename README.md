@@ -192,65 +192,42 @@ locally. It never writes these settings to a ledger or external service.
 unambiguous CAD codes (for example, `CAD 3.13`); `fr-CA` renders `3,13 CAD`. This setting changes
 only presentation—stored developer and billable values remain decimal scalars.
 
-### Billable clocks
+### Repository timesheets
 
-Configure billable policies only when you need separately rated attention and AI clocks. The plugin
-uses the `billablePolicies` structured setting and shows `disabled` by default. Setting
-`defaultClient` makes the active Git repository the billable project target; its project name defaults
-to the repository name. `projects` optionally replaces that displayed name, while `categories` assigns
-a provider-neutral category ID and label to new records for a specific normalized
-`github.com/owner/repository` identity. `repositories` remains available when a repository needs a
-client policy other than `defaultClient`.
+Configure `repositoryBilling` when you want itemized, provider-neutral timesheet entries. Each
+normalized GitHub repository maps explicitly to the project and billing category that own its active
+time. The developer meter's effective paid hourly cost remains a display-only value; no hourly rate
+is configured per project or category.
 
 ```json
 {
-  "defaultClient": "acme",
-  "clients": {
-    "acme": {
-      "label": "Acme",
-      "attentionRatePerHour": "100",
-      "aiRatePerHour": "25"
-    }
-  },
-  "projects": {
-    "github.com/acme/project": "Example Project"
-  },
-  "categories": {
-    "github.com/acme/project": {
-      "id": "programming",
-      "label": "Programming"
-    }
-  },
   "repositories": {
-    "github.com/acme/other-project": "acme"
+    "github.com/acme/project": {
+      "project": { "id": "acme", "label": "Acme" },
+      "category": { "id": "development", "label": "Development" }
+    }
   }
 }
 ```
 
-`defaultClient` is opt-in: Project Time never infers a rate or category. New records snapshot the
-client, repository, project identity, project name, category, and rate. Project and category
-attribution stay provider-neutral; they are not Harvest project or task mappings.
+Unmapped repositories still retain normal local Project Time history, but contribute no timesheet
+entry. Mapped entries snapshot the project/category at recording time, so a later configuration
+change cannot reclassify past work.
 
-Each qualifying top-level prompt writes one five-minute attention token and records its AI interval
-until `turn_end` or shutdown. Records are local append-only files at
-`~/.omp/project-time/attention-tokens.ndjson` and
-`~/.omp/project-time/ai-intervals.ndjson`.
-
-When an interval first settles, the plugin records an explicit user session title. When its host
-exposes title generation, it records a bounded generated description; otherwise it records
-`Unlabeled billable work`. It refreshes the description after compaction and at shutdown.
-Raw prompt text, transcripts, tool output, artifacts,
+On shutdown, Project Time records an explicit session title as the task. When no title exists and
+the host exposes title generation, it records a bounded generated task from the session context;
+otherwise it uses `Unlabeled project work`. Raw prompt text, transcripts, tool output, artifacts,
 and model metadata are never persisted.
 
-OMP plugin settings support scalar values, so `billablePolicies` is one clearly labelled structured
-JSON string:
+OMP plugin settings support only scalar values, so `repositoryBilling` is one clearly labelled
+structured JSON string:
 
 ```bash
-omp plugin config set omp-project-time billablePolicies '{"defaultClient":"acme","clients":{"acme":{"label":"Acme","attentionRatePerHour":"100","aiRatePerHour":"25"}},"projects":{"github.com/acme/project":"Example Project"},"categories":{"github.com/acme/project":{"id":"programming","label":"Programming"}}}'
+omp plugin config set omp-project-time repositoryBilling '{"repositories":{"github.com/acme/project":{"project":{"id":"acme","label":"Acme"},"category":{"id":"development","label":"Development"}}}}'
 ```
 
-Existing `monthlySalary`, `hoursPerWeek`, `weeksPerYear`, and `billableTime` settings continue to
-load for this release. Set the clearer names above for new configuration.
+The legacy `billablePolicies` setting remains available only for its existing local clock reports;
+new timesheet configuration uses `repositoryBilling`.
 
 ## Status command
 
@@ -260,25 +237,25 @@ load for this release. Set the clearer names above for new configuration.
 /project-time summary
 /project-time billable
 /project-time billable preview
+/project-time timesheet preview
 /project-time history
 ```
 
 Type `/project-time ` (including the trailing space) to let OMP offer these modes. The package and
 command are named `omp-project-time` and `/project-time`. The default command posts a visible
-dashboard with the current Git project, developer meter, billable-policy state, and every explicit
-command. `summary` reports its session id, project time cost, active time, prompt count, and the last
-prompt's age and timestamp. It does not infer corrections, nudges, or outcomes.
+dashboard with the current Git project, developer meter, repository-timesheet state, and every
+explicit command. `summary` reports its session id, project time cost, active time, prompt count, and
+the last prompt's age and timestamp. It does not infer corrections, nudges, or outcomes.
 `settings` shows local annual compensation, expected working time, the derived effective paid hourly
-cost, whether billable policies are configured, and each configured attention and AI rate.
-`billable` reports separately grouped attention-token and AI-interval units, durations, and
-snapshotted rates; its CAD rates and displayed amounts use the configured locale and round only at
-the presentation boundary. `billable preview` emits local provider-neutral JSON entries with client
-and project attribution, source-specific timestamps, exact durations, locale-formatted CAD rates,
-and the recorded description. It performs no network operation and does not define an
-external-system payload or integration.
-`history` reports the current Git project, settled developer meter, and recent local developer-time
-intervals and billable records for that repository. It clearly distinguishes disabled billable tracking
-from no records and does not send data to an external service.
+cost, and each repository-timesheet mapping.
+`timesheet preview` emits local provider-neutral JSON entries with the snapshotted project/category,
+generated-or-explicit task, exact active duration, and interval timestamps. Entries aggregate only
+matching session, repository mapping, and task. It performs no network operation and does not define
+an external-system payload or integration.
+`billable` and `billable preview` retain the existing local attention/AI clock reports. `history`
+reports the current Git project, settled developer meter, and recent local developer-time intervals
+and billable records for that repository. It clearly distinguishes disabled billable tracking from no
+records and does not send data to an external service.
 
 ## Local project time log
 

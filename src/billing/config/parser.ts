@@ -31,8 +31,7 @@ export function parseDeveloperCostConfig(options?: DeveloperCostOptions): Develo
     options?.refreshIntervalSeconds ?? DEFAULT_REFRESH_INTERVAL_SECONDS
   const rawLabel = options?.label ?? DEFAULT_LABEL
   const rawLocale = options?.locale ?? DEFAULT_LOCALE
-  const rawBillablePolicies = options?.billablePolicies ?? options?.billableTime
-
+  const rawRepositoryBilling = options?.repositoryBilling ?? options?.billablePolicies ?? options?.billableTime
   const annualGrossSalary = parsePositiveNumber(rawAnnualGrossSalary) ?? DEFAULT_ANNUAL_GROSS_SALARY
   const workingHoursPerWeek =
     parsePositiveNumber(rawWorkingHoursPerWeek) ?? DEFAULT_WORKING_HOURS_PER_WEEK
@@ -44,7 +43,7 @@ export function parseDeveloperCostConfig(options?: DeveloperCostOptions): Develo
     parsePositiveNumber(rawRefreshIntervalSeconds) ?? DEFAULT_REFRESH_INTERVAL_SECONDS
   const label = parseNonEmptyString(rawLabel)?.toLowerCase() ?? DEFAULT_LABEL
   const locale = parseNumberFormatLocale(rawLocale)
-  const billableTime = parseBillableTimeConfig(rawBillablePolicies)
+  const billableTime = parseBillableTimeConfig(rawRepositoryBilling)
 
   return {
     annualGrossSalary,
@@ -62,7 +61,12 @@ export function parseStoredDeveloperCostConfig(value: unknown): DeveloperCostCon
   if (typeof value !== "object" || value === null) return undefined
 
   const candidate = value as Record<string, unknown>
-  const { billablePolicies: _billablePolicies, billableTime: _billableTime, ...scalarOptions } = candidate
+  const {
+    repositoryBilling: _repositoryBilling,
+    billablePolicies: _billablePolicies,
+    billableTime: _billableTime,
+    ...scalarOptions
+  } = candidate
   let config: DeveloperCostConfig
   try {
     config = parseDeveloperCostConfig(scalarOptions)

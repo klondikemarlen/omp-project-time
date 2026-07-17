@@ -10,6 +10,10 @@ import { DEFAULT_LOCALE } from "../billing/config/defaults.js";
 import { SpreadBillingLedger } from "../billing/infrastructure/spread-ledger.js";
 import { loadDeveloperCostConfig } from "../config/loader/load-developer-cost-config.js";
 import { AutomaticTimeLogRecorder } from "../time-log/recorder.js";
+import {
+  createTimesheetEntries,
+  timesheetPreview,
+} from "../time-log/timesheet.js";
 import { resolveGitRepository } from "../infrastructure/git-repository.js";
 import { normalizeBillableRepository } from "../billable-time/domain/repository.js";
 import { errorMessage } from "../utils/error-message.js";
@@ -49,6 +53,11 @@ const PROJECT_TIME_COMMANDS = [
     value: "billable preview",
     label: "billable preview",
     description: "Preview provider-neutral billable entries",
+  },
+  {
+    value: "timesheet preview",
+    label: "timesheet preview",
+    description: "Preview provider-neutral itemized timesheet entries",
   },
   {
     value: "history",
@@ -186,9 +195,24 @@ export class ProjectTimeRuntime {
       !PROJECT_TIME_COMMANDS.some(({ value }) => value === command)
     ) {
       ctx.ui.notify(
-        "Unknown Project Time command. Use settings, summary, billable, billable preview, or history.",
+        "Unknown Project Time command. Use settings, summary, billable, billable preview, timesheet preview, or history.",
         "error",
       );
+      return;
+    }
+    if (command === "timesheet preview") {
+      try {
+        const [intervals, descriptions] = await Promise.all([
+          this.timeLogRecorder.entries(),
+          this.billableTimeRecorder.descriptions(),
+        ]);
+        ctx.ui.notify(
+          timesheetPreview(createTimesheetEntries(intervals, descriptions)),
+          "info",
+        );
+      } catch (error) {
+        ctx.ui.notify(`Timesheet error: ${errorMessage(error)}`, "error");
+      }
       return;
     }
     if (command === "billable preview" || command === "billable") {
@@ -328,6 +352,19 @@ export class ProjectTimeRuntime {
         config.billableTime,
       );
       if (result.started) this.billableSessionIds.add(sessionId);
+      const gitRepository = await resolveGitRepository(ctx.cwd);
+      const repository =
+        gitRepository === undefined
+          ? undefined
+          : normalizeBillableRepository(
+              gitRepository.identity ?? gitRepository.repositoryId,
+            );
+      if (
+        repository !== undefined &&
+        config.billableTime.policiesByRepository.has(repository)
+      ) {
+        this.billableSessionIds.add(sessionId);
+      }
       if (result.closedInterval)
         await this.recordBillableDescription(ctx, sessionId, false);
     } catch (error) {

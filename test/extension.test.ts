@@ -122,6 +122,11 @@ test("offers documented Project Time commands and rejects unsupported arguments"
       description: "Preview provider-neutral billable entries",
     },
     {
+      value: "timesheet preview",
+      label: "timesheet preview",
+      description: "Preview provider-neutral itemized timesheet entries",
+    },
+    {
       value: "history",
       label: "history",
       description: "Show recent local project and billable tracking",
@@ -137,7 +142,7 @@ test("offers documented Project Time commands and rejects unsupported arguments"
 
   await command.handler("unknown", createContext(runtime, { parentSession: undefined }) as never)
   assert.deepEqual(runtime.notifications, [{
-    message: "Unknown Project Time command. Use settings, summary, billable, billable preview, or history.",
+    message: "Unknown Project Time command. Use settings, summary, billable, billable preview, timesheet preview, or history.",
     type: "error",
   }])
 })
@@ -154,8 +159,8 @@ test("shows the active Git project in the default Project Time dashboard", async
         "Project Time",
         "Project: Project",
         "Developer meter: CAD\u00a00.00 (dev)",
-        "Billable policies: not configured",
-        "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
+        "Repository timesheet: not configured",
+        "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time timesheet preview | /project-time history",
         "Tip: type /project-time followed by a space to choose a mode.",
       ].join("\n"),
       type: "info",
@@ -175,7 +180,7 @@ test("shows derived local cost settings", async () => {
       "Annual gross salary: CAD\u00a078,000.00",
       "Working time: 40h/week × 52 weeks/year",
       "Effective paid hourly cost: CAD\u00a037.50/h",
-      "Billable policies: not configured",
+      "Repository timesheet: not configured",
     ].join("\n"),
     type: "info",
   })
@@ -203,8 +208,7 @@ test("shows configured billable attention and AI rates separately", async () => 
       "Annual gross salary: 78 000,00 CAD",
       "Working time: 40h/week × 52 weeks/year",
       "Effective paid hourly cost: 37,50 CAD/h",
-      "Billable policies: configured",
-      "- Acme: attention 120,00 CAD/h; AI 30,00 CAD/h",
+      "Repository timesheet: not configured",
     ].join("\n"),
     type: "info",
   })
@@ -256,8 +260,8 @@ test("uses the current repository as the default billable project target", async
           "Project Time",
           "Project: Project",
           "Developer meter: 0,00\u00a0CAD (dev)",
-          "Billable policies: configured",
-          "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
+          "Repository timesheet: not configured",
+          "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time timesheet preview | /project-time history",
           "Tip: type /project-time followed by a space to choose a mode.",
         ].join("\n"),
         type: "info",
@@ -614,8 +618,8 @@ test("feature scenario tracks visible developer cost across prompts and idle tim
         "Project Time",
         "Project: unavailable",
         "Developer meter: CAD\u00a08.24 (dev)",
-        "Billable policies: not configured",
-        "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
+        "Repository timesheet: not configured",
+        "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time timesheet preview | /project-time history",
         "Tip: type /project-time followed by a space to choose a mode.",
       ].join("\n"),
       type: "info",
@@ -975,8 +979,8 @@ test("restores persisted state from full session history", async () => {
         "Project Time",
         "Project: unavailable",
         "Developer meter: CAD\u00a012.34 (dev)",
-        "Billable policies: not configured",
-        "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
+        "Repository timesheet: not configured",
+        "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time timesheet preview | /project-time history",
         "Tip: type /project-time followed by a space to choose a mode.",
       ].join("\n"),
       type: "info",

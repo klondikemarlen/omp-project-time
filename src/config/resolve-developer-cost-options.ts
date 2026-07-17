@@ -21,13 +21,11 @@ function normalizeLegacySettings(settings: Record<string, unknown>): DeveloperCo
     ?? (monthlySalary === undefined ? undefined : monthlySalary * MONTHS_PER_YEAR)
   const workingHoursPerWeek = settings.workingHoursPerWeek ?? settings.hoursPerWeek
   const workingWeeksPerYear = settings.workingWeeksPerYear ?? settings.weeksPerYear
-  const billablePolicies = settings.billablePolicies ?? settings.billableTime
 
   return {
     ...settings,
     ...(annualGrossSalary === undefined ? {} : { annualGrossSalary }),
     ...(workingHoursPerWeek === undefined ? {} : { workingHoursPerWeek }),
     ...(workingWeeksPerYear === undefined ? {} : { workingWeeksPerYear }),
-    ...(billablePolicies === undefined ? {} : { billablePolicies }),
   }
 }

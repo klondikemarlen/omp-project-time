@@ -33,8 +33,10 @@ export function parseDeveloperCostConfig(options) {
     options?.refreshIntervalSeconds ?? DEFAULT_REFRESH_INTERVAL_SECONDS;
   const rawLabel = options?.label ?? DEFAULT_LABEL;
   const rawLocale = options?.locale ?? DEFAULT_LOCALE;
-  const rawBillablePolicies =
-    options?.billablePolicies ?? options?.billableTime;
+  const rawRepositoryBilling =
+    options?.repositoryBilling ??
+    options?.billablePolicies ??
+    options?.billableTime;
   const annualGrossSalary =
     parsePositiveNumber(rawAnnualGrossSalary) ?? DEFAULT_ANNUAL_GROSS_SALARY;
   const workingHoursPerWeek =
@@ -51,7 +53,7 @@ export function parseDeveloperCostConfig(options) {
     DEFAULT_REFRESH_INTERVAL_SECONDS;
   const label = parseNonEmptyString(rawLabel)?.toLowerCase() ?? DEFAULT_LABEL;
   const locale = parseNumberFormatLocale(rawLocale);
-  const billableTime = parseBillableTimeConfig(rawBillablePolicies);
+  const billableTime = parseBillableTimeConfig(rawRepositoryBilling);
   return {
     annualGrossSalary,
     workingHoursPerWeek,
@@ -68,6 +70,7 @@ export function parseStoredDeveloperCostConfig(value) {
   if (typeof value !== "object" || value === null) return undefined;
   const candidate = value;
   const {
+    repositoryBilling: _repositoryBilling,
     billablePolicies: _billablePolicies,
     billableTime: _billableTime,
     ...scalarOptions

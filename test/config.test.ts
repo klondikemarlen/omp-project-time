@@ -42,24 +42,29 @@ test("loads canonical plugin settings from disk", async () => {
   }
 })
 
-test("loads structured billable policies from the current setting", async () => {
+test("loads repository timesheet mappings from the current setting", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "developer-cost-config-"))
   const pluginsLockfile = path.join(directory, "omp-plugins.lock.json")
   const projectOverrides = path.join(directory, "missing-overrides.json")
 
   try {
     await writePluginSettings(pluginsLockfile, {
-      billablePolicies: JSON.stringify({
-        defaultClient: "acme",
-        clients: {
-          acme: { label: "Acme", attentionRatePerHour: "100", aiRatePerHour: "25" },
+      repositoryBilling: JSON.stringify({
+        repositories: {
+          "github.com/acme/project": {
+            project: { id: "acme", label: "Acme" },
+            category: { id: "development", label: "Development" },
+          },
         },
       }),
     })
 
     const config = await loadDeveloperCostConfigFromFiles(pluginsLockfile, projectOverrides)
 
-    assert.equal(config.billableTime.defaultClient?.id, "acme")
+    assert.deepEqual(config.billableTime.policiesByRepository.get("github.com/acme/project"), {
+      project: { id: "acme", label: "Acme" },
+      category: { id: "development", label: "Development" },
+    })
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

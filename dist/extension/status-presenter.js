@@ -31,22 +31,22 @@ export function settingsText(config) {
     `Annual gross salary: ${formatCadAmount(`${config.annualGrossSalary}`, config.locale)}`,
     `Working time: ${config.workingHoursPerWeek}h/week × ${config.workingWeeksPerYear} weeks/year`,
     `Effective paid hourly cost: ${formatCadAmount(effectivePaidHourlyCost(config), config.locale)}/h`,
-    `Billable policies: ${billablePoliciesStatus(config)}`,
-    ...configuredBillableClients(config).map(
-      (client) =>
-        `- ${client.label}: attention ${formatCadAmount(client.attentionRatePerHour, config.locale)}/h; AI ${formatCadAmount(client.aiRatePerHour, config.locale)}/h`,
+    `Repository timesheet: ${repositoryTimesheetStatus(config)}`,
+    ...configuredRepositoryPolicies(config).map(
+      ([repository, policy]) =>
+        `- ${repository} → ${policy.project.label} / ${policy.category.label}`,
     ),
   ].join("\n");
 }
 
 export function dashboardText(state, config, project) {
-  const billablePoliciesConfigured = billablePoliciesStatus(config);
+  const repositoryTimesheetConfigured = repositoryTimesheetStatus(config);
   return [
     "Project Time",
     `Project: ${project ?? "unavailable"}`,
     `Developer meter: ${statusText(state, config)}`,
-    `Billable policies: ${billablePoliciesConfigured}`,
-    "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time history",
+    `Repository timesheet: ${repositoryTimesheetConfigured}`,
+    "Commands: /project-time settings | /project-time summary | /project-time billable | /project-time billable preview | /project-time timesheet preview | /project-time history",
     "Tip: type /project-time followed by a space to choose a mode.",
   ].join("\n");
 }
@@ -111,23 +111,14 @@ export function summaryText(state, config, sessionId, nowMs) {
   ].join("\n");
 }
 
-function billablePoliciesStatus(config) {
-  return config.billableTime.defaultClient !== undefined ||
-    config.billableTime.clientsByRepository.size > 0
+function repositoryTimesheetStatus(config) {
+  return config.billableTime.policiesByRepository.size > 0
     ? "configured"
     : "not configured";
 }
 
-function configuredBillableClients(config) {
-  const clients = new Map(
-    [...config.billableTime.clientsByRepository.values()].map((client) => [
-      client.id,
-      client,
-    ]),
-  );
-  const { defaultClient } = config.billableTime;
-  if (defaultClient !== undefined) clients.set(defaultClient.id, defaultClient);
-  return [...clients.values()];
+function configuredRepositoryPolicies(config) {
+  return [...config.billableTime.policiesByRepository.entries()];
 }
 
 function recordTimestamp(record) {

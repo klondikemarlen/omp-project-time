@@ -19,9 +19,10 @@ export type DeveloperCostOptions = {
   refreshIntervalSeconds?: unknown
   label?: unknown
   locale?: unknown
-  billablePolicies?: unknown
+  repositoryBilling?: unknown
   monthlySalary?: unknown
   hoursPerWeek?: unknown
   weeksPerYear?: unknown
+  billablePolicies?: unknown
   billableTime?: unknown
 }

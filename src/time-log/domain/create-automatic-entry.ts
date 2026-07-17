@@ -31,6 +31,7 @@ export function createAutomaticTimeLogEntry(
   return {
     project: options.repository.project,
     repositoryId: options.repository.repositoryId,
+    sessionId: options.sessionId,
     sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}`,
     startAtMs,
     endAtMs: settledUntilMs,

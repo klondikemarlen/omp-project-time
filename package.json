@@ -82,10 +82,10 @@
         "default": "en-CA",
         "description": "BCP 47 locale used to format Canadian-dollar amounts."
       },
-      "billablePolicies": {
+      "repositoryBilling": {
         "type": "string",
         "default": "disabled",
-        "description": "Optional structured billable-policy JSON. disabled means billable tracking is not configured; see the README for the schema."
+        "description": "Optional repository-timesheet JSON. Each GitHub repository maps to a project and billing category; disabled records no timesheet attribution."
       }
     }
   },

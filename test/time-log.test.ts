@@ -64,6 +64,7 @@ test("limits automatic intervals to the settled attention duration", () => {
   assert.deepEqual(entry, {
     project: "Project A",
     repositoryId: "repository-a",
+    sessionId: "session-a",
     sourceKey: "session-a:repository-a:0",
     startAtMs: 4 * minute,
     endAtMs: 5 * minute,

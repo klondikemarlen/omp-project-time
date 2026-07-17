@@ -76,6 +76,7 @@ export class SessionStateCoordinator {
   recordTimeLogSettlement(update, stateBeforeSettlement, settledState) {
     this.timeLogRecorder.recordSettlement(
       {
+        config: update.config,
         cwd: update.cwd,
         nowMs: update.nowMs,
         sessionId: update.sessionId,
