@@ -1,3 +1,5 @@
+import type { generateSessionTitle } from "@oh-my-pi/pi-coding-agent/utils/title-generator"
+
 import type { ProjectTimeConfig } from "@/config/project-time-config.js"
 
 export type SessionHeaderLike = {
@@ -32,6 +34,8 @@ export type ExtensionContext = {
   cwd: string
   ui: UiLike
   sessionManager: SessionManagerLike
+  model?: Parameters<typeof generateSessionTitle>[4]
+  modelRegistry?: Parameters<typeof generateSessionTitle>[1]
 }
 
 export type CommandCompletion = {
@@ -58,6 +62,7 @@ export type TurnEndHandler = (
 ) => Promise<void>
 
 export type ExtensionApi = {
+  pi?: { settings?: Parameters<typeof generateSessionTitle>[2] }
   registerCommand(
     name: string,
     options: {
@@ -76,7 +81,13 @@ export type ExtensionApi = {
 
 export type ConfigLoader = (cwd: string) => Promise<ProjectTimeConfig>
 
+export type ActivityLabelGenerator = (
+  prompt: string,
+  ctx: ExtensionContext,
+) => Promise<unknown>
+
 export type ExtensionOptions = {
+  generateActivity?: ActivityLabelGenerator
   loadConfig?: ConfigLoader
   prepareLocalData?: () => Promise<void>
   timeLogPath?: string

@@ -4,6 +4,7 @@ import { errorMessage } from "../utils/error-message.js";
 import { MS_PER_SECOND } from "../utils/time-constants.js";
 import { loadProjectTimeConfig } from "../config/loader/load-project-time-config.js";
 import { resolveGitRepository } from "../infrastructure/git-repository.js";
+import { generateActivityLabel } from "../extension/activity-label-generator.js";
 import { isTopLevelSession } from "../extension/session-classification.js";
 import {
   defaultProjectTimeDataRoot,
@@ -34,11 +35,6 @@ const PROJECT_TIME_COMMANDS = [
     description: "Show recent human and agent intervals for this project",
   },
   {
-    value: "activity",
-    label: "activity",
-    description: "Set a coarse label for subsequent intervals",
-  },
-  {
     value: "report",
     label: "report",
     description: "Show concise project-time totals",
@@ -53,6 +49,8 @@ export class ProjectTimeRuntime {
   pi;
 
   loadConfig;
+
+  generateActivity;
 
   sessionStateCoordinator;
 
@@ -78,6 +76,9 @@ export class ProjectTimeRuntime {
     this.pi = pi;
     this.loadConfig = options.loadConfig ?? loadProjectTimeConfig;
     const dataRoot = defaultProjectTimeDataRoot();
+    this.generateActivity =
+      options.generateActivity ??
+      ((prompt, ctx) => generateActivityLabel(prompt, ctx, pi));
     this.usesDefaultDataRoot =
       options.prepareLocalData !== undefined ||
       options.timeLogPath === undefined;
@@ -110,9 +111,9 @@ export class ProjectTimeRuntime {
       if (!(await this.localDataReady(ctx))) return;
       await this.activateSession(ctx);
     });
-    this.pi.on("before_agent_start", async (_event, ctx) => {
+    this.pi.on("before_agent_start", async (event, ctx) => {
       if (!(await this.localDataReady(ctx))) return;
-      await this.recordPrompt(ctx);
+      await this.recordPrompt(event.prompt, ctx);
     });
     this.pi.on("turn_end", async (_event, ctx) => {
       if (!(await this.localDataReady(ctx))) return;
@@ -145,10 +146,6 @@ export class ProjectTimeRuntime {
       return;
     }
     const command = args.trim();
-    if (command === "activity" || command.startsWith("activity ")) {
-      await this.setActivity(command, ctx);
-      return;
-    }
     if (command === "report" || command.startsWith("report ")) {
       await this.showReport(command, ctx);
       return;
@@ -158,7 +155,7 @@ export class ProjectTimeRuntime {
       !PROJECT_TIME_COMMANDS.some(({ value }) => value === command)
     ) {
       ctx.ui.notify(
-        "Unknown Project Time command. Use summary, history, activity, or report.",
+        "Unknown Project Time command. Use summary, history, or report.",
         "error",
       );
       return;
@@ -227,34 +224,6 @@ export class ProjectTimeRuntime {
     } catch (error) {
       ctx.ui.notify(
         `Project Time report error: ${errorMessage(error)}`,
-        "error",
-      );
-    }
-  }
-
-  async setActivity(command, ctx) {
-    try {
-      const activity = parseActivityCommand(command);
-      const config = await this.loadConfigForStatus(ctx);
-      if (config === undefined) return;
-      const nowMs = Date.now();
-      const nextState = await this.sessionStateCoordinator.setActivity(
-        {
-          config,
-          cwd: ctx.cwd,
-          entries: ctx.sessionManager.getEntries(),
-          nowMs,
-          sessionId: ctx.sessionManager.getSessionId(),
-          notifyTimeLogError: (message) =>
-            ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-        },
-        activity,
-      );
-      updateStatus(ctx, nextState, config);
-      ctx.ui.notify(`Activity: ${activity ?? "unlabelled"}`, "info");
-    } catch (error) {
-      ctx.ui.notify(
-        `Project Time activity error: ${errorMessage(error)}`,
         "error",
       );
     }
@@ -331,24 +300,34 @@ export class ProjectTimeRuntime {
     updateStatus(ctx, settledState, config);
   }
 
-  async recordPrompt(ctx) {
+  async recordPrompt(prompt, ctx) {
     if (!isTopLevelSession(ctx.sessionManager)) return;
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
       this.clearActiveStatus(ctx);
       return;
     }
-    const sessionId = ctx.sessionManager.getSessionId();
     const promptAtMs = Date.now();
-    const nextState = await this.sessionStateCoordinator.recordPrompt({
+    const update = {
       config,
       cwd: ctx.cwd,
       entries: ctx.sessionManager.getEntries(),
       nowMs: promptAtMs,
-      sessionId,
+      sessionId: ctx.sessionManager.getSessionId(),
       notifyTimeLogError: (message) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-    });
+    };
+    const activity = parseActivityLabel(
+      await this.generateActivity(prompt, ctx).catch(() => undefined),
+    );
+    const currentActivity = this.sessionStateCoordinator.stateFor(
+      update.sessionId,
+      update.entries,
+    ).activity;
+    if (currentActivity !== activity) {
+      await this.sessionStateCoordinator.setActivity(update, activity);
+    }
+    const nextState = await this.sessionStateCoordinator.recordPrompt(update);
     updateStatus(ctx, nextState, config);
   }
 
@@ -543,16 +522,4 @@ function parseReportArgs(command) {
     throw new Error("Only weighted reports accept repository weights.");
   }
   return { sourceKind, mode, json, weights };
-}
-
-function parseActivityCommand(command) {
-  const value = command.slice("activity".length).trim();
-  if (value === "clear") return undefined;
-  const activity = parseActivityLabel(value);
-  if (activity === undefined) {
-    throw new Error(
-      "Use 1–48 letters or numbers separated by single spaces or hyphens, or use `activity clear`.",
-    );
-  }
-  return activity;
 }

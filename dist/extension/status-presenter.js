@@ -19,7 +19,7 @@ export function dashboardText(state, config, project, sessionName) {
     `Project: ${project ?? "unavailable"} · Active: ${statusText(state, config)}`,
     `Session: ${sessionName ?? "unnamed"}`,
     `Activity: ${activityText(state.activity)}`,
-    "/project-time summary | history | activity | report",
+    "/project-time summary | history | report",
   ].join("\n");
 }
 

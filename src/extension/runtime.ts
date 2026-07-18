@@ -6,6 +6,7 @@ import { MS_PER_SECOND } from "@/utils/time-constants.js"
 import { loadProjectTimeConfig } from "@/config/loader/load-project-time-config.js"
 import type { ProjectTimeConfig } from "@/config/project-time-config.js"
 import { resolveGitRepository } from "@/infrastructure/git-repository.js"
+import { generateActivityLabel } from "@/extension/activity-label-generator.js"
 import { isTopLevelSession } from "@/extension/session-classification.js"
 import {
   defaultProjectTimeDataRoot,
@@ -26,6 +27,7 @@ import {
   updateStatus,
 } from "@/extension/status-presenter.js"
 import type {
+  ActivityLabelGenerator,
   ConfigLoader,
   ExtensionApi,
   ExtensionContext,
@@ -59,11 +61,6 @@ const PROJECT_TIME_COMMANDS = [
     description: "Show recent human and agent intervals for this project",
   },
   {
-    value: "activity",
-    label: "activity",
-    description: "Set a coarse label for subsequent intervals",
-  },
-  {
     value: "report",
     label: "report",
     description: "Show concise project-time totals",
@@ -78,6 +75,7 @@ function projectTimeArgumentCompletions(argumentPrefix: string) {
 export class ProjectTimeRuntime {
   private readonly pi: ExtensionApi
   private readonly loadConfig: ConfigLoader
+  private readonly generateActivity: ActivityLabelGenerator
   private readonly sessionStateCoordinator: SessionStateCoordinator
   private readonly timeLogRecorder: AutomaticTimeLogRecorder
   private readonly usesDefaultDataRoot: boolean
@@ -96,6 +94,8 @@ export class ProjectTimeRuntime {
     this.pi = pi
     this.loadConfig = options.loadConfig ?? loadProjectTimeConfig
     const dataRoot = defaultProjectTimeDataRoot()
+    this.generateActivity = options.generateActivity
+      ?? ((prompt, ctx) => generateActivityLabel(prompt, ctx, pi))
     this.usesDefaultDataRoot =
       options.prepareLocalData !== undefined || options.timeLogPath === undefined
     this.timeLogRecorder = new AutomaticTimeLogRecorder(
@@ -130,9 +130,9 @@ export class ProjectTimeRuntime {
       await this.activateSession(ctx)
     })
 
-    this.pi.on("before_agent_start", async (_event, ctx) => {
+    this.pi.on("before_agent_start", async (event, ctx) => {
       if (!await this.localDataReady(ctx)) return
-      await this.recordPrompt(ctx)
+      await this.recordPrompt(event.prompt, ctx)
     })
 
     this.pi.on("turn_end", async (_event, ctx) => {
@@ -169,10 +169,6 @@ export class ProjectTimeRuntime {
     }
 
     const command = args.trim()
-    if (command === "activity" || command.startsWith("activity ")) {
-      await this.setActivity(command, ctx)
-      return
-    }
 
     if (command === "report" || command.startsWith("report ")) {
       await this.showReport(command, ctx)
@@ -184,7 +180,7 @@ export class ProjectTimeRuntime {
       && !PROJECT_TIME_COMMANDS.some(({ value }) => value === command)
     ) {
       ctx.ui.notify(
-        "Unknown Project Time command. Use summary, history, activity, or report.",
+        "Unknown Project Time command. Use summary, history, or report.",
         "error",
       )
       return
@@ -268,34 +264,6 @@ export class ProjectTimeRuntime {
     }
   }
 
-  private async setActivity(
-    command: string,
-    ctx: ExtensionContext,
-  ): Promise<void> {
-    try {
-      const activity = parseActivityCommand(command)
-      const config = await this.loadConfigForStatus(ctx)
-      if (config === undefined) return
-
-      const nowMs = Date.now()
-      const nextState = await this.sessionStateCoordinator.setActivity(
-        {
-          config,
-          cwd: ctx.cwd,
-          entries: ctx.sessionManager.getEntries(),
-          nowMs,
-          sessionId: ctx.sessionManager.getSessionId(),
-          notifyTimeLogError: (message) =>
-            ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-        },
-        activity,
-      )
-      updateStatus(ctx, nextState, config)
-      ctx.ui.notify(`Activity: ${activity ?? "unlabelled"}`, "info")
-    } catch (error) {
-      ctx.ui.notify(`Project Time activity error: ${errorMessage(error)}`, "error")
-    }
-  }
 
   private async showHistory(
     ctx: ExtensionContext,
@@ -370,7 +338,10 @@ export class ProjectTimeRuntime {
     updateStatus(ctx, settledState, config)
   }
 
-  private async recordPrompt(ctx: ExtensionContext): Promise<void> {
+  private async recordPrompt(
+    prompt: string,
+    ctx: ExtensionContext,
+  ): Promise<void> {
     if (!isTopLevelSession(ctx.sessionManager)) return
 
     const config = await this.loadConfigForStatus(ctx)
@@ -379,17 +350,26 @@ export class ProjectTimeRuntime {
       return
     }
 
-    const sessionId = ctx.sessionManager.getSessionId()
     const promptAtMs = Date.now()
-    const nextState = await this.sessionStateCoordinator.recordPrompt({
+    const update = {
       config,
       cwd: ctx.cwd,
       entries: ctx.sessionManager.getEntries(),
       nowMs: promptAtMs,
-      sessionId,
-      notifyTimeLogError: (message) =>
+      sessionId: ctx.sessionManager.getSessionId(),
+      notifyTimeLogError: (message: string) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-    })
+    }
+    const activity = parseActivityLabel(
+      await this.generateActivity(prompt, ctx).catch(() => undefined),
+    )
+    const currentActivity = this.sessionStateCoordinator
+      .stateFor(update.sessionId, update.entries)
+      .activity
+    if (currentActivity !== activity) {
+      await this.sessionStateCoordinator.setActivity(update, activity)
+    }
+    const nextState = await this.sessionStateCoordinator.recordPrompt(update)
     updateStatus(ctx, nextState, config)
   }
 
@@ -600,18 +580,4 @@ function parseReportArgs(command: string): ReportArgs {
   }
 
   return { sourceKind, mode, json, weights }
-}
-
-function parseActivityCommand(command: string): string | undefined {
-  const value = command.slice("activity".length).trim()
-  if (value === "clear") return undefined
-
-  const activity = parseActivityLabel(value)
-  if (activity === undefined) {
-    throw new Error(
-      "Use 1–48 letters or numbers separated by single spaces or hyphens, or use `activity clear`.",
-    )
-  }
-
-  return activity
 }

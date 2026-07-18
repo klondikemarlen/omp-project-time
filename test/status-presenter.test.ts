@@ -8,7 +8,7 @@ import {
   summaryText,
 } from "../src/extension/status-presenter.js"
 
-test("presents selected activity and OMP session name", () => {
+test("presents automatic activity and OMP session name", () => {
   const config = {
     activeWindowMinutes: 5,
     refreshIntervalSeconds: 15,
@@ -34,7 +34,7 @@ test("presents selected activity and OMP session name", () => {
       "Project: project-time · Active: 1m 0s (dev)",
       "Session: Project Time Audit",
       "Activity: Code Review",
-      "/project-time summary | history | activity | report",
+      "/project-time summary | history | report",
     ].join("\n"),
   )
   assert.match(historyText("project-time", state, config, [entry], []), /Code Review/)
