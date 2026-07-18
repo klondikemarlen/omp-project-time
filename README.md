@@ -15,7 +15,8 @@ Canonical requirements live in [`spec/project-time.yml`](spec/project-time.yml).
 
 - Only top-level sessions are tracked. Subagents and artifacts do not produce entries.
 - A real user prompt keeps the human-active timer alive for `Active Window Minutes`; refreshes do not create activity.
-- Every entry includes its source kind, top-level session, sanitized repository identity, and interval bounds.
+- Every entry includes its source kind, top-level session, sanitized repository identity, interval bounds, and an optional explicit activity label.
+- Activity labels are user-selected, coarse context only: at most 48 letters or numbers, separated by single spaces or hyphens. They never derive from prompts, session names, or tool activity.
 - Concurrent repositories retain their full independent intervals. Totals can exceed the OMP-active union; that is recorded evidence, not an error.
 - Project Time does not claim literal desk time. The union is an OMP-active reference only.
 - The status is a dim, keyed OMP hook-status line such as `5m 12s (dev)`. OMP owns its placement and layout.
@@ -68,18 +69,23 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 /project-time
 /project-time summary
 /project-time history
+/project-time activity Code Review
+/project-time activity clear
 /project-time report
-/project-time report human raw
 /project-time report human split
+/project-time report agent raw
 /project-time report human weighted '{"<repository-id>": 2}'
-/project-time report agent split
+/project-time report json
+/project-time report json human raw
 ```
 
-`/project-time` shows the current project and active interval status. `summary` shows the top-level session's active time and prompt count. `history` shows local human-active and agent-turn intervals for the current repository.
+`/project-time` shows the current project and active interval status. `summary` shows the top-level session name, active time, selected activity, prompt count, and most recent prompt time. `history` shows local human-active and agent-turn intervals for the current repository.
 
-`report` emits local JSON. It defaults to both source kinds and all allocation modes:
+`activity` sets coarse context for subsequent human-active intervals; `activity clear` returns to `unlabelled`. It accepts only the limited label format above.
 
-- `raw`: one total per repository/project/category/task. Concurrent durations remain fully attributed.
+`report` is a concise human-active, raw-allocation summary. Add `agent`, `split`, or `weighted` to select an evidence source or allocation policy. `report json` is the explicit machine-readable form: without further arguments it includes both sources and all allocation modes; add a source and mode for one JSON report.
+
+- `raw`: one total per sanitized project label. Concurrent durations remain fully attributed.
 - `split`: divides every overlapping interval equally across active repositories.
 - `weighted`: divides overlap by the supplied positive per-repository weights; omitted repositories have weight `1`.
 
@@ -92,6 +98,8 @@ The owner-only ledger is:
 ```text
 ~/.omp/project-time/time-log.json
 ```
+
+It is a single JSON ledger guarded by a cross-window lock and atomically replaced. Reports read the whole local ledger; SQLite would add schema and dependency overhead without a query or transaction need.
 
 The first launch after this major data-model release clears incompatible legacy Project Time, developer-cost, and billable ledgers. Historical data is intentionally not converted.
 
