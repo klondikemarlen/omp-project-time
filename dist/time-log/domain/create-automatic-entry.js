@@ -18,14 +18,17 @@ export function createAutomaticTimeLogEntry(options) {
     stateBeforeSettlement.activeStartAtMs,
     settledUntilMs - settledMilliseconds,
   );
-  if (startAtMs >= settledUntilMs) return undefined;
+  const activityStartedAtMs = options.activityStartedAtMs;
+  const entryStartAtMs = Math.max(startAtMs, activityStartedAtMs ?? startAtMs);
+  if (entryStartAtMs >= settledUntilMs) return undefined;
   return {
     sourceKind: "human_active",
     project: options.repository.project,
     repositoryId: options.repository.repositoryId,
     sessionId: options.sessionId,
-    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}`,
-    startAtMs,
+    ...(options.activity === undefined ? {} : { activity: options.activity }),
+    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}`,
+    startAtMs: entryStartAtMs,
     endAtMs: settledUntilMs,
   };
 }

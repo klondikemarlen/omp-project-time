@@ -8,6 +8,7 @@ import {
   emptyProjectTimeState,
   recordProjectTimePrompt,
   serializeProjectTimeState,
+  setProjectTimeActivity,
   settleProjectTimeState,
   type ProjectTimeState,
 } from "@/time-log/domain/state.js"
@@ -51,6 +52,7 @@ export class SessionStateCoordinator {
       update.sessionId,
       update.cwd,
       update.nowMs,
+      state.activity,
       update.notifyTimeLogError,
     )
     this.persist(update.sessionId, state)
@@ -63,6 +65,29 @@ export class SessionStateCoordinator {
     }
     const state = settleProjectTimeState(stateBeforeSettlement, update.nowMs)
     this.recordTimeLogSettlement(update, stateBeforeSettlement, state)
+    this.persist(update.sessionId, state)
+    return state
+  }
+
+  async setActivity(
+    update: SessionUpdate,
+    activity: string | undefined,
+  ): Promise<ProjectTimeState> {
+    const stateBeforeSettlement = {
+      ...this.stateFor(update.sessionId, update.entries),
+    }
+    const settledState = settleProjectTimeState(
+      stateBeforeSettlement,
+      update.nowMs,
+    )
+    this.recordTimeLogSettlement(update, stateBeforeSettlement, settledState)
+    const state = setProjectTimeActivity(settledState, activity, update.nowMs)
+    this.timeLogRecorder.recordActivityChange(
+      update.sessionId,
+      update.nowMs,
+      activity,
+      update.notifyTimeLogError,
+    )
     this.persist(update.sessionId, state)
     return state
   }

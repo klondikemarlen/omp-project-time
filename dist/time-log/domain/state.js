@@ -1,4 +1,5 @@
 import { MS_PER_MINUTE } from "../../utils/time-constants.js";
+import { parseActivityLabel } from "../../time-log/domain/activity.js";
 import { parseOptionalNumber } from "../../utils/parse-optional-number.js";
 
 export function emptyProjectTimeState() {
@@ -15,6 +16,10 @@ export function parseProjectTimeState(value) {
   const activeUntilMs = parseOptionalNumber(candidate.activeUntilMs);
   const lastSettledAtMs = parseOptionalNumber(candidate.lastSettledAtMs);
   const lastPromptAtMs = parseOptionalNumber(candidate.lastPromptAtMs);
+  const activity = parseActivityLabel(candidate.activity);
+  const activityStartedAtMs = parseOptionalNumber(
+    candidate.activityStartedAtMs,
+  );
   return {
     promptCount,
     activeMilliseconds,
@@ -22,6 +27,8 @@ export function parseProjectTimeState(value) {
     ...(activeUntilMs === undefined ? {} : { activeUntilMs }),
     ...(lastSettledAtMs === undefined ? {} : { lastSettledAtMs }),
     ...(lastPromptAtMs === undefined ? {} : { lastPromptAtMs }),
+    ...(activity === undefined ? {} : { activity }),
+    ...(activityStartedAtMs === undefined ? {} : { activityStartedAtMs }),
   };
 }
 
@@ -39,6 +46,7 @@ export function recordProjectTimePrompt(state, promptAtMs, config) {
     nextState.activeStartAtMs = promptAtMs;
     nextState.activeUntilMs = promptAtMs + windowMs;
     nextState.lastSettledAtMs = promptAtMs;
+    nextState.activityStartedAtMs = promptAtMs;
   } else {
     nextState.activeUntilMs = Math.max(
       nextState.activeUntilMs,
@@ -47,6 +55,21 @@ export function recordProjectTimePrompt(state, promptAtMs, config) {
   }
   nextState.promptCount += 1;
   nextState.lastPromptAtMs = promptAtMs;
+  return nextState;
+}
+
+export function setProjectTimeActivity(state, activity, nowMs) {
+  const nextState = { ...state };
+  if (activity === undefined) delete nextState.activity;
+  else nextState.activity = activity;
+  if (
+    nextState.activeStartAtMs !== undefined &&
+    nextState.activeUntilMs !== undefined
+  ) {
+    nextState.activityStartedAtMs = nowMs;
+  } else {
+    delete nextState.activityStartedAtMs;
+  }
   return nextState;
 }
 
@@ -68,5 +91,6 @@ export function settleProjectTimeState(state, nowMs) {
   delete nextState.activeStartAtMs;
   delete nextState.activeUntilMs;
   delete nextState.lastSettledAtMs;
+  delete nextState.activityStartedAtMs;
   return nextState;
 }

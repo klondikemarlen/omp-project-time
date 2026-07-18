@@ -11,6 +11,7 @@ export type AutomaticTimeLogInput = {
   project: string
   repositoryId: string
   sessionId?: string
+  activity?: string
   sourceKey: string
   startAtMs: number
   endAtMs: number
@@ -22,6 +23,7 @@ export type TimeLogEntry = {
   project: string
   repositoryId: string
   sessionId?: string
+  activity?: string
   startAtMs: number
   endAtMs: number
   createdAtMs: number

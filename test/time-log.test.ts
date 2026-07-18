@@ -119,10 +119,99 @@ test("limits automatic human intervals to the settled attention duration", () =>
     project: "Project A",
     repositoryId: "repository-a",
     sessionId: "session-a",
-    sourceKey: "session-a:repository-a:0",
+    sourceKey: "session-a:repository-a:0:0",
     startAtMs: 4 * minute,
     endAtMs: 5 * minute,
   })
+})
+
+test("starts an activity-labelled human interval at its label change", () => {
+  const entry = createAutomaticTimeLogEntry({
+    nowMs: 4 * minute,
+    repository: { project: "Project A", repositoryId: "repository-a" },
+    sessionId: "session-a",
+    sourceStartedAtMs: 0,
+    activity: "Code Review",
+    activityStartedAtMs: 2 * minute,
+    stateBeforeSettlement: {
+      promptCount: 1,
+      activeMilliseconds: 0,
+      activeStartAtMs: 0,
+      activeUntilMs: 5 * minute,
+    },
+    settledState: {
+      promptCount: 1,
+      activeMilliseconds: 4 * minute,
+      activeStartAtMs: 0,
+      activeUntilMs: 5 * minute,
+      lastSettledAtMs: 4 * minute,
+    },
+  })
+
+  assert.deepEqual(entry, {
+    sourceKind: "human_active",
+    project: "Project A",
+    repositoryId: "repository-a",
+    sessionId: "session-a",
+    activity: "Code Review",
+    sourceKey: "session-a:repository-a:0:120000",
+    startAtMs: 2 * minute,
+    endAtMs: 4 * minute,
+  })
+})
+
+test("keeps an unlabelled, labelled, then cleared activity separate", () => {
+  const createEntry = (
+    activeMilliseconds: number,
+    nowMs: number,
+    activity: string | undefined,
+    activityStartedAtMs: number,
+  ) =>
+    createAutomaticTimeLogEntry({
+      nowMs,
+      repository: { project: "Project A", repositoryId: "repository-a" },
+      sessionId: "session-a",
+      sourceStartedAtMs: 0,
+      activity,
+      activityStartedAtMs,
+      stateBeforeSettlement: {
+        promptCount: 1,
+        activeMilliseconds,
+        activeStartAtMs: 0,
+        activeUntilMs: 5 * minute,
+      },
+      settledState: {
+        promptCount: 1,
+        activeMilliseconds: nowMs,
+        activeStartAtMs: 0,
+        activeUntilMs: 5 * minute,
+        lastSettledAtMs: nowMs,
+      },
+    })
+  const inputs = [
+    createEntry(0, 2 * minute, undefined, 0),
+    createEntry(2 * minute, 3 * minute, "Code Review", 2 * minute),
+    createEntry(3 * minute, 4 * minute, undefined, 3 * minute),
+  ]
+  const entries: TimeLogEntry[] = []
+
+  for (const input of inputs) {
+    assert.ok(input)
+    recordAutomaticTimeLogEntry(entries, input, start)
+  }
+
+  assert.deepEqual(
+    entries.map(({ activity, startAtMs, endAtMs }) => ({
+      ...(activity === undefined ? {} : { activity }),
+      startAtMs,
+      endAtMs,
+    })),
+    [
+      { startAtMs: 0, endAtMs: 2 * minute },
+      { activity: "Code Review", startAtMs: 2 * minute, endAtMs: 3 * minute },
+      { startAtMs: 3 * minute, endAtMs: 4 * minute },
+    ],
+  )
 })
 
 test("extends automatic entries by source key in the domain", () => {
@@ -275,11 +364,36 @@ test("rejects incomplete automatic identities and non-positive intervals", async
         startAtMs: start + minute,
         endAtMs: start,
       },
+      {
+        sourceKind: "agent_turn_elapsed",
+        project: "github.com/acme/alpha",
+        repositoryId: "repo-alpha",
+        sourceKey: "invalid-activity",
+        activity: "Review #84",
+        startAtMs: start,
+        endAtMs: start + minute,
+      },
     ] as const)) {
       await assert.rejects(() => ledger.recordAutomatic(input))
     }
 
     assertEntries(await ledger.entries(), [])
+  })
+})
+
+test("persists activity labels on agent evidence", async () => {
+  await withLedger(async (ledger) => {
+    await ledger.recordAutomatic({
+      sourceKind: "agent_turn_elapsed",
+      project: "github.com/acme/alpha",
+      repositoryId: "repo-alpha",
+      sourceKey: "agent-activity",
+      activity: "Code Review",
+      startAtMs: start,
+      endAtMs: start + minute,
+    })
+
+    assert.equal((await ledger.entries())[0]?.activity, "Code Review")
   })
 })
 

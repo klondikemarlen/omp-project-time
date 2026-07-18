@@ -2,6 +2,7 @@ import type { ProjectTimeConfig } from "@/config/project-time-config.js"
 import type { ExtensionContext } from "@/extension/types.js"
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
 import type { TimeLogEntry } from "@/time-log/domain/model.js"
+import type { Report } from "@/time-log/domain/report.js"
 
 export const STATUS_KEY = "project-time"
 
@@ -29,13 +30,13 @@ export function dashboardText(
   state: ProjectTimeState,
   config: ProjectTimeConfig,
   project: string | undefined,
+  sessionName: string | undefined,
 ): string {
   return [
-    "Project Time",
-    `Project: ${project ?? "unavailable"}`,
-    `Current active: ${statusText(state, config)}`,
-    "Commands: /project-time summary | /project-time history | /project-time report",
-    "Tip: type /project-time followed by a space to choose a mode.",
+    `Project: ${project ?? "unavailable"} · Active: ${statusText(state, config)}`,
+    `Session: ${sessionName ?? "unnamed"}`,
+    `Activity: ${activityText(state.activity)}`,
+    "/project-time summary | history | activity | report",
   ].join("\n")
 }
 
@@ -58,7 +59,6 @@ export function historyText(
   const recentAgent = recentEntries(agentEntries)
 
   return [
-    "Project Time history",
     `Project: ${project ?? "unavailable"}`,
     `Current active: ${statusText(state, config)}`,
     `Human active: ${humanEntries.length} intervals, ${durationText(humanMilliseconds)}`,
@@ -71,7 +71,7 @@ export function historyText(
 export function summaryText(
   state: ProjectTimeState,
   config: ProjectTimeConfig,
-  sessionId: string,
+  sessionName: string | undefined,
   nowMs: number,
 ): string {
   const lastPromptAtMs = state.lastPromptAtMs
@@ -86,11 +86,23 @@ export function summaryText(
   }
 
   return [
-    "Project Time summary",
-    `Session: ${sessionId}`,
+    `Session: ${sessionName ?? "unnamed"}`,
+    `Activity: ${activityText(state.activity)}`,
     `Active time: ${durationText(state.activeMilliseconds)}`,
     `Prompt count: ${state.promptCount}`,
     lastPrompt,
+  ].join("\n")
+}
+
+export function reportText(report: Report): string {
+  const entries = [...report.entries].sort(
+    (left, right) => right.durationMs - left.durationMs,
+  )
+
+  return [
+    `${sourceKindText(report.sourceKind)} — ${allocationText(report.mode)}`,
+    `OMP-active: ${durationText(report.ompActiveUnionMs)}`,
+    `Projects:${entries.length === 0 ? " none" : `\n${entries.map((entry) => `- ${entry.project}: ${durationText(entry.durationMs)}`).join("\n")}`}`,
   ].join("\n")
 }
 
@@ -102,13 +114,28 @@ function recentEntries(entries: readonly TimeLogEntry[]): string[] {
     .slice(0, 3)
     .map(
       (entry) =>
-        `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)}`,
+        `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)} — ${activityText(entry.activity)}`,
     )
 }
 
 function timestampText(milliseconds: number): string {
   const timestamp = new Date(milliseconds)
   return Number.isNaN(timestamp.getTime()) ? "unknown time" : timestamp.toISOString()
+}
+
+function activityText(activity: string | undefined): string {
+  return activity ?? "unlabelled"
+}
+
+function sourceKindText(sourceKind: Report["sourceKind"]): string {
+  return sourceKind === "human_active" ? "Human collaboration" : "Agent execution"
+}
+
+function allocationText(mode: Report["mode"]): string {
+  if (mode === "raw") return "full repository time"
+  if (mode === "split") return "equal split"
+
+  return "weighted split"
 }
 
 function durationText(milliseconds: number): string {

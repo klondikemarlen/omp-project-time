@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { parseActivityLabel } from "@/time-log/domain/activity.js"
 
 import type {
   AutomaticTimeLogInput,
@@ -40,6 +41,10 @@ function createTimeLogEntry(
   const repositoryId = input.repositoryId.trim()
   const sourceKey = input.sourceKey.trim()
   const { startAtMs, endAtMs, sourceKind, sessionId } = input
+  const activity = parseActivityLabel(input.activity)
+  if (input.activity !== undefined && activity === undefined) {
+    throw new Error("Time log activity label is invalid.")
+  }
 
   if (project.length === 0) throw new Error("Time log project is required.")
   if (repositoryId.length === 0) {
@@ -62,6 +67,7 @@ function createTimeLogEntry(
     project,
     repositoryId,
     ...(sessionId === undefined ? {} : { sessionId }),
+    ...(activity === undefined ? {} : { activity }),
     startAtMs,
     endAtMs,
     createdAtMs,

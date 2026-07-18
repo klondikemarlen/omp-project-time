@@ -13,6 +13,7 @@ import {
 } from "@/extension/local-data-root.js"
 import { SessionStateCoordinator } from "@/extension/application/session-state-coordinator.js"
 import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js"
+import { parseActivityLabel } from "@/time-log/domain/activity.js"
 import { buildReport, type AllocationMode } from "@/time-log/domain/report.js"
 import type { SourceKind } from "@/time-log/domain/model.js"
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
@@ -20,6 +21,7 @@ import {
   clearStatus,
   dashboardText,
   historyText,
+  reportText,
   summaryText,
   updateStatus,
 } from "@/extension/status-presenter.js"
@@ -41,6 +43,7 @@ type RuntimeState = {
 type ReportArgs = {
   sourceKind: SourceKind
   mode: AllocationMode | "all"
+  json: boolean
   weights?: Record<string, number>
 }
 
@@ -56,9 +59,14 @@ const PROJECT_TIME_COMMANDS = [
     description: "Show recent human and agent intervals for this project",
   },
   {
+    value: "activity",
+    label: "activity",
+    description: "Set a coarse label for subsequent intervals",
+  },
+  {
     value: "report",
     label: "report",
-    description: "Show raw, split, or weighted allocation reports",
+    description: "Show concise project-time totals",
   },
 ] as const
 
@@ -161,7 +169,12 @@ export class ProjectTimeRuntime {
     }
 
     const command = args.trim()
-    if (command.startsWith("report")) {
+    if (command === "activity" || command.startsWith("activity ")) {
+      await this.setActivity(command, ctx)
+      return
+    }
+
+    if (command === "report" || command.startsWith("report ")) {
       await this.showReport(command, ctx)
       return
     }
@@ -171,7 +184,7 @@ export class ProjectTimeRuntime {
       && !PROJECT_TIME_COMMANDS.some(({ value }) => value === command)
     ) {
       ctx.ui.notify(
-        "Unknown Project Time command. Use summary, history, or report.",
+        "Unknown Project Time command. Use summary, history, activity, or report.",
         "error",
       )
       return
@@ -186,6 +199,7 @@ export class ProjectTimeRuntime {
     }
 
     const sessionId = ctx.sessionManager.getSessionId()
+    const sessionName = ctx.sessionManager.getSessionName?.()
     const nowMs = Date.now()
     const settledState = await this.sessionStateCoordinator.settle({
       config,
@@ -199,8 +213,8 @@ export class ProjectTimeRuntime {
     const project = (await resolveGitRepository(ctx.cwd))?.project
     const message =
       command === "summary"
-        ? summaryText(settledState, config, sessionId, nowMs)
-        : dashboardText(settledState, config, project)
+        ? summaryText(settledState, config, sessionName, nowMs)
+        : dashboardText(settledState, config, project, sessionName)
 
     ctx.ui.notify(message, "info")
   }
@@ -233,10 +247,7 @@ export class ProjectTimeRuntime {
           )
         }
 
-        ctx.ui.notify(
-          JSON.stringify({ human, agent }, null, 2),
-          "info",
-        )
+        ctx.ui.notify(JSON.stringify({ human, agent }, null, 2), "info")
         return
       }
 
@@ -246,9 +257,43 @@ export class ProjectTimeRuntime {
         reportArgs.mode,
         reportArgs.weights,
       )
-      ctx.ui.notify(JSON.stringify(report, null, 2), "info")
+      ctx.ui.notify(
+        reportArgs.json
+          ? JSON.stringify(report, null, 2)
+          : reportText(report),
+        "info",
+      )
     } catch (error) {
       ctx.ui.notify(`Project Time report error: ${errorMessage(error)}`, "error")
+    }
+  }
+
+  private async setActivity(
+    command: string,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    try {
+      const activity = parseActivityCommand(command)
+      const config = await this.loadConfigForStatus(ctx)
+      if (config === undefined) return
+
+      const nowMs = Date.now()
+      const nextState = await this.sessionStateCoordinator.setActivity(
+        {
+          config,
+          cwd: ctx.cwd,
+          entries: ctx.sessionManager.getEntries(),
+          nowMs,
+          sessionId: ctx.sessionManager.getSessionId(),
+          notifyTimeLogError: (message) =>
+            ctx.ui.notify(`Project Time log error: ${message}`, "error"),
+        },
+        activity,
+      )
+      updateStatus(ctx, nextState, config)
+      ctx.ui.notify(`Activity: ${activity ?? "unlabelled"}`, "info")
+    } catch (error) {
+      ctx.ui.notify(`Project Time activity error: ${errorMessage(error)}`, "error")
     }
   }
 
@@ -494,25 +539,40 @@ function parseReportArgs(command: string): ReportArgs {
   if (tokens[0] !== "report") throw new Error("Expected a report command.")
 
   const rest = tokens.slice(1)
+  const json = rest[0] === "json"
+  if (json) rest.shift()
+
   let sourceKind: SourceKind = "human_active"
+  let sourceWasSpecified = false
   if (rest[0] === "agent") {
     sourceKind = "agent_turn_elapsed"
+    sourceWasSpecified = true
     rest.shift()
   } else if (rest[0] === "human") {
+    sourceWasSpecified = true
     rest.shift()
   }
 
   const modeToken = rest[0]
-  let mode: AllocationMode | "all" = "all"
+  let mode: AllocationMode | "all" = json ? "all" : "raw"
   if (
     modeToken === "raw"
     || modeToken === "split"
     || modeToken === "weighted"
+    || modeToken === "all"
   ) {
     mode = modeToken
     rest.shift()
   } else if (modeToken !== undefined) {
     throw new Error(`Unknown report mode: ${modeToken}`)
+  }
+
+  if (mode === "all" && !json) {
+    throw new Error("Use report json for an all-modes report.")
+  }
+
+  if (mode === "all" && sourceWasSpecified) {
+    throw new Error("All-modes reports cannot select a source.")
   }
 
   let weights: Record<string, number> | undefined
@@ -535,7 +595,23 @@ function parseReportArgs(command: string): ReportArgs {
         throw new Error("Weights must be valid JSON object mapping repository to weight.")
       }
     }
+  } else if (rest.length > 0) {
+    throw new Error("Only weighted reports accept repository weights.")
   }
 
-  return { sourceKind, mode, weights }
+  return { sourceKind, mode, json, weights }
+}
+
+function parseActivityCommand(command: string): string | undefined {
+  const value = command.slice("activity".length).trim()
+  if (value === "clear") return undefined
+
+  const activity = parseActivityLabel(value)
+  if (activity === undefined) {
+    throw new Error(
+      "Use 1–48 letters or numbers separated by single spaces or hyphens, or use `activity clear`.",
+    )
+  }
+
+  return activity
 }

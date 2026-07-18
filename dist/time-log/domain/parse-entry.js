@@ -1,3 +1,4 @@
+import { parseActivityLabel } from "../../time-log/domain/activity.js";
 import { isFiniteNumber } from "../../utils/is-finite-number.js";
 
 export function parseTimeLogEntry(value) {
@@ -11,6 +12,7 @@ export function parseTimeLogEntry(value) {
   const startAtMs = candidate.startAtMs;
   const endAtMs = candidate.endAtMs;
   const createdAtMs = candidate.createdAtMs;
+  const activity = parseActivityLabel(candidate.activity);
   if (
     typeof id !== "string" ||
     id.length === 0 ||
@@ -25,6 +27,7 @@ export function parseTimeLogEntry(value) {
     !isFiniteNumber(endAtMs) ||
     startAtMs >= endAtMs ||
     !isFiniteNumber(createdAtMs) ||
+    (candidate.activity !== undefined && activity === undefined) ||
     "attribution" in candidate
   ) {
     return undefined;
@@ -35,6 +38,7 @@ export function parseTimeLogEntry(value) {
     project,
     repositoryId,
     ...(sessionId === undefined ? {} : { sessionId }),
+    ...(activity === undefined ? {} : { activity }),
     startAtMs,
     endAtMs,
     createdAtMs,

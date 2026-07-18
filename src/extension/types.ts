@@ -14,6 +14,7 @@ export type SessionManagerLike = {
   getSessionId(): string
   getHeader(): SessionHeaderLike | null
   getEntries(): SessionEntryLike[]
+  getSessionName?(): string | undefined
   getBranch?(): SessionEntryLike[]
 }
 

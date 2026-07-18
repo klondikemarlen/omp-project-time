@@ -14,13 +14,12 @@ export function statusText(state, config) {
   return `${durationText(state.activeMilliseconds)} (${config.label})`;
 }
 
-export function dashboardText(state, config, project) {
+export function dashboardText(state, config, project, sessionName) {
   return [
-    "Project Time",
-    `Project: ${project ?? "unavailable"}`,
-    `Current active: ${statusText(state, config)}`,
-    "Commands: /project-time summary | /project-time history | /project-time report",
-    "Tip: type /project-time followed by a space to choose a mode.",
+    `Project: ${project ?? "unavailable"} · Active: ${statusText(state, config)}`,
+    `Session: ${sessionName ?? "unnamed"}`,
+    `Activity: ${activityText(state.activity)}`,
+    "/project-time summary | history | activity | report",
   ].join("\n");
 }
 
@@ -42,7 +41,6 @@ export function historyText(
   const recentHuman = recentEntries(humanEntries);
   const recentAgent = recentEntries(agentEntries);
   return [
-    "Project Time history",
     `Project: ${project ?? "unavailable"}`,
     `Current active: ${statusText(state, config)}`,
     `Human active: ${humanEntries.length} intervals, ${durationText(humanMilliseconds)}`,
@@ -52,7 +50,7 @@ export function historyText(
   ].join("\n");
 }
 
-export function summaryText(state, config, sessionId, nowMs) {
+export function summaryText(state, config, sessionName, nowMs) {
   const lastPromptAtMs = state.lastPromptAtMs;
   let lastPrompt = "Last prompt: unavailable";
   if (lastPromptAtMs !== undefined) {
@@ -62,11 +60,22 @@ export function summaryText(state, config, sessionId, nowMs) {
     }
   }
   return [
-    "Project Time summary",
-    `Session: ${sessionId}`,
+    `Session: ${sessionName ?? "unnamed"}`,
+    `Activity: ${activityText(state.activity)}`,
     `Active time: ${durationText(state.activeMilliseconds)}`,
     `Prompt count: ${state.promptCount}`,
     lastPrompt,
+  ].join("\n");
+}
+
+export function reportText(report) {
+  const entries = [...report.entries].sort(
+    (left, right) => right.durationMs - left.durationMs,
+  );
+  return [
+    `${sourceKindText(report.sourceKind)} — ${allocationText(report.mode)}`,
+    `OMP-active: ${durationText(report.ompActiveUnionMs)}`,
+    `Projects:${entries.length === 0 ? " none" : `\n${entries.map((entry) => `- ${entry.project}: ${durationText(entry.durationMs)}`).join("\n")}`}`,
   ].join("\n");
 }
 
@@ -76,7 +85,7 @@ function recentEntries(entries) {
     .slice(0, 3)
     .map(
       (entry) =>
-        `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)}`,
+        `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)} — ${activityText(entry.activity)}`,
     );
 }
 
@@ -85,6 +94,22 @@ function timestampText(milliseconds) {
   return Number.isNaN(timestamp.getTime())
     ? "unknown time"
     : timestamp.toISOString();
+}
+
+function activityText(activity) {
+  return activity ?? "unlabelled";
+}
+
+function sourceKindText(sourceKind) {
+  return sourceKind === "human_active"
+    ? "Human collaboration"
+    : "Agent execution";
+}
+
+function allocationText(mode) {
+  if (mode === "raw") return "full repository time";
+  if (mode === "split") return "equal split";
+  return "weighted split";
 }
 
 function durationText(milliseconds) {

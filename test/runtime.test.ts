@@ -11,18 +11,21 @@ import type {
   ExtensionContext,
 } from "../src/extension/types.js"
 
-test("reports raw repository time and rejects the removed independent mode", async () => {
+test("shows concise reports and records explicit activity labels", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-runtime-"))
   const notices: Array<{ message: string; type?: string }> = []
-  let handler: CommandHandler | undefined
+  const persistedStates: unknown[] = []
   let completionValues: string[] = []
+  let handler: CommandHandler | undefined
   const extensionApi: ExtensionApi = {
     registerCommand(_name, options) {
       handler = options.handler
       completionValues = (options.getArgumentCompletions?.("") ?? []).map(({ value }) => value)
     },
     on() {},
-    appendEntry() {},
+    appendEntry(_customType, data) {
+      persistedStates.push(data)
+    },
   }
   const context: ExtensionContext = {
     cwd: directory,
@@ -35,6 +38,7 @@ test("reports raw repository time and rejects the removed independent mode", asy
     },
     sessionManager: {
       getSessionId: () => "session",
+      getSessionName: () => "Project Time Audit",
       getHeader: () => null,
       getEntries: () => [],
     },
@@ -44,15 +48,32 @@ test("reports raw repository time and rejects the removed independent mode", asy
     new ProjectTimeRuntime(extensionApi, {
       timeLogPath: path.join(directory, "time-log.json"),
     }).register()
-    assert.deepEqual(completionValues, ["summary", "history", "report"])
+    assert.deepEqual(completionValues, ["summary", "history", "activity", "report"])
     assert.ok(handler)
 
-    await handler("report human raw", context)
+    await handler("", context)
+    assert.match(notices.at(-1)?.message ?? "", /Session: Project Time Audit/)
+
+    await handler("report", context)
     assert.equal(notices.at(-1)?.type, "info")
+    assert.match(notices.at(-1)?.message ?? "", /Human collaboration — full repository time/)
+
+    await handler("report json human raw", context)
     assert.equal(JSON.parse(notices.at(-1)?.message ?? "").mode, "raw")
 
-    await handler("report human independent", context)
-    assert.match(notices.at(-1)?.message ?? "", /Unknown report mode: independent/)
+    await handler("report all", context)
+    assert.match(notices.at(-1)?.message ?? "", /Use report json for an all-modes report/)
+
+    await handler("activity Code Review", context)
+    assert.equal(notices.at(-1)?.message, "Activity: Code Review")
+    assert.deepEqual(persistedStates.at(-1), {
+      promptCount: 0,
+      activeMilliseconds: 0,
+      activity: "Code Review",
+    })
+
+    await handler("activity Review #84", context)
+    assert.match(notices.at(-1)?.message ?? "", /Project Time activity error/)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
