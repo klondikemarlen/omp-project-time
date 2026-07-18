@@ -3,7 +3,7 @@ status: stable
 requirements:
   - id: top_level_human_activity
     title: Top-level human-active intervals
-    requirement: Record an immutable human_active interval for prompt-driven active collaboration in every top-level OMP session, including session identity, sanitized repository identity, interval bounds, and an optional user-selected coarse activity label.
+    requirement: Record an immutable human_active interval for prompt-driven active collaboration in every top-level OMP session, including session identity, sanitized repository identity, interval bounds, and an optional automatically generated coarse activity label.
     rationale: Human-active evidence is the default Project Time source without claiming idle terminal or literal desk time.
   - id: agent_turn_evidence
     title: Separate agent-turn evidence
@@ -27,7 +27,7 @@ requirements:
     rationale: Their activity belongs to the top-level session and otherwise risks double counting.
   - id: local_privacy
     title: Local privacy boundary
-    requirement: Persist only a sanitized project label, one-way repository hash, source kind, session identity, timing, and an optional user-selected coarse activity label. Do not persist working-directory paths, raw remote URLs, credentials, prompts, assignments, transcripts, tool output, artifacts, session names, session files, file paths, model metadata, or custom attribution.
+    requirement: Persist only a sanitized project label, one-way repository hash, source kind, session identity, timing, and an optional coarse activity label generated transiently from the current prompt. Do not persist working-directory paths, raw remote URLs, credentials, prompts, assignments, transcripts, tool output, artifacts, session names, session files, file paths, model metadata, or custom attribution.
     rationale: Time tracking must not create sensitive activity logging.
   - id: local_data_reset
     title: Incompatible local data reset
