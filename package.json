@@ -38,7 +38,7 @@
   },
   "omp": {
     "extensions": [
-      "./dist/index.js"
+      "./dist/omp-extension.js"
     ],
     "settings": {
       "Active Window Minutes": {
