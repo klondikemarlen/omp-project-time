@@ -11,3 +11,12 @@ export function parseActivityLabel(value) {
   }
   return activityPattern.test(activity) ? activity : undefined;
 }
+
+export function parseGeneratedActivityLabel(value) {
+  const activity = parseActivityLabel(value);
+  if (activity !== undefined || typeof value !== "string") return activity;
+  const suffixIndex = value.indexOf(":");
+  return suffixIndex === -1
+    ? undefined
+    : parseActivityLabel(value.slice(0, suffixIndex));
+}

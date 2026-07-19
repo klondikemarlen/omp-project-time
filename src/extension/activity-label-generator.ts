@@ -1,3 +1,5 @@
+import { generateSessionTitle } from "@oh-my-pi/pi-coding-agent/utils/title-generator"
+
 import type { ExtensionApi, ExtensionContext } from "@/extension/types.js"
 
 const activityLabelPrompt = [
@@ -17,10 +19,6 @@ export async function generateActivityLabel(
     return undefined
   }
 
-  // OMP's loader supports this source module's Markdown imports; Node tests do not.
-  const { generateSessionTitle } = await import(
-    "@oh-my-pi/pi-coding-agent/utils/title-generator"
-  )
   return (await generateSessionTitle(
     prompt,
     ctx.modelRegistry,

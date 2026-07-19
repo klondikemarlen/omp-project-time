@@ -6,7 +6,6 @@ import { MS_PER_SECOND } from "@/utils/time-constants.js"
 import { loadProjectTimeConfig } from "@/config/loader/load-project-time-config.js"
 import type { ProjectTimeConfig } from "@/config/project-time-config.js"
 import { resolveGitRepository } from "@/infrastructure/git-repository.js"
-import { generateActivityLabel } from "@/extension/activity-label-generator.js"
 import { isTopLevelSession } from "@/extension/session-classification.js"
 import {
   defaultProjectTimeDataRoot,
@@ -14,7 +13,7 @@ import {
 } from "@/extension/local-data-root.js"
 import { SessionStateCoordinator } from "@/extension/application/session-state-coordinator.js"
 import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js"
-import { parseActivityLabel } from "@/time-log/domain/activity.js"
+import { parseGeneratedActivityLabel } from "@/time-log/domain/activity.js"
 import { buildReport, type AllocationMode } from "@/time-log/domain/report.js"
 import type { SourceKind } from "@/time-log/domain/model.js"
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
@@ -94,8 +93,7 @@ export class ProjectTimeRuntime {
     this.pi = pi
     this.loadConfig = options.loadConfig ?? loadProjectTimeConfig
     const dataRoot = defaultProjectTimeDataRoot()
-    this.generateActivity = options.generateActivity
-      ?? ((prompt, ctx) => generateActivityLabel(prompt, ctx, pi))
+    this.generateActivity = options.generateActivity ?? (async () => undefined)
     this.usesDefaultDataRoot =
       options.prepareLocalData !== undefined || options.timeLogPath === undefined
     this.timeLogRecorder = new AutomaticTimeLogRecorder(
@@ -359,9 +357,10 @@ export class ProjectTimeRuntime {
       notifyTimeLogError: (message: string) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     }
-    const activity = parseActivityLabel(
-      await this.generateActivity(prompt, ctx).catch(() => undefined),
+    const generatedActivity = await this.generateActivity(prompt, ctx).catch(
+      () => undefined,
     )
+    const activity = parseGeneratedActivityLabel(generatedActivity)
     const currentActivity = this.sessionStateCoordinator
       .stateFor(update.sessionId, update.entries)
       .activity

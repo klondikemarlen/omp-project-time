@@ -15,3 +15,13 @@ export function parseActivityLabel(value: unknown): string | undefined {
 
   return activityPattern.test(activity) ? activity : undefined
 }
+
+export function parseGeneratedActivityLabel(value: unknown): string | undefined {
+  const activity = parseActivityLabel(value)
+  if (activity !== undefined || typeof value !== "string") return activity
+
+  const suffixIndex = value.indexOf(":")
+  return suffixIndex === -1
+    ? undefined
+    : parseActivityLabel(value.slice(0, suffixIndex))
+}

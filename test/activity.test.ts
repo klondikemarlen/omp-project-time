@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   MAX_ACTIVITY_LENGTH,
   parseActivityLabel,
+  parseGeneratedActivityLabel,
 } from "../src/time-log/domain/activity.js"
 
 test("accepts only concise activity labels", () => {
@@ -15,4 +16,12 @@ test("accepts only concise activity labels", () => {
   const nonBmpLetters = "\u{10400}".repeat(MAX_ACTIVITY_LENGTH)
   assert.equal(parseActivityLabel(nonBmpLetters), nonBmpLetters)
   assert.equal(parseActivityLabel(`${nonBmpLetters}\u{10400}`), undefined)
+})
+
+test("keeps generated labels coarse without accepting invalid manual labels", () => {
+  assert.equal(
+    parseGeneratedActivityLabel("Pull Request Review: Code Quality"),
+    "Pull Request Review",
+  )
+  assert.equal(parseGeneratedActivityLabel("Review #84"), undefined)
 })
