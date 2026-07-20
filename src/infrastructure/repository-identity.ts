@@ -1,6 +1,12 @@
 import path from "node:path"
 
 import { sanitizedProjectLabel } from "@/infrastructure/sanitized-project-label.js"
+import {
+  normalizeRepositoryIdentity,
+  parseRepositoryIdentity,
+} from "@/utils/parse-repository-identity.js"
+
+export { normalizeRepositoryIdentity }
 
 type RepositoryIdentity = {
   project: string
@@ -17,9 +23,6 @@ export function repositoryIdentityFromRemoteUrl(remoteUrl: string): RepositoryId
   return repositoryIdentity(scpIdentity.host, scpIdentity.path)
 }
 
-export function normalizeRepositoryIdentity(repository: string): string {
-  return repository.replace(/\.git$/i, "").toLowerCase()
-}
 
 function repositoryIdentityFromUrl(remoteUrl: string): { host: string; path: string } | undefined {
   try {
@@ -47,8 +50,11 @@ function repositoryIdentity(host: string, remotePath: string): RepositoryIdentit
   const normalizedPath = remotePath.replace(/\.git$/i, "")
   if (normalizedPath === "") return undefined
 
+  const value = `${host}/${normalizedPath}`
+  if (parseRepositoryIdentity(normalizeRepositoryIdentity(value)) === undefined) return undefined
+
   return {
-    value: `${host}/${normalizedPath}`,
+    value,
     project: sanitizedProjectLabel(path.basename(normalizedPath)),
   }
 }

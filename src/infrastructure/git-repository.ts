@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { promisify } from "node:util"
 
 import { repositoryIdentityFromRemoteUrl } from "@/infrastructure/repository-identity.js"
+import { normalizeRepositoryIdentity } from "@/utils/parse-repository-identity.js"
 
 const execFileAsync = promisify(execFile)
 
@@ -14,7 +15,7 @@ type GitRepositoryIdentity = {
 export type GitRepository = {
   project: string
   repositoryId: string
-  identity?: string
+  repositoryIdentity?: string
 }
 
 export async function resolveGitRepository(cwd: string): Promise<GitRepository | undefined> {
@@ -25,11 +26,14 @@ export async function resolveGitRepository(cwd: string): Promise<GitRepository |
   const remoteIdentity = remoteUrl === undefined ? undefined : repositoryIdentityFromRemoteUrl(remoteUrl)
   const identity = remoteIdentity ?? localRepositoryIdentity(rootPath)
   const repositoryId = createHash("sha256").update(identity.value).digest("hex")
+  const repositoryIdentity = remoteIdentity === undefined
+    ? undefined
+    : normalizeRepositoryIdentity(remoteIdentity.value)
 
   return {
     project: identity.project,
     repositoryId,
-    identity: remoteIdentity?.value,
+    ...(repositoryIdentity === undefined ? {} : { repositoryIdentity }),
   }
 }
 

@@ -152,6 +152,9 @@ export class AutomaticTimeLogRecorder {
       sourceKind: "agent_turn_elapsed",
       project: repository.project,
       repositoryId: repository.repositoryId,
+      ...(repository.repositoryIdentity === undefined
+        ? {}
+        : { repositoryIdentity: repository.repositoryIdentity }),
       sessionId: turn.sessionId,
       ...(turn.activity === undefined ? {} : { activity: turn.activity }),
       sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent`,

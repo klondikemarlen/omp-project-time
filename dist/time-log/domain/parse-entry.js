@@ -1,5 +1,6 @@
 import { parseActivityLabel } from "../../time-log/domain/activity.js";
 import { isFiniteNumber } from "../../utils/is-finite-number.js";
+import { parseRepositoryIdentity } from "../../utils/parse-repository-identity.js";
 
 export function parseTimeLogEntry(value) {
   if (typeof value !== "object" || value === null) return undefined;
@@ -8,6 +9,9 @@ export function parseTimeLogEntry(value) {
   const sourceKind = parseSourceKind(candidate.sourceKind);
   const project = candidate.project;
   const repositoryId = candidate.repositoryId;
+  const repositoryIdentity = parseRepositoryIdentity(
+    candidate.repositoryIdentity,
+  );
   const sessionId = candidate.sessionId;
   const startAtMs = candidate.startAtMs;
   const endAtMs = candidate.endAtMs;
@@ -21,6 +25,8 @@ export function parseTimeLogEntry(value) {
     project.length === 0 ||
     typeof repositoryId !== "string" ||
     repositoryId.length === 0 ||
+    (candidate.repositoryIdentity !== undefined &&
+      repositoryIdentity === undefined) ||
     (sessionId !== undefined &&
       (typeof sessionId !== "string" || sessionId.length === 0)) ||
     !isFiniteNumber(startAtMs) ||
@@ -37,6 +43,7 @@ export function parseTimeLogEntry(value) {
     sourceKind,
     project,
     repositoryId,
+    ...(repositoryIdentity === undefined ? {} : { repositoryIdentity }),
     ...(sessionId === undefined ? {} : { sessionId }),
     ...(activity === undefined ? {} : { activity }),
     startAtMs,

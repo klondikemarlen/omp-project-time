@@ -25,6 +25,9 @@ export function createAutomaticTimeLogEntry(options) {
     sourceKind: "human_active",
     project: options.repository.project,
     repositoryId: options.repository.repositoryId,
+    ...(options.repository.repositoryIdentity === undefined
+      ? {}
+      : { repositoryIdentity: options.repository.repositoryIdentity }),
     sessionId: options.sessionId,
     ...(options.activity === undefined ? {} : { activity: options.activity }),
     sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}`,

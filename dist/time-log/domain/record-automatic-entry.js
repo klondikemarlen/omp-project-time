@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseActivityLabel } from "../../time-log/domain/activity.js";
+import { parseRepositoryIdentity } from "../../utils/parse-repository-identity.js";
 
 export function recordAutomaticTimeLogEntry(
   entries,
@@ -18,7 +19,14 @@ export function recordAutomaticTimeLogEntry(
   if (entry.endAtMs <= existingEntry.endAtMs) {
     return { changed: false, entry: existingEntry };
   }
-  const extendedEntry = { ...existingEntry, endAtMs: entry.endAtMs };
+  const extendedEntry = {
+    ...existingEntry,
+    ...(existingEntry.repositoryIdentity === undefined &&
+    entry.repositoryIdentity !== undefined
+      ? { repositoryIdentity: entry.repositoryIdentity }
+      : {}),
+    endAtMs: entry.endAtMs,
+  };
   entries[existingIndex] = extendedEntry;
   return { changed: true, entry: extendedEntry };
 }
@@ -26,11 +34,18 @@ export function recordAutomaticTimeLogEntry(
 function createTimeLogEntry(input, createdAtMs) {
   const project = input.project.trim();
   const repositoryId = input.repositoryId.trim();
+  const repositoryIdentity = parseRepositoryIdentity(input.repositoryIdentity);
   const sourceKey = input.sourceKey.trim();
   const { startAtMs, endAtMs, sourceKind, sessionId } = input;
   const activity = parseActivityLabel(input.activity);
   if (input.activity !== undefined && activity === undefined) {
     throw new Error("Time log activity label is invalid.");
+  }
+  if (
+    input.repositoryIdentity !== undefined &&
+    repositoryIdentity === undefined
+  ) {
+    throw new Error("Time log repository identity is invalid.");
   }
   if (project.length === 0) throw new Error("Time log project is required.");
   if (repositoryId.length === 0) {
@@ -51,6 +66,7 @@ function createTimeLogEntry(input, createdAtMs) {
     sourceKind,
     project,
     repositoryId,
+    ...(repositoryIdentity === undefined ? {} : { repositoryIdentity }),
     ...(sessionId === undefined ? {} : { sessionId }),
     ...(activity === undefined ? {} : { activity }),
     startAtMs,

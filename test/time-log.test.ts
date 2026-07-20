@@ -19,6 +19,7 @@ type ExpectedEntry = {
   endAtMs: number
   project: string
   repositoryId: string
+  repositoryIdentity?: string
   startAtMs: number
 }
 
@@ -91,10 +92,38 @@ test("rejects entries with removed attribution", () => {
   )
 })
 
+test("rejects malformed remote identities in persisted entries", () => {
+  for (const repositoryIdentity of [
+    "https://github.com/acme/project-a.git",
+    "github.com/acme/project-a?token=secret",
+    "github.com/acme/project-a%3Ftoken=secret",
+    "github.com/../secret",
+    ".github.com/acme/project-a",
+  ]) {
+    assert.equal(
+      parseTimeLogEntry({
+        id: "raw-remote",
+        sourceKind: "human_active",
+        project: "Project A",
+        repositoryId: "repository-a",
+        repositoryIdentity,
+        startAtMs: start,
+        endAtMs: start + minute,
+        createdAtMs: start,
+      }),
+      undefined,
+    )
+  }
+})
+
 test("limits automatic human intervals to the settled attention duration", () => {
   const entry = createAutomaticTimeLogEntry({
     nowMs: 6 * minute,
-    repository: { project: "Project A", repositoryId: "repository-a" },
+    repository: {
+      project: "Project A",
+      repositoryId: "repository-a",
+      repositoryIdentity: "github.com/acme/project-a",
+    },
     sessionId: "session-a",
     sourceStartedAtMs: 0,
     stateBeforeSettlement: {
@@ -118,6 +147,7 @@ test("limits automatic human intervals to the settled attention duration", () =>
     sourceKind: "human_active",
     project: "Project A",
     repositoryId: "repository-a",
+    repositoryIdentity: "github.com/acme/project-a",
     sessionId: "session-a",
     sourceKey: "session-a:repository-a:0:0",
     startAtMs: 4 * minute,
@@ -234,6 +264,7 @@ test("extends automatic entries by source key in the domain", () => {
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
+      repositoryIdentity: "github.com/acme/alpha",
       sourceKey: "activity-2026-01-01T00:00:00Z",
       startAtMs: start + 2 * minute,
       endAtMs: start + 3 * minute,
@@ -249,6 +280,7 @@ test("extends automatic entries by source key in the domain", () => {
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
+      repositoryIdentity: "github.com/acme/alpha",
       startAtMs: start,
       endAtMs: start + 3 * minute,
     },
@@ -373,6 +405,15 @@ test("rejects incomplete automatic identities and non-positive intervals", async
         startAtMs: start,
         endAtMs: start + minute,
       },
+      {
+        sourceKind: "agent_turn_elapsed",
+        project: "github.com/acme/alpha",
+        repositoryId: "repo-alpha",
+        repositoryIdentity: "GitHub.com/acme/alpha",
+        sourceKey: "invalid-repository-identity",
+        startAtMs: start,
+        endAtMs: start + minute,
+      },
     ] as const)) {
       await assert.rejects(() => ledger.recordAutomatic(input))
     }
@@ -403,6 +444,7 @@ test("persists automatic intervals and their deduplication keys", async () => {
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
+      repositoryIdentity: "github.com/acme/alpha",
       sourceKey: "persisted-activity",
       startAtMs: start + minute,
       endAtMs: start + 3 * minute,
@@ -412,19 +454,39 @@ test("persists automatic intervals and their deduplication keys", async () => {
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
       repositoryId: "repo-alpha",
+      repositoryIdentity: "github.com/acme/alpha",
       sourceKey: "persisted-activity",
       startAtMs: start + minute,
       endAtMs: start + 3 * minute,
     })
 
     assert.equal(replay.id, entry.id)
+
+    await reopenedLedger.recordAutomatic({
+      sourceKind: "human_active",
+      project: "github.com/acme/alpha",
+      repositoryId: "repo-alpha",
+      repositoryIdentity: "github.com/acme/alpha",
+      sourceKey: "subsequent-activity",
+      startAtMs: start + 4 * minute,
+      endAtMs: start + 5 * minute,
+    })
     assertEntries(await reopenedLedger.entries(), [
       {
         sourceKind: "human_active",
         project: "github.com/acme/alpha",
         repositoryId: "repo-alpha",
+        repositoryIdentity: "github.com/acme/alpha",
         startAtMs: start + minute,
         endAtMs: start + 3 * minute,
+      },
+      {
+        sourceKind: "human_active",
+        project: "github.com/acme/alpha",
+        repositoryId: "repo-alpha",
+        repositoryIdentity: "github.com/acme/alpha",
+        startAtMs: start + 4 * minute,
+        endAtMs: start + 5 * minute,
       },
     ])
   })
