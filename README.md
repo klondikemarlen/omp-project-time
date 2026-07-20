@@ -15,8 +15,8 @@ Canonical requirements live in [`spec/project-time.yml`](spec/project-time.yml).
 
 - Only top-level sessions are tracked. Subagents and artifacts do not produce entries.
 - A real user prompt keeps the human-active timer alive for `Active Window Minutes`; refreshes do not create activity.
-- Every entry includes its source kind, top-level session, sanitized project label, one-way repository hash, interval bounds, and an optional coarse activity label. When `origin` resolves, it also retains a normalized lowercase `host/path` repository identity without a protocol, credential, raw URL, or local filesystem path.
-- Before each top-level turn, OMP's configured title model generates the label from the current prompt. The prompt is transient; Project Time retains only the label, limited to 48 letters or numbers separated by single spaces or hyphens.
+- Every entry includes its source kind, top-level session, sanitized project label, one-way repository hash, interval bounds, and a coarse activity label. When `origin` resolves, it also retains a normalized lowercase `host/path` repository identity without a protocol, credential, raw URL, or local filesystem path.
+- Before each top-level turn, OMP's configured title model generates the label from the current prompt. The prompt is transient; Project Time retains only the label, limited to 48 letters or numbers separated by single spaces or hyphens. If generation produces no valid label, it retains the previous label or uses `General Work`.
 - Concurrent repositories retain their full independent intervals. Totals can exceed the OMP-active union; that is recorded evidence, not an error.
 - Project Time does not claim literal desk time. The union is an OMP-active reference only.
 - The status is a dim, keyed OMP hook-status line such as `5m 12s (dev)`. OMP owns its placement and layout.
