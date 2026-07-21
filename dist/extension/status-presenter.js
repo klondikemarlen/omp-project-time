@@ -83,10 +83,15 @@ function recentEntries(entries) {
   return [...entries]
     .sort((left, right) => right.endAtMs - left.endAtMs)
     .slice(0, 3)
-    .map(
-      (entry) =>
-        `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)} — ${activityText(entry.activity)}`,
-    );
+    .map((entry) => {
+      const summary = `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)} — ${activityText(entry.activity)}`;
+      return entry.narrative === undefined
+        ? summary
+        : `${summary}\n${entry.narrative.text
+            .split("\n")
+            .map((line) => `  ${line}`)
+            .join("\n")}`;
+    });
 }
 
 function timestampText(milliseconds) {

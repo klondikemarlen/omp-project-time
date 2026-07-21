@@ -78,7 +78,7 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 /project-time report json human raw
 ```
 
-`/project-time` shows the current project and active interval status. `summary` shows the top-level session name, active time, automatic activity, prompt count, and most recent prompt time. `history` shows local human-active and agent-turn intervals for the current repository.
+`/project-time` shows the current project and active interval status. `summary` shows the top-level session name, active time, automatic activity, prompt count, and most recent prompt time. `history` shows local human-active and agent-turn intervals for the current repository, including each stored narrative beneath its compact activity label.
 
 Activity labels are generated for each top-level turn by OMP's configured title model. There is no manual activity command.
 

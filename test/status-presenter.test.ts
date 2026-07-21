@@ -49,3 +49,36 @@ test("presents automatic activity and OMP session name", () => {
     /project-time: 1m 0s/,
   )
 })
+
+test("shows stored narratives in recent history while keeping legacy entries readable", () => {
+  const config = {
+    activeWindowMinutes: 5,
+    refreshIntervalSeconds: 15,
+    label: "dev",
+  }
+  const state = { promptCount: 1, activeMilliseconds: 60_000 }
+  const entry = {
+    id: "entry",
+    sourceKind: "human_active" as const,
+    project: "project-time",
+    repositoryId: "repository-hash",
+    activity: "Code Review",
+    startAtMs: 0,
+    endAtMs: 60_000,
+    createdAtMs: 60_000,
+  }
+
+  const history = historyText("project-time", state, config, [
+    {
+      ...entry,
+      narrative: {
+        text: "Reviewing pull-request changes and test coverage.\nChecked the release artifact.",
+        source: "generated" as const,
+      },
+    },
+    { ...entry, id: "legacy-entry", activity: "Commit Message" },
+  ], [])
+
+  assert.match(history, /Code Review\n  Reviewing pull-request changes and test coverage\.\n  Checked the release artifact\./)
+  assert.match(history, /Commit Message/)
+})
