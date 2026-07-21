@@ -1,18 +1,23 @@
 import assert from "node:assert/strict"
+import { execFile } from "node:child_process"
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { promisify } from "node:util"
 
 import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js"
 import type { AutomaticTimeLogInput, TimeLogEntry } from "../src/time-log/domain/model.js"
 import { parseTimeLogEntry } from "../src/time-log/domain/parse-entry.js"
 import { createAutomaticTimeLogEntry } from "../src/time-log/domain/create-automatic-entry.js"
 import { recordAutomaticTimeLogEntry } from "../src/time-log/domain/record-automatic-entry.js"
+import { AutomaticTimeLogRecorder } from "../src/time-log/recorder.js"
 import { lock } from "../src/vendor/proper-lockfile.js"
 
 const minute = 60_000
 const start = Date.UTC(2026, 0, 1)
+
+const execFileAsync = promisify(execFile)
 
 type ExpectedEntry = {
   sourceKind: "human_active" | "agent_turn_elapsed"
@@ -116,6 +121,59 @@ test("rejects malformed remote identities in persisted entries", () => {
   }
 })
 
+test("reads legacy entries and typed activity narratives", () => {
+  const entry = {
+    id: "entry",
+    sourceKind: "human_active" as const,
+    project: "Project A",
+    repositoryId: "repository-a",
+    startAtMs: start,
+    endAtMs: start + minute,
+    createdAtMs: start,
+  }
+
+  assert.deepEqual(parseTimeLogEntry(entry), entry)
+  assert.deepEqual(
+    parseTimeLogEntry({
+      ...entry,
+      narrative: {
+        text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
+        source: "generated",
+      },
+    }),
+    {
+      ...entry,
+      narrative: {
+        text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
+        source: "generated",
+      },
+    },
+  )
+  assert.deepEqual(
+    parseTimeLogEntry({
+      ...entry,
+      narrative: {
+        text: "Prepared release notes for the activity report.",
+        source: "user_provided",
+      },
+    }),
+    {
+      ...entry,
+      narrative: {
+        text: "Prepared release notes for the activity report.",
+        source: "user_provided",
+      },
+    },
+  )
+  assert.equal(
+    parseTimeLogEntry({
+      ...entry,
+      narrative: { text: " ", source: "user_provided" },
+    }),
+    undefined,
+  )
+})
+
 test("limits automatic human intervals to the settled attention duration", () => {
   const entry = createAutomaticTimeLogEntry({
     nowMs: 6 * minute,
@@ -162,6 +220,10 @@ test("starts an activity-labelled human interval at its label change", () => {
     sessionId: "session-a",
     sourceStartedAtMs: 0,
     activity: "Code Review",
+    narrative: {
+      text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
+      source: "generated",
+    },
     activityStartedAtMs: 2 * minute,
     stateBeforeSettlement: {
       promptCount: 1,
@@ -184,6 +246,10 @@ test("starts an activity-labelled human interval at its label change", () => {
     repositoryId: "repository-a",
     sessionId: "session-a",
     activity: "Code Review",
+    narrative: {
+      text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
+      source: "generated",
+    },
     sourceKey: "session-a:repository-a:0:120000",
     startAtMs: 2 * minute,
     endAtMs: 4 * minute,
@@ -424,7 +490,7 @@ test("rejects incomplete automatic identities and non-positive intervals", async
   })
 })
 
-test("persists activity labels on agent evidence", async () => {
+test("persists activity narratives with their agent evidence intervals", async () => {
   await withLedger(async (ledger) => {
     await ledger.recordAutomatic({
       sourceKind: "agent_turn_elapsed",
@@ -432,12 +498,87 @@ test("persists activity labels on agent evidence", async () => {
       repositoryId: "repo-alpha",
       sourceKey: "agent-activity",
       activity: "Code Review",
+      narrative: {
+        text: "Review PR #84: verify detailed worklog narratives remain attached to their source intervals.",
+        source: "generated",
+      },
       startAtMs: start,
       endAtMs: start + minute,
     })
 
-    assert.equal((await ledger.entries())[0]?.activity, "Code Review")
+    const persisted = (await ledger.entries())[0]
+    assert.equal(persisted?.activity, "Code Review")
+    assert.deepEqual(persisted?.narrative, {
+      text: "Review PR #84: verify detailed worklog narratives remain attached to their source intervals.",
+      source: "generated",
+    })
+    assert.equal(persisted?.endAtMs - (persisted?.startAtMs ?? 0), minute)
   })
+})
+
+test("persists prompt narratives through the recorder", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "time-log-recorder-test-"))
+  const ledgerPath = path.join(directory, "ledger.json")
+  const narrative = {
+    text: "Review PR #84: capture detailed activity narratives and verify downstream interval-duration access.",
+    source: "generated" as const,
+  }
+
+  try {
+    await execFileAsync("git", ["init", "--quiet", directory])
+    await execFileAsync("git", [
+      "-C",
+      directory,
+      "remote",
+      "add",
+      "origin",
+      "git@github.com:acme/project-time.git",
+    ])
+
+    const recorder = new AutomaticTimeLogRecorder(ledgerPath)
+    recorder.recordPromptStart(
+      "session",
+      directory,
+      start,
+      "Code Review",
+      narrative,
+      () => {},
+    )
+    recorder.recordSettlement(
+      {
+        cwd: directory,
+        nowMs: start + minute,
+        sessionId: "session",
+        stateBeforeSettlement: {
+          promptCount: 1,
+          activeMilliseconds: 0,
+          activeStartAtMs: start,
+          activeUntilMs: start + 5 * minute,
+          activity: "Code Review",
+          narrative,
+          activityStartedAtMs: start,
+        },
+        settledState: {
+          promptCount: 1,
+          activeMilliseconds: minute,
+          activeStartAtMs: start,
+          activeUntilMs: start + 5 * minute,
+          lastSettledAtMs: start + minute,
+          activity: "Code Review",
+          narrative,
+          activityStartedAtMs: start,
+        },
+      },
+      () => {},
+    )
+    await recorder.flush("session", () => {})
+
+    const entry = (await recorder.entries())[0]
+    assert.deepEqual(entry?.narrative, narrative)
+    assert.equal(entry?.endAtMs - (entry?.startAtMs ?? 0), minute)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
 
 test("persists automatic intervals and their deduplication keys", async () => {

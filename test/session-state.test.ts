@@ -69,3 +69,19 @@ test("ignores invalid persisted state", () => {
   assert.equal(state.promptCount, 0)
   assert.equal(state.activeMilliseconds, 0)
 })
+
+test("rejects malformed persisted narratives", () => {
+  const state = loadPersistedProjectTimeState([
+    {
+      type: "custom",
+      customType: PROJECT_TIME_STATE_ENTRY,
+      data: {
+        promptCount: 7,
+        narrative: { text: " ", source: "generated" },
+      },
+    },
+  ])
+
+  assert.equal(state.promptCount, 0)
+  assert.equal(state.narrative, undefined)
+})

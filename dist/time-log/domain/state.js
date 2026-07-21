@@ -1,5 +1,6 @@
 import { MS_PER_MINUTE } from "../../utils/time-constants.js";
 import { parseActivityLabel } from "../../time-log/domain/activity.js";
+import { parseActivityNarrative } from "../../time-log/domain/narrative.js";
 import { parseOptionalNumber } from "../../utils/parse-optional-number.js";
 
 export function emptyProjectTimeState() {
@@ -20,6 +21,9 @@ export function parseProjectTimeState(value) {
   const activityStartedAtMs = parseOptionalNumber(
     candidate.activityStartedAtMs,
   );
+  const narrative = parseActivityNarrative(candidate.narrative);
+  if (candidate.narrative !== undefined && narrative === undefined)
+    return undefined;
   return {
     promptCount,
     activeMilliseconds,
@@ -29,6 +33,7 @@ export function parseProjectTimeState(value) {
     ...(lastPromptAtMs === undefined ? {} : { lastPromptAtMs }),
     ...(activity === undefined ? {} : { activity }),
     ...(activityStartedAtMs === undefined ? {} : { activityStartedAtMs }),
+    ...(narrative === undefined ? {} : { narrative }),
   };
 }
 
@@ -58,10 +63,12 @@ export function recordProjectTimePrompt(state, promptAtMs, config) {
   return nextState;
 }
 
-export function setProjectTimeActivity(state, activity, nowMs) {
+export function setProjectTimeActivity(state, activity, narrative, nowMs) {
   const nextState = { ...state };
   if (activity === undefined) delete nextState.activity;
   else nextState.activity = activity;
+  if (narrative === undefined) delete nextState.narrative;
+  else nextState.narrative = narrative;
   if (
     nextState.activeStartAtMs !== undefined &&
     nextState.activeUntilMs !== undefined

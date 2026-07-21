@@ -30,6 +30,9 @@ export function createAutomaticTimeLogEntry(options) {
       : { repositoryIdentity: options.repository.repositoryIdentity }),
     sessionId: options.sessionId,
     ...(options.activity === undefined ? {} : { activity: options.activity }),
+    ...(options.narrative === undefined
+      ? {}
+      : { narrative: options.narrative }),
     sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}`,
     startAtMs: entryStartAtMs,
     endAtMs: settledUntilMs,

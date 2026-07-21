@@ -16,6 +16,7 @@ test("shows concise reports and generates automatic activity labels", async () =
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-runtime-"))
   const notices: Array<{ message: string; type?: string }> = []
   const persistedActivities: unknown[] = []
+  const persistedNarratives: unknown[] = []
   const generatedPrompts: string[] = []
   const handlers: { beforeAgentStart?: BeforeAgentStartHandler } = {}
   let completionValues: string[] = []
@@ -33,10 +34,12 @@ test("shows concise reports and generates automatic activity labels", async () =
       }
     },
     appendEntry(_customType, data) {
-      if (data !== null && typeof data === "object" && "activity" in data) {
-        persistedActivities.push(data.activity)
+      if (data !== null && typeof data === "object") {
+        persistedActivities.push("activity" in data ? data.activity : undefined)
+        persistedNarratives.push("narrative" in data ? data.narrative : undefined)
       } else {
         persistedActivities.push(undefined)
+        persistedNarratives.push(undefined)
       }
     },
   }
@@ -61,10 +64,16 @@ test("shows concise reports and generates automatic activity labels", async () =
     new ProjectTimeRuntime(extensionApi, {
       generateActivity: async (prompt) => {
         generatedPrompts.push(prompt)
-        if (prompt === "initial failure") return undefined
-        if (prompt === "invalid output") return "Review #84"
+        if (prompt === "initial failure") return {}
+        if (prompt === "invalid output") return { activity: "Review #84" }
         if (prompt === "generator failure") throw new Error("unavailable")
-        return "Code Review"
+        return {
+          activity: "Code Review",
+          narrative: {
+            text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
+            source: "generated",
+          },
+        }
       },
       timeLogPath: path.join(directory, "time-log.json"),
     }).register()
@@ -89,9 +98,18 @@ test("shows concise reports and generates automatic activity labels", async () =
     assert.deepEqual(generatedPrompts, ["initial failure"])
     assert.equal(persistedActivities.at(-1), "General Work")
 
-    await handlers.beforeAgentStart({ prompt: "Review the pull request" }, context)
-    assert.deepEqual(generatedPrompts, ["initial failure", "Review the pull request"])
+    await handlers.beforeAgentStart({
+      prompt: "Review PR #84: Capture activity narratives for downstream worklogs, including typed persistence, legacy-log compatibility, and interval-duration access.",
+    }, context)
+    assert.deepEqual(generatedPrompts, [
+      "initial failure",
+      "Review PR #84: Capture activity narratives for downstream worklogs, including typed persistence, legacy-log compatibility, and interval-duration access.",
+    ])
     assert.equal(persistedActivities.at(-1), "Code Review")
+    assert.deepEqual(persistedNarratives.at(-1), {
+      text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
+      source: "generated",
+    })
     const persistedStateCount = persistedActivities.length
     await handlers.beforeAgentStart({ prompt: "same activity" }, context)
     assert.equal(persistedActivities.length, persistedStateCount + 1)

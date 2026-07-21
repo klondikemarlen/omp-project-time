@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { parseActivityLabel } from "@/time-log/domain/activity.js"
+import { parseActivityNarrative } from "@/time-log/domain/narrative.js"
 import { parseRepositoryIdentity } from "@/utils/parse-repository-identity.js"
 
 import type {
@@ -52,8 +53,12 @@ function createTimeLogEntry(
   const sourceKey = input.sourceKey.trim()
   const { startAtMs, endAtMs, sourceKind, sessionId } = input
   const activity = parseActivityLabel(input.activity)
+  const narrative = parseActivityNarrative(input.narrative)
   if (input.activity !== undefined && activity === undefined) {
     throw new Error("Time log activity label is invalid.")
+  }
+  if (input.narrative !== undefined && narrative === undefined) {
+    throw new Error("Time log narrative is invalid.")
   }
 
   if (input.repositoryIdentity !== undefined && repositoryIdentity === undefined) {
@@ -83,6 +88,7 @@ function createTimeLogEntry(
     ...(repositoryIdentity === undefined ? {} : { repositoryIdentity }),
     ...(sessionId === undefined ? {} : { sessionId }),
     ...(activity === undefined ? {} : { activity }),
+    ...(narrative === undefined ? {} : { narrative }),
     startAtMs,
     endAtMs,
     createdAtMs,

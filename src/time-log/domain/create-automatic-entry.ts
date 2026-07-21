@@ -1,4 +1,5 @@
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
+import type { ActivityNarrative } from "@/time-log/domain/narrative.js"
 import type { AutomaticTimeLogInput, Repository } from "@/time-log/domain/model.js"
 
 type AutomaticEntryOptions = {
@@ -7,6 +8,7 @@ type AutomaticEntryOptions = {
   sessionId: string
   sourceStartedAtMs: number
   activity?: string
+  narrative?: ActivityNarrative
   activityStartedAtMs?: number
   stateBeforeSettlement: ProjectTimeState
   settledState: ProjectTimeState
@@ -49,6 +51,7 @@ export function createAutomaticTimeLogEntry(
       : { repositoryIdentity: options.repository.repositoryIdentity }),
     sessionId: options.sessionId,
     ...(options.activity === undefined ? {} : { activity: options.activity }),
+    ...(options.narrative === undefined ? {} : { narrative: options.narrative }),
     sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}`,
     startAtMs: entryStartAtMs,
     endAtMs: settledUntilMs,

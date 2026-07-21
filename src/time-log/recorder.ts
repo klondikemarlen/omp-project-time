@@ -3,6 +3,7 @@ import { createAutomaticTimeLogEntry } from "@/time-log/domain/create-automatic-
 import { TimeLogLedger } from "@/time-log/infrastructure/ledger.js"
 import type { AutomaticTimeLogInput, TimeLogEntry } from "@/time-log/domain/model.js"
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
+import type { ActivityNarrative } from "@/time-log/domain/narrative.js"
 import {
   resolveGitRepository,
   type GitRepository,
@@ -18,6 +19,7 @@ type Settlement = {
 
 type AgentTurn = {
   activity?: string
+  narrative?: ActivityNarrative
   endAtMs: number
   sessionId: string
   startAtMs: number
@@ -43,6 +45,7 @@ export class AutomaticTimeLogRecorder {
     cwd: string,
     promptAtMs: number,
     activityLabel: string | undefined,
+    narrative: ActivityNarrative | undefined,
     notifyError: ErrorNotifier,
   ): void {
     const repository = this.repositoryFor(cwd)
@@ -60,7 +63,7 @@ export class AutomaticTimeLogRecorder {
       )
     }
 
-    activity.setPromptStart(repository, promptAtMs, activityLabel)
+    activity.setPromptStart(repository, promptAtMs, activityLabel, narrative)
   }
 
   recordSettlement(
@@ -101,6 +104,7 @@ export class AutomaticTimeLogRecorder {
     sessionId: string,
     atMs: number,
     activityLabel: string | undefined,
+    narrative: ActivityNarrative | undefined,
     notifyError: ErrorNotifier,
   ): void {
     const activity = this.sessionActivities.get(sessionId)
@@ -119,6 +123,7 @@ export class AutomaticTimeLogRecorder {
     }
 
     activity.activity = activityLabel
+    activity.narrative = narrative
   }
 
   async flush(sessionId: string, notifyError: ErrorNotifier): Promise<void> {
@@ -148,6 +153,7 @@ export class AutomaticTimeLogRecorder {
     const startAtMs = activity.agentTurnStartAtMs
     const agentRepository = activity.agentRepository
     const agentActivity = activity.activity
+    const agentNarrative = activity.narrative
     if (startAtMs === undefined) return
 
     activity.agentTurnStartAtMs = undefined
@@ -159,6 +165,7 @@ export class AutomaticTimeLogRecorder {
         startAtMs,
         repository: agentRepository,
         activity: agentActivity,
+        narrative: agentNarrative,
       }),
       (entry) => this.ledger.recordAutomatic(entry),
       () => {
@@ -191,6 +198,7 @@ export class AutomaticTimeLogRecorder {
       sessionId: settlement.sessionId,
       sourceStartedAtMs,
       activity: stateBeforeSettlement.activity,
+      narrative: stateBeforeSettlement.narrative,
       activityStartedAtMs: stateBeforeSettlement.activityStartedAtMs,
       stateBeforeSettlement,
       settledState: settlement.settledState,
@@ -217,6 +225,7 @@ export class AutomaticTimeLogRecorder {
         : { repositoryIdentity: repository.repositoryIdentity }),
       sessionId: turn.sessionId,
       ...(turn.activity === undefined ? {} : { activity: turn.activity }),
+      ...(turn.narrative === undefined ? {} : { narrative: turn.narrative }),
       sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent`,
       startAtMs: turn.startAtMs,
       endAtMs: turn.endAtMs,
@@ -277,17 +286,20 @@ class SessionActivity {
   agentTurnStartAtMs?: number
   agentRepository?: Promise<GitRepository | undefined>
   activity?: string
+  narrative?: ActivityNarrative
 
   setPromptStart(
     repository: Promise<GitRepository | undefined>,
     startedAtMs: number,
     activity: string | undefined,
+    narrative: ActivityNarrative | undefined,
   ): void {
     this.repository = repository
     this.agentRepository = repository
     this.startedAtMs = startedAtMs
     this.agentTurnStartAtMs = startedAtMs
     this.activity = activity
+    this.narrative = narrative
   }
 
   enqueue(

@@ -1,4 +1,6 @@
 import type { generateSessionTitle } from "@oh-my-pi/pi-coding-agent/utils/title-generator"
+import type { ActivityNarrative } from "@/time-log/domain/narrative.js"
+
 
 import type { ProjectTimeConfig } from "@/config/project-time-config.js"
 
@@ -81,13 +83,17 @@ export type ExtensionApi = {
 
 export type ConfigLoader = (cwd: string) => Promise<ProjectTimeConfig>
 
-export type ActivityLabelGenerator = (
+export type GeneratedActivity = {
+  activity?: string
+  narrative?: ActivityNarrative
+}
+
+export type ActivityGenerator = (
   prompt: string,
   ctx: ExtensionContext,
-) => Promise<unknown>
-
+) => Promise<GeneratedActivity>
 export type ExtensionOptions = {
-  generateActivity?: ActivityLabelGenerator
+  generateActivity?: ActivityGenerator
   loadConfig?: ConfigLoader
   prepareLocalData?: () => Promise<void>
   timeLogPath?: string

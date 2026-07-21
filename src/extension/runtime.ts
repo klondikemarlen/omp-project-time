@@ -14,6 +14,7 @@ import {
 import { SessionStateCoordinator } from "@/extension/application/session-state-coordinator.js"
 import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js"
 import { parseGeneratedActivityLabel } from "@/time-log/domain/activity.js"
+import { parseActivityNarrative } from "@/time-log/domain/narrative.js"
 import { buildReport, type AllocationMode } from "@/time-log/domain/report.js"
 import type { SourceKind } from "@/time-log/domain/model.js"
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
@@ -26,7 +27,8 @@ import {
   updateStatus,
 } from "@/extension/status-presenter.js"
 import type {
-  ActivityLabelGenerator,
+  ActivityGenerator,
+  GeneratedActivity,
   ConfigLoader,
   ExtensionApi,
   ExtensionContext,
@@ -74,7 +76,7 @@ function projectTimeArgumentCompletions(argumentPrefix: string) {
 export class ProjectTimeRuntime {
   private readonly pi: ExtensionApi
   private readonly loadConfig: ConfigLoader
-  private readonly generateActivity: ActivityLabelGenerator
+  private readonly generateActivity: ActivityGenerator
   private readonly sessionStateCoordinator: SessionStateCoordinator
   private readonly timeLogRecorder: AutomaticTimeLogRecorder
   private readonly usesDefaultDataRoot: boolean
@@ -93,7 +95,7 @@ export class ProjectTimeRuntime {
     this.pi = pi
     this.loadConfig = options.loadConfig ?? loadProjectTimeConfig
     const dataRoot = defaultProjectTimeDataRoot()
-    this.generateActivity = options.generateActivity ?? (async () => undefined)
+    this.generateActivity = options.generateActivity ?? (async () => ({}))
     this.usesDefaultDataRoot =
       options.prepareLocalData !== undefined || options.timeLogPath === undefined
     this.timeLogRecorder = new AutomaticTimeLogRecorder(
@@ -358,17 +360,22 @@ export class ProjectTimeRuntime {
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     }
     const generatedActivity = await this.generateActivity(prompt, ctx).catch(
-      () => undefined,
+      (): GeneratedActivity => ({}),
     )
-    const currentActivity = this.sessionStateCoordinator
-      .stateFor(update.sessionId, update.entries)
-      .activity
+    const currentState = this.sessionStateCoordinator.stateFor(
+      update.sessionId,
+      update.entries,
+    )
     const activity =
-      parseGeneratedActivityLabel(generatedActivity)
-      ?? currentActivity
+      parseGeneratedActivityLabel(generatedActivity.activity)
+      ?? currentState.activity
       ?? "General Work"
-    if (currentActivity !== activity) {
-      await this.sessionStateCoordinator.setActivity(update, activity)
+    const narrative = parseActivityNarrative(generatedActivity.narrative)
+    const narrativeChanged =
+      currentState.narrative?.text !== narrative?.text
+      || currentState.narrative?.source !== narrative?.source
+    if (currentState.activity !== activity || narrativeChanged) {
+      await this.sessionStateCoordinator.setActivity(update, activity, narrative)
     }
     const nextState = await this.sessionStateCoordinator.recordPrompt(update)
     updateStatus(ctx, nextState, config)

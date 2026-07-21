@@ -1,5 +1,6 @@
 import { MS_PER_MINUTE } from "@/utils/time-constants.js"
 import { parseActivityLabel } from "@/time-log/domain/activity.js"
+import { parseActivityNarrative, type ActivityNarrative } from "@/time-log/domain/narrative.js"
 import { parseOptionalNumber } from "@/utils/parse-optional-number.js"
 
 export type ProjectTimeState = {
@@ -11,6 +12,7 @@ export type ProjectTimeState = {
   lastPromptAtMs?: number
   activity?: string
   activityStartedAtMs?: number
+  narrative?: ActivityNarrative
 }
 
 export function emptyProjectTimeState(): ProjectTimeState {
@@ -31,6 +33,8 @@ export function parseProjectTimeState(
   const lastPromptAtMs = parseOptionalNumber(candidate.lastPromptAtMs)
   const activity = parseActivityLabel(candidate.activity)
   const activityStartedAtMs = parseOptionalNumber(candidate.activityStartedAtMs)
+  const narrative = parseActivityNarrative(candidate.narrative)
+  if (candidate.narrative !== undefined && narrative === undefined) return undefined
 
   return {
     promptCount,
@@ -41,6 +45,7 @@ export function parseProjectTimeState(
     ...(lastPromptAtMs === undefined ? {} : { lastPromptAtMs }),
     ...(activity === undefined ? {} : { activity }),
     ...(activityStartedAtMs === undefined ? {} : { activityStartedAtMs }),
+    ...(narrative === undefined ? {} : { narrative }),
   }
 }
 
@@ -79,13 +84,15 @@ export function recordProjectTimePrompt(
 export function setProjectTimeActivity(
   state: ProjectTimeState,
   activity: string | undefined,
+  narrative: ActivityNarrative | undefined,
   nowMs: number,
 ): ProjectTimeState {
   const nextState = { ...state }
 
   if (activity === undefined) delete nextState.activity
   else nextState.activity = activity
-
+  if (narrative === undefined) delete nextState.narrative
+  else nextState.narrative = narrative
   if (nextState.activeStartAtMs !== undefined && nextState.activeUntilMs !== undefined) {
     nextState.activityStartedAtMs = nowMs
   } else {
