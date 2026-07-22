@@ -16,7 +16,12 @@ import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js"
 import { parseGeneratedActivityLabel } from "@/time-log/domain/activity.js"
 import { parseActivityNarrative } from "@/time-log/domain/narrative.js"
 import { extractWorkItem } from "@/time-log/domain/work-item.js"
-import { buildReport, type AllocationMode } from "@/time-log/domain/report.js"
+import {
+  buildHumanActiveCoverage,
+  buildReport,
+  type AllocationMode,
+  type CoverageRange,
+} from "@/time-log/domain/report.js"
 import type { SourceKind } from "@/time-log/domain/model.js"
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
 import {
@@ -51,6 +56,9 @@ type ReportArgs = {
   mode: AllocationMode | "all"
   json: boolean
   weights?: Record<string, number>
+  coverage: boolean
+  coverageDate?: string
+  coverageRange?: CoverageRange
 }
 
 const PROJECT_TIME_COMMANDS = [
@@ -323,6 +331,26 @@ export class ProjectTimeRuntime {
       const reportArgs = parseReportArgs(tokens)
       const entries = await this.timeLogRecorder.entries()
 
+      if (reportArgs.coverage) {
+        ctx.ui.notify(
+          JSON.stringify(
+            {
+              humanActiveCoverage: {
+                localDate: reportArgs.coverageDate,
+                projects: buildHumanActiveCoverage(
+                  entries,
+                  project,
+                  reportArgs.coverageRange,
+                ),
+              },
+            },
+            null,
+            2,
+          ),
+          "info",
+        )
+        return
+      }
       if (reportArgs.mode === "all") {
         const modes: AllocationMode[] = ["raw", "split", "weighted"]
         const human: Record<string, unknown> = {}
@@ -742,6 +770,21 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
     rest.shift()
   }
 
+  const coverage = rest[0] === "coverage"
+  if (coverage) rest.shift()
+
+  let coverageDate: string | undefined
+  let coverageRange: CoverageRange | undefined
+  if (coverage) {
+    if (rest[0] !== "--date" || rest[1] === undefined) {
+      throw new Error("Use --date YYYY-MM-DD with report json coverage.")
+    }
+
+    coverageDate = rest[1]
+    coverageRange = parseLocalDateRange(coverageDate)
+    rest.splice(0, 2)
+  }
+
   const modeToken = rest[0]
   let mode: AllocationMode | "all" = json ? "all" : "raw"
   if (
@@ -754,6 +797,18 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
     rest.shift()
   } else if (modeToken !== undefined) {
     throw new Error(`Unknown report mode: ${modeToken}`)
+  }
+
+  if (coverage && !json) {
+    throw new Error("Use report json coverage for a coverage report.")
+  }
+
+  if (coverage && sourceWasSpecified) {
+    throw new Error("Coverage reports use human_active evidence.")
+  }
+
+  if (coverage && mode !== "all") {
+    throw new Error("Coverage reports do not accept an allocation mode.")
   }
 
   if (mode === "all" && !json) {
@@ -788,5 +843,27 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
     throw new Error("Only weighted reports accept repository weights.")
   }
 
-  return { sourceKind, mode, json, weights }
+  return { sourceKind, mode, json, coverage, coverageDate, coverageRange, weights }
+}
+
+function parseLocalDateRange(value: string): CoverageRange {
+  const match = /^(?<year>[1-9]\d{3})-(?<month>\d{2})-(?<day>\d{2})$/.exec(value)
+  if (match?.groups === undefined) {
+    throw new Error("Coverage dates use YYYY-MM-DD.")
+  }
+
+  const year = Number(match.groups.year)
+  const month = Number(match.groups.month)
+  const day = Number(match.groups.day)
+  const start = new Date(year, month - 1, day)
+  if (
+    start.getFullYear() !== year
+    || start.getMonth() !== month - 1
+    || start.getDate() !== day
+  ) {
+    throw new Error("Coverage dates must be calendar dates.")
+  }
+
+  const end = new Date(year, month - 1, day + 1)
+  return { startAtMs: start.getTime(), endAtMs: end.getTime() }
 }

@@ -17,6 +17,92 @@ export type Report = {
   entries: ReportEntry[]
 }
 
+export type CoverageRange = {
+  startAtMs: number
+  endAtMs: number
+}
+
+export type HumanActiveCoverage = {
+  sourceKind: "human_active"
+  project: string
+  rawTotalMs: number
+  unionTotalMs: number
+  concurrentOverlapMs: number
+  span: { startAtMs: number; endAtMs: number } | null
+  inactiveGaps: {
+    totalMs: number
+    intervals: Array<{ startAtMs: number; endAtMs: number }>
+  }
+}
+
+export function buildHumanActiveCoverage(
+  entries: readonly TimeLogEntry[],
+  project?: string,
+  range?: CoverageRange,
+): HumanActiveCoverage[] {
+  const entriesByProject = new Map<string, TimeLogEntry[]>()
+
+  for (const entry of entries) {
+    if (
+      entry.sourceKind !== "human_active"
+      || (project !== undefined && entry.project !== project)
+    ) continue
+
+    const startAtMs = range === undefined
+      ? entry.startAtMs
+      : Math.max(entry.startAtMs, range.startAtMs)
+    const endAtMs = range === undefined
+      ? entry.endAtMs
+      : Math.min(entry.endAtMs, range.endAtMs)
+    if (endAtMs <= startAtMs) continue
+
+    const projectEntries = entriesByProject.get(entry.project) ?? []
+    projectEntries.push(
+      range === undefined ? entry : { ...entry, startAtMs, endAtMs },
+    )
+    entriesByProject.set(entry.project, projectEntries)
+  }
+
+  return [...entriesByProject.entries()]
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([project, projectEntries]) => {
+      const intervals = mergedIntervals(projectEntries)
+      const inactiveGaps = intervals.slice(1).map((interval, index) => ({
+        startAtMs: intervals[index]!.endAtMs,
+        endAtMs: interval.startAtMs,
+      }))
+      const unionTotalMs = intervals.reduce(
+        (total, interval) => total + interval.endAtMs - interval.startAtMs,
+        0,
+      )
+      const rawTotalMs = projectEntries.reduce(
+        (total, entry) => total + entry.endAtMs - entry.startAtMs,
+        0,
+      )
+
+      return {
+        sourceKind: "human_active",
+        project,
+        rawTotalMs,
+        unionTotalMs,
+        concurrentOverlapMs: rawTotalMs - unionTotalMs,
+        span: intervals.length === 0
+          ? null
+          : {
+              startAtMs: intervals[0]!.startAtMs,
+              endAtMs: intervals.at(-1)!.endAtMs,
+            },
+        inactiveGaps: {
+          totalMs: inactiveGaps.reduce(
+            (total, interval) => total + interval.endAtMs - interval.startAtMs,
+            0,
+          ),
+          intervals: inactiveGaps,
+        },
+      }
+    })
+}
+
 export function buildReport(
   entries: readonly TimeLogEntry[],
   sourceKind: SourceKind,
@@ -181,36 +267,31 @@ function segmentEntries(
   return segments
 }
 
+function mergedIntervals(
+  entries: readonly TimeLogEntry[],
+): Array<{ startAtMs: number; endAtMs: number }> {
+  const intervals = [...entries]
+    .sort((left, right) => left.startAtMs - right.startAtMs)
+    .map(({ startAtMs, endAtMs }) => ({ startAtMs, endAtMs }))
+  const merged: Array<{ startAtMs: number; endAtMs: number }> = []
+
+  for (const interval of intervals) {
+    const previous = merged.at(-1)
+    if (previous === undefined || interval.startAtMs > previous.endAtMs) {
+      merged.push(interval)
+    } else {
+      previous.endAtMs = Math.max(previous.endAtMs, interval.endAtMs)
+    }
+  }
+
+  return merged
+}
+
 function unionMilliseconds(entries: readonly TimeLogEntry[]): number {
-  const intervals = [...entries].sort(
-    (left, right) => left.startAtMs - right.startAtMs,
+  return mergedIntervals(entries).reduce(
+    (total, interval) => total + interval.endAtMs - interval.startAtMs,
+    0,
   )
-  let totalMilliseconds = 0
-  let currentStartAtMs: number | undefined
-  let currentEndAtMs: number | undefined
-
-  for (const entry of intervals) {
-    if (currentStartAtMs === undefined || currentEndAtMs === undefined) {
-      currentStartAtMs = entry.startAtMs
-      currentEndAtMs = entry.endAtMs
-      continue
-    }
-
-    if (entry.startAtMs > currentEndAtMs) {
-      totalMilliseconds += currentEndAtMs - currentStartAtMs
-      currentStartAtMs = entry.startAtMs
-      currentEndAtMs = entry.endAtMs
-      continue
-    }
-
-    currentEndAtMs = Math.max(currentEndAtMs, entry.endAtMs)
-  }
-
-  if (currentStartAtMs !== undefined && currentEndAtMs !== undefined) {
-    totalMilliseconds += currentEndAtMs - currentStartAtMs
-  }
-
-  return totalMilliseconds
 }
 
 

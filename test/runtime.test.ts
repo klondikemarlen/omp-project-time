@@ -20,6 +20,8 @@ test("shows concise reports and generates automatic activity labels", async () =
   const persistedNarratives: unknown[] = []
   const persistedWorkItems: unknown[] = []
   const generatedPrompts: string[] = []
+  const coverageDate = "2026-01-01"
+  const coverageStart = new Date(2026, 0, 1).getTime()
   const handlers: { beforeAgentStart?: BeforeAgentStartHandler } = {}
   let completionValues: string[] = []
   let argumentCompletions:
@@ -131,9 +133,9 @@ test("shows concise reports and generates automatic activity labels", async () =
             project: "wrap",
             repositoryId: "wrap-repository",
             activity: "Code Review",
-            startAtMs: 0,
-            endAtMs: 60_000,
-            createdAtMs: 60_000,
+            startAtMs: coverageStart,
+            endAtMs: coverageStart + 60_000,
+            createdAtMs: coverageStart + 60_000,
           },
           {
             id: "wrap-agent",
@@ -141,9 +143,9 @@ test("shows concise reports and generates automatic activity labels", async () =
             project: "wrap",
             repositoryId: "wrap-repository",
             activity: "Tests",
-            startAtMs: 60_000,
-            endAtMs: 120_000,
-            createdAtMs: 120_000,
+            startAtMs: coverageStart + 60_000,
+            endAtMs: coverageStart + 120_000,
+            createdAtMs: coverageStart + 120_000,
           },
           {
             id: "other-human",
@@ -151,9 +153,9 @@ test("shows concise reports and generates automatic activity labels", async () =
             project: "other",
             repositoryId: "other-repository",
             activity: "Unrelated Work",
-            startAtMs: 0,
-            endAtMs: 180_000,
-            createdAtMs: 180_000,
+            startAtMs: coverageStart,
+            endAtMs: coverageStart + 180_000,
+            createdAtMs: coverageStart + 180_000,
           },
         ],
       }),
@@ -199,6 +201,27 @@ test("shows concise reports and generates automatic activity labels", async () =
       ),
       ["wrap"],
     )
+
+    await handler(`report json coverage --date ${coverageDate} --project wrap`, context)
+    assert.deepEqual(JSON.parse(notices.at(-1)?.message ?? ""), {
+      humanActiveCoverage: {
+        localDate: coverageDate,
+        projects: [
+          {
+            sourceKind: "human_active",
+            project: "wrap",
+            rawTotalMs: 60_000,
+            unionTotalMs: 60_000,
+            concurrentOverlapMs: 0,
+            span: { startAtMs: coverageStart, endAtMs: coverageStart + 60_000 },
+            inactiveGaps: { totalMs: 0, intervals: [] },
+          },
+        ],
+      },
+    })
+
+    await handler(`report json agent coverage --date ${coverageDate} --project wrap`, context)
+    assert.match(notices.at(-1)?.message ?? "", /Coverage reports use human_active evidence/)
 
     await handler("report --project wrap --project other", context)
     assert.match(notices.at(-1)?.message ?? "", /Use --project NAME once at the end/)

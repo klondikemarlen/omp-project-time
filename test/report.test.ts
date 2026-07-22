@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { buildReport } from "../src/time-log/domain/report.js"
+import { buildHumanActiveCoverage, buildReport } from "../src/time-log/domain/report.js"
 import type { TimeLogEntry } from "../src/time-log/domain/model.js"
 
 const minute = 60_000
@@ -186,6 +186,67 @@ test("agent reports are separate from human reports", () => {
   assert.equal(human.entries[0].durationMs, 3 * minute)
   assert.equal(agent.entries.length, 1)
   assert.equal(agent.entries[0].durationMs, 5 * minute)
+})
+
+test("human-active coverage clips local-date intervals and reports overlap and gaps", () => {
+  const entries = [
+    entry({
+      sourceKind: "human_active",
+      repositoryId: "repo-wrap",
+      project: "wrap",
+      startAtMs: start,
+      endAtMs: start + 5 * minute,
+    }),
+    entry({
+      sourceKind: "human_active",
+      repositoryId: "repo-wrap",
+      project: "wrap",
+      startAtMs: start + 2 * minute,
+      endAtMs: start + 7 * minute,
+    }),
+    entry({
+      sourceKind: "human_active",
+      repositoryId: "repo-wrap",
+      project: "wrap",
+      startAtMs: start + 10 * minute,
+      endAtMs: start + 12 * minute,
+    }),
+    entry({
+      sourceKind: "human_active",
+      repositoryId: "repo-other",
+      project: "other",
+      startAtMs: start,
+      endAtMs: start + 20 * minute,
+    }),
+    entry({
+      sourceKind: "agent_turn_elapsed",
+      repositoryId: "repo-wrap",
+      project: "wrap",
+      startAtMs: start,
+      endAtMs: start + 20 * minute,
+    }),
+  ]
+
+  assert.deepEqual(
+    buildHumanActiveCoverage(entries, "wrap", {
+      startAtMs: start + minute,
+      endAtMs: start + 11 * minute,
+    }),
+    [
+      {
+        sourceKind: "human_active",
+        project: "wrap",
+        rawTotalMs: 10 * minute,
+        unionTotalMs: 7 * minute,
+        concurrentOverlapMs: 3 * minute,
+        span: { startAtMs: start + minute, endAtMs: start + 11 * minute },
+        inactiveGaps: {
+          totalMs: 3 * minute,
+          intervals: [{ startAtMs: start + 7 * minute, endAtMs: start + 10 * minute }],
+        },
+      },
+    ],
+  )
 })
 
 test("weighted reports reject non-positive weights", () => {

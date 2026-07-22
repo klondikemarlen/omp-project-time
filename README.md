@@ -63,7 +63,6 @@ omp plugin install /absolute/path/to/omp-project-time
 
 OMP symlinks local installs and watches them for changes. Restart OMP or run `/reload-plugins`, then run `/project-time` to confirm the extension loaded.
 
-
 ## Commands
 
 ```text
@@ -76,6 +75,7 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 /project-time report human weighted '{"<repository-id>": 2}'
 /project-time report json
 /project-time report json human raw
+/project-time report json coverage --date 2026-07-21 --project wrap
 /project-time --project wrap
 /project-time summary --project wrap
 /project-time history --project wrap
@@ -95,6 +95,8 @@ Activity labels are generated for each top-level turn by OMP's configured title 
 - `weighted`: divides overlap by the supplied positive per-repository weights; omitted repositories have weight `1`.
 
 Every report contains `ompActiveUnionMs`, the union of its source-kind intervals. It is an OMP-active reference, not literal desk time. `agent` selects `agent_turn_elapsed`; otherwise reports use `human_active`. The two sources are never combined.
+
+`report json coverage --date YYYY-MM-DD` emits per-project `human_active` diagnostics for the local calendar day. Each project contains `rawTotalMs`, non-overlapping `unionTotalMs`, `concurrentOverlapMs`, its `span`, and `inactiveGaps` with total and interval bounds. Entries crossing local midnight are clipped to the requested date. Add the exact persisted `--project NAME` selector to return one project. Coverage excludes `agent_turn_elapsed`.
 
 ## Local data
 
