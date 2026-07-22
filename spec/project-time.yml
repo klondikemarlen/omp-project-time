@@ -21,6 +21,10 @@ requirements:
     title: OMP-active union reference
     requirement: Report the union of source-kind intervals as ompActiveUnionMs and never present it as literal desk presence.
     rationale: OMP can verify its own activity windows, not work outside OMP.
+  - id: human_active_coverage
+    title: Per-project human-active coverage
+    requirement: "`report json coverage --date YYYY-MM-DD` must emit local-day, per-project human-active raw total, interval union, concurrent overlap, span, and inactive gap totals and bounds. It clips intervals to the requested local calendar day, accepts the final exact `--project NAME` selector, and excludes agent_turn_elapsed evidence."
+    rationale: Downstream reconciliation needs transparent interval coverage without reimplementing the local ledger analysis or silently combining evidence sources.
   - id: top_level_only
     title: Top-level sessions only
     requirement: Subagent and artifact sessions must not create or display their own Project Time intervals.
