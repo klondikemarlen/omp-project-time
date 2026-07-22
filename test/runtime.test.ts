@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -7,6 +7,7 @@ import test from "node:test"
 import { ProjectTimeRuntime } from "../src/extension/runtime.js"
 import type {
   BeforeAgentStartHandler,
+  CommandCompletion,
   CommandHandler,
   ExtensionApi,
   ExtensionContext,
@@ -21,11 +22,15 @@ test("shows concise reports and generates automatic activity labels", async () =
   const generatedPrompts: string[] = []
   const handlers: { beforeAgentStart?: BeforeAgentStartHandler } = {}
   let completionValues: string[] = []
+  let argumentCompletions:
+    | ((argumentPrefix: string) => CommandCompletion[] | null)
+    | undefined
   let handler: CommandHandler | undefined
   const extensionApi: ExtensionApi = {
     registerCommand(_name, options) {
       handler = options.handler
-      completionValues = (options.getArgumentCompletions?.("") ?? []).map(({ value }) => value)
+      argumentCompletions = options.getArgumentCompletions
+      completionValues = (argumentCompletions?.("") ?? []).map(({ value }) => value)
     },
     on(event, listener) {
       if (event === "before_agent_start") {
@@ -80,7 +85,7 @@ test("shows concise reports and generates automatic activity labels", async () =
       },
       timeLogPath: path.join(directory, "time-log.json"),
     }).register()
-    assert.deepEqual(completionValues, ["summary", "history", "report"])
+    assert.deepEqual(completionValues, ["summary", "history", "report", "--project"])
     assert.ok(handler)
     assert.ok(handlers.beforeAgentStart)
 
@@ -96,6 +101,88 @@ test("shows concise reports and generates automatic activity labels", async () =
 
     await handler("report all", context)
     assert.match(notices.at(-1)?.message ?? "", /Use report json for an all-modes report/)
+
+    await writeFile(
+      path.join(directory, "time-log.json"),
+      JSON.stringify({
+        entries: [
+          {
+            id: "wrap-human",
+            sourceKind: "human_active",
+            project: "wrap",
+            repositoryId: "wrap-repository",
+            activity: "Code Review",
+            startAtMs: 0,
+            endAtMs: 60_000,
+            createdAtMs: 60_000,
+          },
+          {
+            id: "wrap-agent",
+            sourceKind: "agent_turn_elapsed",
+            project: "wrap",
+            repositoryId: "wrap-repository",
+            activity: "Tests",
+            startAtMs: 60_000,
+            endAtMs: 120_000,
+            createdAtMs: 120_000,
+          },
+          {
+            id: "other-human",
+            sourceKind: "human_active",
+            project: "other",
+            repositoryId: "other-repository",
+            activity: "Unrelated Work",
+            startAtMs: 0,
+            endAtMs: 180_000,
+            createdAtMs: 180_000,
+          },
+        ],
+      }),
+    )
+
+    assert.equal(argumentCompletions?.("history --project"), null)
+
+    assert.deepEqual(
+      argumentCompletions?.("history --project w")?.map(({ value }) => value),
+      ["history --project wrap"],
+    )
+
+    await handler("--project wrap", context)
+    assert.match(notices.at(-1)?.message ?? "", /Project: wrap · Ledger view/)
+    assert.doesNotMatch(notices.at(-1)?.message ?? "", /Unrelated Work/)
+
+    await handler("summary --project wrap", context)
+    assert.match(notices.at(-1)?.message ?? "", /Project: wrap · Ledger summary/)
+    assert.match(notices.at(-1)?.message ?? "", /Human active: 1m 0s/)
+
+    await handler("history --project wrap", context)
+    assert.match(notices.at(-1)?.message ?? "", /Current active: unavailable outside the active session/)
+    assert.match(notices.at(-1)?.message ?? "", /Recent human active:\n- .*Code Review/)
+    assert.doesNotMatch(notices.at(-1)?.message ?? "", /Unrelated Work/)
+
+    await handler("report human raw --project wrap", context)
+    assert.match(notices.at(-1)?.message ?? "", /- wrap: 1m 0s/)
+    assert.doesNotMatch(notices.at(-1)?.message ?? "", /other/)
+
+    await handler("report human split --project wrap", context)
+    assert.match(notices.at(-1)?.message ?? "", /- wrap: 30s/)
+
+    await handler(
+      "report human weighted '{\"wrap-repository\": 3}' --project wrap",
+      context,
+    )
+    assert.match(notices.at(-1)?.message ?? "", /- wrap: 45s/)
+
+    await handler("report json --project wrap", context)
+    assert.deepEqual(
+      JSON.parse(notices.at(-1)?.message ?? "").human.raw.entries.map(
+        (entry: { project: string }) => entry.project,
+      ),
+      ["wrap"],
+    )
+
+    await handler("report --project wrap --project other", context)
+    assert.match(notices.at(-1)?.message ?? "", /Use --project NAME once at the end/)
 
     await handlers.beforeAgentStart({ prompt: "initial failure" }, context)
     assert.deepEqual(generatedPrompts, ["initial failure"])

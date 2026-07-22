@@ -22,19 +22,23 @@ export function buildReport(
   sourceKind: SourceKind,
   mode: AllocationMode,
   weights?: Readonly<Record<string, number>>,
+  project?: string,
 ): Report {
-  const filtered = entries.filter((entry) => entry.sourceKind === sourceKind)
+  const sourceEntries = entries.filter((entry) => entry.sourceKind === sourceKind)
+  const scopedEntries = project === undefined
+    ? sourceEntries
+    : sourceEntries.filter((entry) => entry.project === project)
 
   if (mode === "raw") {
     return {
       sourceKind,
       mode,
-      ompActiveUnionMs: unionMilliseconds(filtered),
-      entries: repositoryEntries(filtered, sourceKind, mode),
+      ompActiveUnionMs: unionMilliseconds(scopedEntries),
+      entries: repositoryEntries(scopedEntries, sourceKind, mode),
     }
   }
 
-  return splitWeightedReport(filtered, sourceKind, mode, weights)
+  return splitWeightedReport(sourceEntries, sourceKind, mode, weights, project)
 }
 
 function repositoryEntries(
@@ -70,6 +74,7 @@ function splitWeightedReport(
   sourceKind: SourceKind,
   mode: AllocationMode,
   weights?: Readonly<Record<string, number>>,
+  project?: string,
 ): Report {
   if (
     mode === "weighted"
@@ -78,16 +83,17 @@ function splitWeightedReport(
     throw new Error("Report weights must be positive finite numbers.")
   }
 
+  const scopedEntries = project === undefined
+    ? entries
+    : entries.filter((entry) => entry.project === project)
   const segments = segmentEntries(entries)
   const splitTotals = new Map<string, ReportEntry>()
   const weightedTotals = new Map<string, ReportEntry>()
-  let ompActiveUnionMs = 0
 
   for (const segment of segments) {
     const duration = segment.endAtMs - segment.startAtMs
     if (duration <= 0) continue
 
-    ompActiveUnionMs += duration
 
     const active = segment.entries
     if (active.length === 0) continue
@@ -99,6 +105,7 @@ function splitWeightedReport(
     )
 
     for (const entry of active) {
+      if (project !== undefined && entry.project !== project) continue
       const key = entry.repositoryId
       const weight = weights?.[entry.repositoryId] ?? 1
       const weightedShare =
@@ -126,7 +133,7 @@ function splitWeightedReport(
   return {
     sourceKind,
     mode,
-    ompActiveUnionMs,
+    ompActiveUnionMs: unionMilliseconds(scopedEntries),
     entries: [...totals.values()],
   }
 }

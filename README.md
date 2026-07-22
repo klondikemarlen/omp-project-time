@@ -76,9 +76,15 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 /project-time report human weighted '{"<repository-id>": 2}'
 /project-time report json
 /project-time report json human raw
+/project-time --project wrap
+/project-time summary --project wrap
+/project-time history --project wrap
+/project-time report human split --project wrap
 ```
 
 `/project-time` shows the current project and active interval status. `summary` shows the top-level session name, active time, automatic activity, prompt count, and most recent prompt time. `history` shows local human-active and agent-turn intervals for the current repository, including each stored narrative beneath its compact activity label.
+
+Append `--project NAME` to any view to select the exact persisted Project Time project label from the local ledger, for example `--project wrap`. The selected dashboard and summary are explicitly ledger views because another project's live session state is unavailable. Targeted history also labels current activity as unavailable rather than attributing this session to the selected project. Reports preserve full-ledger concurrent allocation before returning only the selected project. Type `--project ` to complete stored project labels.
 
 Activity labels are generated for each top-level turn by OMP's configured title model. There is no manual activity command.
 

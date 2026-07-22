@@ -23,6 +23,8 @@ import {
   clearStatus,
   dashboardText,
   historyText,
+  projectDashboardText,
+  projectSummaryText,
   reportText,
   summaryText,
   updateStatus,
@@ -69,10 +71,12 @@ const PROJECT_TIME_COMMANDS = [
   },
 ] as const
 
-function projectTimeArgumentCompletions(argumentPrefix: string) {
-  const prefix = argumentPrefix.trimStart().toLowerCase()
-  return PROJECT_TIME_COMMANDS.filter(({ value }) => value.startsWith(prefix))
+const PROJECT_OPTION = {
+  value: "--project",
+  label: "--project",
+  description: "View an exact local Project Time project",
 }
+
 
 export class ProjectTimeRuntime {
   private readonly pi: ExtensionApi
@@ -91,6 +95,47 @@ export class ProjectTimeRuntime {
 
   private static readonly defaultRefreshIntervalMs =
     ProjectTimeRuntime.refreshIntervalMs(parseProjectTimeConfig())
+
+  private projectTimeArgumentCompletions(argumentPrefix: string) {
+    const prefix = argumentPrefix.trimStart()
+    const tokens = prefix.trim().split(/\s+/)
+    const projectOptionIndex = tokens.indexOf("--project")
+    if (projectOptionIndex !== -1) {
+      const selectingProject =
+        projectOptionIndex === tokens.length - 1 && prefix.endsWith(" ")
+      const current = selectingProject ? "" : tokens.at(-1) ?? ""
+      if (
+        !selectingProject
+        && !(projectOptionIndex === tokens.length - 2 && !prefix.endsWith(" "))
+      ) {
+        return null
+      }
+
+      const base = current === ""
+        ? prefix.trimEnd()
+        : prefix.slice(0, -current.length).trimEnd()
+      return this.timeLogRecorder
+        .projectNames()
+        .filter((project) => project.toLowerCase().startsWith(current.toLowerCase()))
+        .map((project) => ({
+          value: `${base} ${project}`,
+          label: project,
+          description: "Local Project Time project",
+        }))
+    }
+
+    if (tokens.length === 1 && !prefix.endsWith(" ")) {
+      return [...PROJECT_TIME_COMMANDS, PROJECT_OPTION].filter(({ value }) =>
+        value.startsWith(tokens[0].toLowerCase()),
+      )
+    }
+
+    if (prefix === "" || prefix.endsWith(" ") || tokens.at(-1)?.startsWith("--")) {
+      return [{ ...PROJECT_OPTION, value: `${prefix}${PROJECT_OPTION.value}` }]
+    }
+
+    return null
+  }
 
   constructor(pi: ExtensionApi, options: ExtensionOptions = {}) {
     this.pi = pi
@@ -114,7 +159,7 @@ export class ProjectTimeRuntime {
 
     this.pi.registerCommand("project-time", {
       description: "Show Project Time status, summary, history, or reports",
-      getArgumentCompletions: projectTimeArgumentCompletions,
+      getArgumentCompletions: (prefix) => this.projectTimeArgumentCompletions(prefix),
       handler: async (args, ctx) => {
         if (!await this.localDataReady(ctx)) return
         await this.showCurrentStatus(args, ctx)
@@ -169,16 +214,20 @@ export class ProjectTimeRuntime {
       return
     }
 
-    const command = args.trim()
-
-    if (command === "report" || command.startsWith("report ")) {
-      await this.showReport(command, ctx)
+    let parsed: ProjectTimeCommand
+    try {
+      parsed = parseProjectTimeCommand(args)
+    } catch (error) {
+      ctx.ui.notify(`Project Time command error: ${errorMessage(error)}`, "error")
       return
     }
 
+    const { command, project, tokens } = parsed
     if (
       command !== ""
-      && !PROJECT_TIME_COMMANDS.some(({ value }) => value === command)
+      && command !== "summary"
+      && command !== "history"
+      && !(command === "report" || command.startsWith("report "))
     ) {
       ctx.ui.notify(
         "Unknown Project Time command. Use summary, history, or report.",
@@ -187,13 +236,32 @@ export class ProjectTimeRuntime {
       return
     }
 
-    const config = await this.loadConfigForStatus(ctx)
-    if (config === undefined) return
-
-    if (command === "history") {
-      await this.showHistory(ctx, config)
+    if (command === "report" || command.startsWith("report ")) {
+      await this.showReport(tokens, ctx, project)
       return
     }
+
+    if (project !== undefined) {
+      if (command === "history") {
+        await this.showHistory(ctx, project)
+        return
+      }
+
+      await this.showProjectView(
+        ctx,
+        project,
+        command === "summary" ? "summary" : "dashboard",
+      )
+      return
+    }
+
+    if (command === "history") {
+      await this.showHistory(ctx)
+      return
+    }
+
+    const config = await this.loadConfigForStatus(ctx)
+    if (config === undefined) return
 
     const sessionId = ctx.sessionManager.getSessionId()
     const sessionName = ctx.sessionManager.getSessionName?.()
@@ -207,21 +275,22 @@ export class ProjectTimeRuntime {
       notifyTimeLogError: (message) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     })
-    const project = (await resolveGitRepository(ctx.cwd))?.project
+    const currentProject = (await resolveGitRepository(ctx.cwd))?.project
     const message =
       command === "summary"
         ? summaryText(settledState, config, sessionName, nowMs)
-        : dashboardText(settledState, config, project, sessionName)
+        : dashboardText(settledState, config, currentProject, sessionName)
 
     ctx.ui.notify(message, "info")
   }
 
   private async showReport(
-    command: string,
+    tokens: readonly string[],
     ctx: ExtensionContext,
+    project: string | undefined,
   ): Promise<void> {
     try {
-      const reportArgs = parseReportArgs(command)
+      const reportArgs = parseReportArgs(tokens)
       const entries = await this.timeLogRecorder.entries()
 
       if (reportArgs.mode === "all") {
@@ -235,12 +304,14 @@ export class ProjectTimeRuntime {
             "human_active",
             mode,
             reportArgs.weights,
+            project,
           )
           agent[mode] = buildReport(
             entries,
             "agent_turn_elapsed",
             mode,
             reportArgs.weights,
+            project,
           )
         }
 
@@ -253,6 +324,7 @@ export class ProjectTimeRuntime {
         reportArgs.sourceKind,
         reportArgs.mode,
         reportArgs.weights,
+        project,
       )
       ctx.ui.notify(
         reportArgs.json
@@ -267,9 +339,23 @@ export class ProjectTimeRuntime {
 
   private async showHistory(
     ctx: ExtensionContext,
-    config: ProjectTimeConfig,
+    project: string | undefined = undefined,
   ): Promise<void> {
     try {
+      const timeLogEntries = await this.timeLogRecorder.entries()
+      if (project !== undefined) {
+        const humanEntries = timeLogEntries.filter(
+          (entry) => entry.sourceKind === "human_active" && entry.project === project,
+        )
+        const agentEntries = timeLogEntries.filter(
+          (entry) => entry.sourceKind === "agent_turn_elapsed" && entry.project === project,
+        )
+        ctx.ui.notify(historyText(project, undefined, undefined, humanEntries, agentEntries), "info")
+        return
+      }
+
+      const config = await this.loadConfigForStatus(ctx)
+      if (config === undefined) return
       const sessionId = ctx.sessionManager.getSessionId()
       const nowMs = Date.now()
       const settledState = await this.sessionStateCoordinator.settle({
@@ -283,7 +369,6 @@ export class ProjectTimeRuntime {
       })
       const gitRepository = await resolveGitRepository(ctx.cwd)
       const repositoryId = gitRepository?.repositoryId
-      const [timeLogEntries] = await Promise.all([this.timeLogRecorder.entries()])
       const humanEntries = timeLogEntries.filter(
         (entry) =>
           entry.sourceKind === "human_active"
@@ -307,6 +392,25 @@ export class ProjectTimeRuntime {
       )
     } catch (error) {
       ctx.ui.notify(`Project Time history error: ${errorMessage(error)}`, "error")
+    }
+  }
+
+  private async showProjectView(
+    ctx: ExtensionContext,
+    project: string,
+    view: "dashboard" | "summary",
+  ): Promise<void> {
+    try {
+      const entries = await this.timeLogRecorder.entries()
+      const projectEntries = entries.filter((entry) => entry.project === project)
+      ctx.ui.notify(
+        view === "dashboard"
+          ? projectDashboardText(project, projectEntries)
+          : projectSummaryText(project, projectEntries),
+        "info",
+      )
+    } catch (error) {
+      ctx.ui.notify(`Project Time ${view} error: ${errorMessage(error)}`, "error")
     }
   }
 
@@ -528,8 +632,69 @@ export class ProjectTimeRuntime {
   }
 }
 
-function parseReportArgs(command: string): ReportArgs {
-  const tokens = command.trim().split(/\s+/)
+type ProjectTimeCommand = {
+  command: string
+  project?: string
+  tokens: string[]
+}
+
+function parseProjectTimeCommand(args: string): ProjectTimeCommand {
+  const tokens = parseCommandTokens(args)
+  const projectIndexes = tokens
+    .map((token, index) => (token === "--project" ? index : -1))
+    .filter((index) => index !== -1)
+  if (projectIndexes.length === 0) {
+    return { command: tokens.join(" "), tokens }
+  }
+
+  const projectIndex = projectIndexes[0]
+  if (projectIndexes.length !== 1 || projectIndex !== tokens.length - 2) {
+    throw new Error("Use --project NAME once at the end of the command.")
+  }
+
+  const project = tokens.at(-1)
+  if (project === undefined || !/^[A-Za-z0-9._-]+$/.test(project)) {
+    throw new Error("Project names use letters, numbers, periods, underscores, and hyphens.")
+  }
+
+  const commandTokens = tokens.slice(0, -2)
+  return { command: commandTokens.join(" "), project, tokens: commandTokens }
+}
+
+function parseCommandTokens(args: string): string[] {
+  const tokens: string[] = []
+  let token = ""
+  let quote: "'" | "\"" | undefined
+  let escaped = false
+
+  for (const character of args.trim()) {
+    if (escaped) {
+      token += character
+      escaped = false
+    } else if (character === "\\" && quote !== "'") {
+      escaped = true
+    } else if (quote !== undefined) {
+      if (character === quote) quote = undefined
+      else token += character
+    } else if (character === "'" || character === "\"") {
+      quote = character
+    } else if (/\s/.test(character)) {
+      if (token !== "") {
+        tokens.push(token)
+        token = ""
+      }
+    } else {
+      token += character
+    }
+  }
+
+  if (quote !== undefined || escaped) throw new Error("Use closed quoted arguments.")
+  if (token !== "") tokens.push(token)
+  return tokens
+}
+
+
+function parseReportArgs(tokens: readonly string[]): ReportArgs {
   if (tokens[0] !== "report") throw new Error("Expected a report command.")
 
   const rest = tokens.slice(1)

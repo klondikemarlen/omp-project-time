@@ -150,6 +150,10 @@ export class AutomaticTimeLogRecorder {
     return this.ledger.entries()
   }
 
+  projectNames(): string[] {
+    return this.ledger.projectNames()
+  }
+
   private closeAgentTurn(
     activity: SessionActivity,
     turn: AgentTurn,

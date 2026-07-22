@@ -40,10 +40,23 @@ export function dashboardText(
   ].join("\n")
 }
 
+export function projectDashboardText(
+  project: string,
+  entries: readonly TimeLogEntry[],
+): string {
+  const latest = [...entries].sort((left, right) => right.endAtMs - left.endAtMs)[0]
+
+  return [
+    `Project: ${project} · Ledger view`,
+    `Last recorded: ${latest === undefined ? "none" : `${timestampText(latest.endAtMs)} — ${activityText(latest.activity)}`}`,
+    `/project-time summary --project ${project} | history --project ${project} | report --project ${project}`,
+  ].join("\n")
+}
+
 export function historyText(
   project: string | undefined,
-  state: ProjectTimeState,
-  config: ProjectTimeConfig,
+  state: ProjectTimeState | undefined,
+  config: ProjectTimeConfig | undefined,
   humanEntries: readonly TimeLogEntry[],
   agentEntries: readonly TimeLogEntry[],
 ): string {
@@ -57,10 +70,14 @@ export function historyText(
   )
   const recentHuman = recentEntries(humanEntries)
   const recentAgent = recentEntries(agentEntries)
+  const currentActive =
+    state === undefined || config === undefined
+      ? "Current active: unavailable outside the active session"
+      : `Current active: ${statusText(state, config)}`
 
   return [
     `Project: ${project ?? "unavailable"}`,
-    `Current active: ${statusText(state, config)}`,
+    currentActive,
     `Human active: ${humanEntries.length} intervals, ${durationText(humanMilliseconds)}`,
     `Agent elapsed: ${agentEntries.length} intervals, ${durationText(agentMilliseconds)}`,
     `Recent human active:${recentHuman.length === 0 ? " none" : `\n${recentHuman.join("\n")}`}`,
@@ -91,6 +108,25 @@ export function summaryText(
     `Active time: ${durationText(state.activeMilliseconds)}`,
     `Prompt count: ${state.promptCount}`,
     lastPrompt,
+  ].join("\n")
+}
+
+export function projectSummaryText(
+  project: string,
+  entries: readonly TimeLogEntry[],
+): string {
+  const humanMilliseconds = entries
+    .filter((entry) => entry.sourceKind === "human_active")
+    .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0)
+  const agentMilliseconds = entries
+    .filter((entry) => entry.sourceKind === "agent_turn_elapsed")
+    .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0)
+
+  return [
+    `Project: ${project} · Ledger summary`,
+    `Human active: ${durationText(humanMilliseconds)}`,
+    `Agent elapsed: ${durationText(agentMilliseconds)}`,
+    `Recorded intervals: ${entries.length}`,
   ].join("\n")
 }
 

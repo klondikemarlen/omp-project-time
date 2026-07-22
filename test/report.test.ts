@@ -112,6 +112,55 @@ test("weighted report divides concurrent time by caller-supplied weights", () =>
   assert.equal(beta?.durationMs, 4.25 * minute)
 })
 
+test("selects an exact project label without changing concurrent allocation", () => {
+  const entries = [
+    entry({
+      sourceKind: "human_active",
+      repositoryId: "repo-wrap",
+      project: "old-wrap",
+      startAtMs: start,
+      endAtMs: start + minute,
+    }),
+    entry({
+      sourceKind: "human_active",
+      repositoryId: "repo-wrap",
+      project: "wrap",
+      startAtMs: start + minute,
+      endAtMs: start + 2 * minute,
+    }),
+    entry({
+      sourceKind: "human_active",
+      repositoryId: "repo-other",
+      project: "other",
+      startAtMs: start + minute,
+      endAtMs: start + 2 * minute,
+    }),
+  ]
+
+  const raw = buildReport(entries, "human_active", "raw", undefined, "wrap")
+  const split = buildReport(entries, "human_active", "split", undefined, "wrap")
+  const weighted = buildReport(
+    entries,
+    "human_active",
+    "weighted",
+    { "repo-wrap": 3 },
+    "wrap",
+  )
+
+  assert.deepEqual(raw.entries, [
+    {
+      mode: "raw",
+      sourceKind: "human_active",
+      repositoryId: "repo-wrap",
+      project: "wrap",
+      durationMs: minute,
+    },
+  ])
+  assert.equal(raw.ompActiveUnionMs, minute)
+  assert.equal(split.entries[0]?.durationMs, minute / 2)
+  assert.equal(weighted.entries[0]?.durationMs, 0.75 * minute)
+})
+
 test("agent reports are separate from human reports", () => {
   const entries = [
     entry({

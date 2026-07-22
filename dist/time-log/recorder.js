@@ -118,6 +118,10 @@ export class AutomaticTimeLogRecorder {
     return this.ledger.entries();
   }
 
+  projectNames() {
+    return this.ledger.projectNames();
+  }
+
   closeAgentTurn(activity, turn, notifyError) {
     const startAtMs = activity.agentTurnStartAtMs;
     const agentRepository = activity.agentRepository;

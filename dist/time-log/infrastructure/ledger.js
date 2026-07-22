@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -36,6 +37,17 @@ export class TimeLogLedger {
       const state = await this.readState();
       return state.entries;
     });
+  }
+
+  projectNames() {
+    try {
+      const value = JSON.parse(readFileSync(this.filePath, "utf8"));
+      const state = parseTimeLogState(value);
+      if (state === undefined) return [];
+      return [...new Set(state.entries.map((entry) => entry.project))].sort();
+    } catch {
+      return [];
+    }
   }
 
   async withLock(operation) {

@@ -41,6 +41,10 @@ requirements:
     title: Local reports only
     requirement: Report commands provide concise local summaries by default; only explicit report json commands emit local JSON. They do not call external systems or define a provider payload.
     rationale: Export and billing allocation remain the user's later, transparent decision.
+  - id: cross_project_views
+    title: Cross-project local views
+    requirement: Every Project Time view accepts one final `--project NAME` selector for an exact persisted project label. Selected dashboards and summaries explicitly read the local ledger rather than claiming remote live session state. Selected reports calculate raw, split, and weighted allocation from the full local ledger before returning the selected project's entries.
+    rationale: Users must be able to inspect local evidence for another project without changing directories, while preserving honest session-state and concurrent-allocation semantics.
 non_requirements:
   - id: no_desk_clock
     description: Project Time does not record manual desk time or assert literal desk presence.
