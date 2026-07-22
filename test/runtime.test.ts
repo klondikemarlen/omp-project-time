@@ -85,7 +85,26 @@ test("shows concise reports and generates automatic activity labels", async () =
       },
       timeLogPath: path.join(directory, "time-log.json"),
     }).register()
-    assert.deepEqual(completionValues, ["summary", "history", "report", "--project"])
+    assert.deepEqual(completionValues, ["summary", "history", "report"])
+    assert.deepEqual(
+      argumentCompletions?.("--p")?.map(({ value }) => value),
+      ["--project"],
+    )
+    assert.deepEqual(
+      argumentCompletions?.("summary ")?.map(({ value }) => value),
+      ["summary --project"],
+    )
+    assert.deepEqual(
+      argumentCompletions?.("report ")?.map(({ value }) => value),
+      ["report --project"],
+    )
+    assert.deepEqual(
+      argumentCompletions?.("summary --p")?.map(({ value }) => value),
+      ["summary --project"],
+    )
+    assert.equal(argumentCompletions?.("garbage "), null)
+    assert.equal(argumentCompletions?.("summary extra "), null)
+    assert.equal(argumentCompletions?.("garbage --project "), null)
     assert.ok(handler)
     assert.ok(handlers.beforeAgentStart)
 

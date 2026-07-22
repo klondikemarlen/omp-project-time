@@ -77,6 +77,20 @@ const PROJECT_OPTION = {
   description: "View an exact local Project Time project",
 }
 
+function supportsProjectOption(tokens: readonly string[]): boolean {
+  if (tokens[0] === "summary" || tokens[0] === "history") {
+    return tokens.length === 1
+  }
+
+  if (tokens[0] !== "report") return false
+  try {
+    parseReportArgs(tokens)
+    return true
+  } catch {
+    return false
+  }
+}
+
 
 export class ProjectTimeRuntime {
   private readonly pi: ExtensionApi
@@ -101,6 +115,10 @@ export class ProjectTimeRuntime {
     const tokens = prefix.trim().split(/\s+/)
     const projectOptionIndex = tokens.indexOf("--project")
     if (projectOptionIndex !== -1) {
+      const baseTokens = tokens.slice(0, projectOptionIndex)
+      if (baseTokens.length > 0 && !supportsProjectOption(baseTokens)) {
+        return null
+      }
       const selectingProject =
         projectOptionIndex === tokens.length - 1 && prefix.endsWith(" ")
       const current = selectingProject ? "" : tokens.at(-1) ?? ""
@@ -125,13 +143,25 @@ export class ProjectTimeRuntime {
     }
 
     if (tokens.length === 1 && !prefix.endsWith(" ")) {
-      return [...PROJECT_TIME_COMMANDS, PROJECT_OPTION].filter(({ value }) =>
+      const choices = tokens[0].startsWith("--")
+        ? [PROJECT_OPTION]
+        : PROJECT_TIME_COMMANDS
+      return choices.filter(({ value }) =>
         value.startsWith(tokens[0].toLowerCase()),
       )
     }
 
-    if (prefix === "" || prefix.endsWith(" ") || tokens.at(-1)?.startsWith("--")) {
-      return [{ ...PROJECT_OPTION, value: `${prefix}${PROJECT_OPTION.value}` }]
+    const currentIsFlagPrefix =
+      !prefix.endsWith(" ") && tokens.at(-1)?.startsWith("--")
+    const commandTokens = currentIsFlagPrefix ? tokens.slice(0, -1) : tokens
+    if (
+      supportsProjectOption(commandTokens)
+      && (prefix.endsWith(" ") || currentIsFlagPrefix)
+    ) {
+      const value = currentIsFlagPrefix
+        ? `${prefix.slice(0, -(tokens.at(-1)?.length ?? 0))}${PROJECT_OPTION.value}`
+        : `${prefix}${PROJECT_OPTION.value}`
+      return [{ ...PROJECT_OPTION, value }]
     }
 
     return null
