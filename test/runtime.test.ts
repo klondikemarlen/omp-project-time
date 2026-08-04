@@ -13,7 +13,6 @@ import type {
   ExtensionContext,
 } from "../src/extension/types.js"
 
-
 test("shows concise reports and generates automatic activity labels", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-runtime-"))
   const notices: Array<{ message: string; type?: string }> = []
@@ -120,7 +119,6 @@ test("shows concise reports and generates automatic activity labels", async () =
 
     await handler("report json human raw", context)
     assert.equal(JSON.parse(notices.at(-1)?.message ?? "").mode, "raw")
-
 
     await handler("report all", context)
     assert.match(notices.at(-1)?.message ?? "", /Use report json for an all-modes report/)

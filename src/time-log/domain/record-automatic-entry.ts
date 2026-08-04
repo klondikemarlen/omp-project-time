@@ -74,7 +74,6 @@ function createTimeLogEntry(
     throw new Error("Only manual time log entries retain a time zone.")
   }
 
-
   if (input.repositoryIdentity !== undefined && repositoryIdentity === undefined) {
     throw new Error("Time log repository identity is invalid.")
   }

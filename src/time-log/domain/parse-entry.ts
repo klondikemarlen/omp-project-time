@@ -65,6 +65,7 @@ export function parseTimeLogEntry(value: unknown): TimeLogEntry | undefined {
     createdAtMs,
   }
 }
+
 function parseSourceKind(value: unknown): SourceKind | undefined {
   if (
     value === "human_active"

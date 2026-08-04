@@ -1,6 +1,7 @@
 import { parseTimeLogEntry } from "@/time-log/domain/parse-entry.js"
 import { parseManualTimer } from "@/time-log/domain/manual-timer.js"
 import type { ManualTimer, TimeLogEntry } from "@/time-log/domain/model.js"
+
 export type TimeLogState = {
   entries: TimeLogEntry[]
   activeManualTimer?: ManualTimer
