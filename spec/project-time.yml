@@ -9,6 +9,10 @@ requirements:
     title: Explicit non-overlapping manual time
     requirement: "`/project-time start [activity label]` must create exactly one shared active manual timer for the current repository under the cross-process ledger lock, and `/project-time stop` must atomically consume it into exactly one `manual_tracked` interval. Persist UTC epoch bounds and the IANA time zone captured at start; local-day reports split an interval at local midnight in that stored zone, including DST transitions."
     rationale: User-controlled time is the sole candidate evidence for a later billable-hours review without inferring desk time from OMP activity.
+  - id: agent_turn_evidence
+    title: Separate agent-turn evidence
+    requirement: Record agent_turn_elapsed intervals from before_agent_start through turn_end for top-level OMP sessions, with the same identity and interval fields as human-active intervals.
+    rationale: Agent execution is useful parallel evidence but must remain distinguishable from human collaboration.
   - id: source_separation
     title: Separate evidence sources
     requirement: Keep manual_tracked, human_active, and agent_turn_elapsed entries and reports separate; never automatically add one source to another or label prompt windows as billable.
@@ -23,7 +27,7 @@ requirements:
     rationale: OMP can verify its own activity windows, not work outside OMP.
   - id: human_active_coverage
     title: Per-project human-active coverage
-    requirement: "`report json coverage --date YYYY-MM-DD` must emit local-day, per-project human-active raw total, interval union, concurrent overlap, span, and inactive gap totals and bounds. It clips intervals to the requested local calendar day, accepts the final exact `--project NAME` selector, and excludes agent_turn_elapsed evidence."
+    requirement: "`report json coverage --date YYYY-MM-DD` must emit local-day, per-project human-active raw total, interval union, concurrent overlap, span, and inactive gap totals and bounds. It clips intervals to the requested local calendar day, accepts the final exact `--project NAME` selector, and excludes agent_turn_elapsed and manual_tracked evidence."
     rationale: Downstream reconciliation needs transparent interval coverage without reimplementing the local ledger analysis or silently combining evidence sources.
   - id: top_level_only
     title: Top-level sessions only
