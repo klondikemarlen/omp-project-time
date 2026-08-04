@@ -13,6 +13,7 @@ import type {
   ExtensionContext,
 } from "../src/extension/types.js"
 
+
 test("shows concise reports and generates automatic activity labels", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-runtime-"))
   const notices: Array<{ message: string; type?: string }> = []
@@ -87,7 +88,7 @@ test("shows concise reports and generates automatic activity labels", async () =
       },
       timeLogPath: path.join(directory, "time-log.json"),
     }).register()
-    assert.deepEqual(completionValues, ["summary", "history", "report"])
+    assert.deepEqual(completionValues, ["summary", "history", "report", "start", "stop"])
     assert.deepEqual(
       argumentCompletions?.("--p")?.map(({ value }) => value),
       ["--project"],
@@ -120,6 +121,7 @@ test("shows concise reports and generates automatic activity labels", async () =
     await handler("report json human raw", context)
     assert.equal(JSON.parse(notices.at(-1)?.message ?? "").mode, "raw")
 
+
     await handler("report all", context)
     assert.match(notices.at(-1)?.message ?? "", /Use report json for an all-modes report/)
 
@@ -146,6 +148,17 @@ test("shows concise reports and generates automatic activity labels", async () =
             startAtMs: coverageStart + 60_000,
             endAtMs: coverageStart + 120_000,
             createdAtMs: coverageStart + 120_000,
+          },
+          {
+            id: "wrap-manual",
+            sourceKind: "manual_tracked",
+            project: "wrap",
+            repositoryId: "wrap-repository",
+            activity: "Client Review",
+            startAtMs: coverageStart + 120_000,
+            endAtMs: coverageStart + 180_000,
+            createdAtMs: coverageStart + 180_000,
+            timeZone: "America/New_York",
           },
           {
             id: "other-human",
@@ -228,6 +241,14 @@ test("shows concise reports and generates automatic activity labels", async () =
       ),
       ["wrap"],
     )
+    const manualReport = JSON.parse(notices.at(-1)?.message ?? "")
+    assert.equal(manualReport.manual.raw.sourceKind, "manual_tracked")
+    assert.deepEqual(manualReport.manualTrackedDaily.map(
+      (entry: { sourceKind: string; durationMs: number }) => ({
+        sourceKind: entry.sourceKind,
+        durationMs: entry.durationMs,
+      }),
+    ), [{ sourceKind: "manual_tracked", durationMs: 60_000 }])
 
     await handler(`report json coverage --date ${coverageDate} --project wrap`, context)
     assert.deepEqual(JSON.parse(notices.at(-1)?.message ?? ""), {
@@ -304,7 +325,7 @@ test("shows concise reports and generates automatic activity labels", async () =
     await handler("activity Code Review", context)
     assert.match(
       notices.at(-1)?.message ?? "",
-      /Unknown Project Time command. Use summary, history, or report/,
+      /Unknown Project Time command. Use start, stop, summary, history, or report/,
     )
   } finally {
     await rm(directory, { recursive: true, force: true })

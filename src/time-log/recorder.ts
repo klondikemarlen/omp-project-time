@@ -1,7 +1,11 @@
 import { errorMessage } from "@/utils/error-message.js"
 import { createAutomaticTimeLogEntry } from "@/time-log/domain/create-automatic-entry.js"
 import { TimeLogLedger } from "@/time-log/infrastructure/ledger.js"
-import type { AutomaticTimeLogInput, TimeLogEntry } from "@/time-log/domain/model.js"
+import type {
+  AutomaticTimeLogInput,
+  ManualTimer,
+  TimeLogEntry,
+} from "@/time-log/domain/model.js"
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
 import type { ActivityNarrative } from "@/time-log/domain/narrative.js"
 import type { WorkItem } from "@/time-log/domain/work-item.js"
@@ -152,6 +156,31 @@ export class AutomaticTimeLogRecorder {
 
   projectNames(): string[] {
     return this.ledger.projectNames()
+  }
+
+  async startManual(
+    cwd: string,
+    activity: string | undefined,
+  ): Promise<ManualTimer> {
+    const repository = await this.repositoryFor(cwd)
+    if (repository === undefined) {
+      throw new Error("Manual tracking requires a Git repository.")
+    }
+
+    return this.ledger.startManual({
+      project: repository.project,
+      repositoryId: repository.repositoryId,
+      ...(repository.repositoryIdentity === undefined
+        ? {}
+        : { repositoryIdentity: repository.repositoryIdentity }),
+      ...(activity === undefined ? {} : { activity }),
+      startAtMs: Date.now(),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    })
+  }
+
+  async stopManual(): Promise<TimeLogEntry> {
+    return this.ledger.stopManual(Date.now())
   }
 
   private closeAgentTurn(

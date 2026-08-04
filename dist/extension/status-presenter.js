@@ -19,7 +19,7 @@ export function dashboardText(state, config, project, sessionName) {
     `Project: ${project ?? "unavailable"} · Active: ${statusText(state, config)}`,
     `Session: ${sessionName ?? "unnamed"}`,
     `Activity: ${activityText(state.activity)}`,
-    "/project-time summary | history | report",
+    "/project-time start | stop | summary | history | report",
   ].join("\n");
 }
 
@@ -40,6 +40,7 @@ export function historyText(
   config,
   humanEntries,
   agentEntries,
+  manualEntries = [],
 ) {
   const humanMilliseconds = humanEntries.reduce(
     (total, entry) => total + entry.endAtMs - entry.startAtMs,
@@ -49,8 +50,13 @@ export function historyText(
     (total, entry) => total + entry.endAtMs - entry.startAtMs,
     0,
   );
+  const manualMilliseconds = manualEntries.reduce(
+    (total, entry) => total + entry.endAtMs - entry.startAtMs,
+    0,
+  );
   const recentHuman = recentEntries(humanEntries);
   const recentAgent = recentEntries(agentEntries);
+  const recentManual = recentEntries(manualEntries);
   const currentActive =
     state === undefined || config === undefined
       ? "Current active: unavailable outside the active session"
@@ -58,8 +64,10 @@ export function historyText(
   return [
     `Project: ${project ?? "unavailable"}`,
     currentActive,
+    `Manual tracked: ${manualEntries.length} intervals, ${durationText(manualMilliseconds)}`,
     `Human active: ${humanEntries.length} intervals, ${durationText(humanMilliseconds)}`,
     `Agent elapsed: ${agentEntries.length} intervals, ${durationText(agentMilliseconds)}`,
+    `Recent manual tracked:${recentManual.length === 0 ? " none" : `\n${recentManual.join("\n")}`}`,
     `Recent human active:${recentHuman.length === 0 ? " none" : `\n${recentHuman.join("\n")}`}`,
     `Recent agent elapsed:${recentAgent.length === 0 ? " none" : `\n${recentAgent.join("\n")}`}`,
   ].join("\n");
@@ -90,8 +98,12 @@ export function projectSummaryText(project, entries) {
   const agentMilliseconds = entries
     .filter((entry) => entry.sourceKind === "agent_turn_elapsed")
     .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0);
+  const manualMilliseconds = entries
+    .filter((entry) => entry.sourceKind === "manual_tracked")
+    .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0);
   return [
     `Project: ${project} · Ledger summary`,
+    `Manual tracked: ${durationText(manualMilliseconds)}`,
     `Human active: ${durationText(humanMilliseconds)}`,
     `Agent elapsed: ${durationText(agentMilliseconds)}`,
     `Recorded intervals: ${entries.length}`,
@@ -104,7 +116,7 @@ export function reportText(report) {
   );
   return [
     `${sourceKindText(report.sourceKind)} — ${allocationText(report.mode)}`,
-    `OMP-active: ${durationText(report.ompActiveUnionMs)}`,
+    `${report.sourceKind === "manual_tracked" ? "Recorded union" : "OMP-active"}: ${durationText(report.ompActiveUnionMs)}`,
     `Projects:${entries.length === 0 ? " none" : `\n${entries.map((entry) => `- ${entry.project}: ${durationText(entry.durationMs)}`).join("\n")}`}`,
   ].join("\n");
 }
@@ -140,6 +152,7 @@ function activityText(activity) {
 }
 
 function sourceKindText(sourceKind) {
+  if (sourceKind === "manual_tracked") return "Manual tracked";
   return sourceKind === "human_active"
     ? "Human collaboration"
     : "Agent execution";
