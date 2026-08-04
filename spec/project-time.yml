@@ -4,14 +4,14 @@ requirements:
   - id: top_level_human_activity
     title: Top-level human-active intervals
     requirement: Record an immutable human_active interval for prompt-driven active collaboration in every top-level OMP session, including session identity, sanitized project label, one-way repository hash, optional normalized remote host/path identity, interval bounds, and a coarse activity label generated transiently from the current prompt. Retain the previous valid label when generation produces no valid label; use General Work when none exists.
-    rationale: Human-active evidence is the default Project Time source without claiming idle terminal or literal desk time.
-  - id: agent_turn_evidence
-    title: Separate agent-turn evidence
-    requirement: Record agent_turn_elapsed intervals from before_agent_start through turn_end for top-level sessions, with the same identity and interval fields as human-active intervals.
-    rationale: Agent execution is useful parallel evidence but must remain distinguishable from human collaboration.
+    rationale: Human-active evidence is useful collaboration context without claiming idle terminal, literal desk time, or paid duration.
+  - id: manual_tracked_time
+    title: Explicit non-overlapping manual time
+    requirement: "`/project-time start [activity label]` must create exactly one shared active manual timer for the current repository under the cross-process ledger lock, and `/project-time stop` must atomically consume it into exactly one `manual_tracked` interval. Persist UTC epoch bounds and the IANA time zone captured at start; local-day reports split an interval at local midnight in that stored zone, including DST transitions."
+    rationale: User-controlled time is the sole candidate evidence for a later billable-hours review without inferring desk time from OMP activity.
   - id: source_separation
-    title: Source separation
-    requirement: Keep human_active and agent_turn_elapsed entries and reports separate; never automatically add agent-turn elapsed time to human-active, desk, or timesheet totals.
+    title: Separate evidence sources
+    requirement: Keep manual_tracked, human_active, and agent_turn_elapsed entries and reports separate; never automatically add one source to another or label prompt windows as billable.
     rationale: Separate observations must not become an unreviewable billing decision.
   - id: concurrent_projects
     title: Concurrent project evidence
@@ -50,12 +50,12 @@ requirements:
     requirement: Every Project Time view accepts one final `--project NAME` selector for an exact persisted project label. Selected dashboards and summaries explicitly read the local ledger rather than claiming remote live session state. Selected reports calculate raw, split, and weighted allocation from the full local ledger before returning the selected project's entries.
     rationale: Users must be able to inspect local evidence for another project without changing directories, while preserving honest session-state and concurrent-allocation semantics.
 non_requirements:
-  - id: no_desk_clock
-    description: Project Time does not record manual desk time or assert literal desk presence.
+  - id: no_automatic_desk_clock
+    description: Project Time does not infer desk time from prompts, agent turns, refreshes, or idle terminal state; manual tracking starts only from an explicit command.
   - id: no_external_billing
     description: Project Time does not calculate money, rates, client policy, invoices, or external time-entry payloads.
   - id: no_automatic_source_aggregation
-    description: Project Time does not aggregate agent_turn_elapsed into human_active time.
+    description: Project Time does not aggregate manual_tracked, agent_turn_elapsed, or human_active time.
   - id: no_repository_attribution
     description: Project Time does not configure repository-to-project, category, or task mappings.
   - id: no_inline_status_until_omp_support
