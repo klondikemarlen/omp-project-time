@@ -6,6 +6,7 @@ import path from "node:path";
 import { lock } from "../../vendor/proper-lockfile.js";
 import { recordAutomaticTimeLogEntry } from "../../time-log/domain/record-automatic-entry.js";
 import { parseTimeLogState } from "../../time-log/infrastructure/state-mapper.js";
+import { parseManualTimer } from "../../time-log/domain/manual-timer.js";
 
 export class TimeLogLedger {
   filePath;
@@ -28,6 +29,44 @@ export class TimeLogLedger {
       const state = await this.readState();
       const recorded = recordAutomaticTimeLogEntry(state.entries, input);
       if (recorded.changed) await this.writeState(state);
+      return recorded.entry;
+    });
+  }
+
+  async startManual(input) {
+    const timer = parseManualTimer({ ...input, id: randomUUID() });
+    if (timer === undefined) throw new Error("Manual timer is invalid.");
+    return this.withLock(async () => {
+      const state = await this.readState();
+      if (state.activeManualTimer !== undefined) {
+        throw new Error("A manual timer is already active.");
+      }
+      state.activeManualTimer = timer;
+      await this.writeState(state);
+      return timer;
+    });
+  }
+
+  async stopManual(nowMs) {
+    return this.withLock(async () => {
+      const state = await this.readState();
+      const timer = state.activeManualTimer;
+      if (timer === undefined) throw new Error("No manual timer is active.");
+      const recorded = recordAutomaticTimeLogEntry(state.entries, {
+        sourceKind: "manual_tracked",
+        project: timer.project,
+        repositoryId: timer.repositoryId,
+        ...(timer.repositoryIdentity === undefined
+          ? {}
+          : { repositoryIdentity: timer.repositoryIdentity }),
+        ...(timer.activity === undefined ? {} : { activity: timer.activity }),
+        sourceKey: `manual:${timer.id}`,
+        startAtMs: timer.startAtMs,
+        endAtMs: nowMs,
+        timeZone: timer.timeZone,
+      });
+      delete state.activeManualTimer;
+      await this.writeState(state);
       return recorded.entry;
     });
   }

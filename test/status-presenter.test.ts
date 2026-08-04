@@ -34,7 +34,7 @@ test("presents automatic activity and OMP session name", () => {
       "Project: project-time · Active: 1m 0s (dev)",
       "Session: Project Time Audit",
       "Activity: Code Review",
-      "/project-time summary | history | report",
+      "/project-time start | stop | summary | history | report",
     ].join("\n"),
   )
   assert.match(historyText("project-time", state, config, [entry], []), /Code Review/)

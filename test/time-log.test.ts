@@ -728,3 +728,67 @@ test("waits for another OMP window to release the time log lock", async () => {
     ])
   })
 })
+
+test("allows one of two OMP processes to start a manual timer", async () => {
+  await withLedger(async (ledger, ledgerPath) => {
+    const timer = {
+      project: "github.com/acme/alpha",
+      repositoryId: "repo-alpha",
+      repositoryIdentity: "github.com/acme/alpha",
+      activity: "Code Review",
+      startAtMs: start,
+      timeZone: "America/New_York",
+    }
+    const startScript = `
+      import { TimeLogLedger } from "./src/time-log/infrastructure/ledger.ts"
+      const ledger = new TimeLogLedger(process.argv[1])
+      try {
+        await ledger.startManual(JSON.parse(process.argv[2]))
+        process.stdout.write("started")
+      } catch {
+        process.stdout.write("rejected")
+      }
+    `
+    const startArgs = [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "--eval",
+      startScript,
+      ledgerPath,
+      JSON.stringify(timer),
+    ]
+    const starts = await Promise.all([
+      execFileAsync(process.execPath, startArgs),
+      execFileAsync(process.execPath, startArgs),
+    ])
+
+    assert.deepEqual(starts.map(({ stdout }) => stdout).sort(), ["rejected", "started"])
+
+    const stopped = await ledger.stopManual(start + minute)
+    assert.deepEqual(
+      {
+        sourceKind: stopped.sourceKind,
+        project: stopped.project,
+        repositoryId: stopped.repositoryId,
+        activity: stopped.activity,
+        startAtMs: stopped.startAtMs,
+        endAtMs: stopped.endAtMs,
+        timeZone: stopped.timeZone,
+      },
+      {
+        sourceKind: "manual_tracked",
+        project: "github.com/acme/alpha",
+        repositoryId: "repo-alpha",
+        activity: "Code Review",
+        startAtMs: start,
+        endAtMs: start + minute,
+        timeZone: "America/New_York",
+      },
+    )
+    assert.equal((await ledger.entries()).filter(
+      (entry) => entry.sourceKind === "manual_tracked",
+    ).length, 1)
+    await assert.rejects(() => ledger.stopManual(start + 2 * minute), /No manual timer/)
+  })
+})

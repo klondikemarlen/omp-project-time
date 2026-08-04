@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { buildHumanActiveCoverage, buildReport } from "../src/time-log/domain/report.js"
+import { buildManualTrackedDailyReport } from "../src/time-log/domain/manual-tracked-report.js"
 import type { TimeLogEntry } from "../src/time-log/domain/model.js"
 
 const minute = 60_000
@@ -260,4 +261,60 @@ test("weighted reports reject non-positive weights", () => {
       ),
     /positive finite/,
   )
+})
+
+test("splits manual tracking at local midnight on standard and DST dates", () => {
+  const entries = [
+    entry({
+      sourceKind: "manual_tracked",
+      repositoryId: "repo-alpha",
+      timeZone: "America/New_York",
+      startAtMs: Date.parse("2026-01-01T23:30:00-05:00"),
+      endAtMs: Date.parse("2026-01-02T00:30:00-05:00"),
+    }),
+    entry({
+      sourceKind: "manual_tracked",
+      repositoryId: "repo-alpha",
+      timeZone: "America/New_York",
+      startAtMs: Date.parse("2026-03-08T01:30:00-05:00"),
+      endAtMs: Date.parse("2026-03-09T00:30:00-04:00"),
+    }),
+    entry({
+      sourceKind: "human_active",
+      repositoryId: "repo-alpha",
+      startAtMs: Date.parse("2026-03-08T23:30:00-04:00"),
+      endAtMs: Date.parse("2026-03-09T00:30:00-04:00"),
+    }),
+  ]
+
+  assert.deepEqual(buildManualTrackedDailyReport(entries), [
+    {
+      sourceKind: "manual_tracked",
+      localDate: "2026-01-01",
+      project: "project",
+      repositoryId: "repo-alpha",
+      durationMs: 30 * minute,
+    },
+    {
+      sourceKind: "manual_tracked",
+      localDate: "2026-01-02",
+      project: "project",
+      repositoryId: "repo-alpha",
+      durationMs: 30 * minute,
+    },
+    {
+      sourceKind: "manual_tracked",
+      localDate: "2026-03-08",
+      project: "project",
+      repositoryId: "repo-alpha",
+      durationMs: 21.5 * 60 * minute,
+    },
+    {
+      sourceKind: "manual_tracked",
+      localDate: "2026-03-09",
+      project: "project",
+      repositoryId: "repo-alpha",
+      durationMs: 30 * minute,
+    },
+  ])
 })

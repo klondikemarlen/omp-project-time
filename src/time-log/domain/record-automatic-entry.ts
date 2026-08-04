@@ -3,6 +3,7 @@ import { parseActivityLabel } from "@/time-log/domain/activity.js"
 import { parseActivityNarrative } from "@/time-log/domain/narrative.js"
 import { parseWorkItem } from "@/time-log/domain/work-item.js"
 import { parseRepositoryIdentity } from "@/utils/parse-repository-identity.js"
+import { parseIanaTimeZone } from "@/utils/parse-iana-time-zone.js"
 
 import type {
   AutomaticTimeLogInput,
@@ -52,10 +53,11 @@ function createTimeLogEntry(
   const repositoryId = input.repositoryId.trim()
   const repositoryIdentity = parseRepositoryIdentity(input.repositoryIdentity)
   const sourceKey = input.sourceKey.trim()
-  const { startAtMs, endAtMs, sourceKind, sessionId } = input
+  const { startAtMs, endAtMs, sourceKind, sessionId, timeZone: inputTimeZone } = input
   const activity = parseActivityLabel(input.activity)
   const narrative = parseActivityNarrative(input.narrative)
   const workItem = parseWorkItem(input.workItem)
+  const timeZone = parseIanaTimeZone(inputTimeZone)
   if (input.activity !== undefined && activity === undefined) {
     throw new Error("Time log activity label is invalid.")
   }
@@ -64,6 +66,12 @@ function createTimeLogEntry(
   }
   if (input.workItem !== undefined && workItem === undefined) {
     throw new Error("Time log work item is invalid.")
+  }
+  if (sourceKind === "manual_tracked" && timeZone === undefined) {
+    throw new Error("Manual time log entries require an IANA time zone.")
+  }
+  if (sourceKind !== "manual_tracked" && inputTimeZone !== undefined) {
+    throw new Error("Only manual time log entries retain a time zone.")
   }
 
   if (input.repositoryIdentity !== undefined && repositoryIdentity === undefined) {
@@ -95,6 +103,7 @@ function createTimeLogEntry(
     ...(activity === undefined ? {} : { activity }),
     ...(narrative === undefined ? {} : { narrative }),
     ...(workItem === undefined ? {} : { workItem }),
+    ...(timeZone === undefined ? {} : { timeZone }),
     startAtMs,
     endAtMs,
     createdAtMs,

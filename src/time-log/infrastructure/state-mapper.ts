@@ -1,8 +1,10 @@
 import { parseTimeLogEntry } from "@/time-log/domain/parse-entry.js"
-import type { TimeLogEntry } from "@/time-log/domain/model.js"
+import { parseManualTimer } from "@/time-log/domain/manual-timer.js"
+import type { ManualTimer, TimeLogEntry } from "@/time-log/domain/model.js"
 
 export type TimeLogState = {
   entries: TimeLogEntry[]
+  activeManualTimer?: ManualTimer
 }
 
 export function parseTimeLogState(value: unknown): TimeLogState | undefined {
@@ -15,6 +17,8 @@ export function parseTimeLogState(value: unknown): TimeLogState | undefined {
     return undefined
   }
 
+  const candidate = value as Record<string, unknown>
+
   const entries: TimeLogEntry[] = []
   for (const valueEntry of value.entries) {
     const entry = parseTimeLogEntry(valueEntry)
@@ -22,5 +26,15 @@ export function parseTimeLogState(value: unknown): TimeLogState | undefined {
     entries.push(entry)
   }
 
-  return { entries }
+  const activeManualTimer = candidate.activeManualTimer === undefined
+    ? undefined
+    : parseManualTimer(candidate.activeManualTimer)
+  if ("activeManualTimer" in candidate && activeManualTimer === undefined) {
+    return undefined
+  }
+
+  return {
+    entries,
+    ...(activeManualTimer === undefined ? {} : { activeManualTimer }),
+  }
 }
