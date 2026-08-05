@@ -1,9 +1,9 @@
-import { parseTimeLogEntry } from "@/time-log/domain/parse-entry.js"
-import type { TimeLogEntry } from "@/time-log/domain/model.js"
+import { parseTimeLogEntry } from "@/time-log/domain/parse-entry.js";
+import type { TimeLogEntry } from "@/time-log/domain/model.js";
 
 export type TimeLogState = {
-  entries: TimeLogEntry[]
-}
+  entries: TimeLogEntry[];
+};
 
 export function parseTimeLogState(value: unknown): TimeLogState | undefined {
   if (
@@ -12,25 +12,27 @@ export function parseTimeLogState(value: unknown): TimeLogState | undefined {
     !("entries" in value) ||
     !Array.isArray(value.entries)
   ) {
-    return undefined
+    return undefined;
   }
 
-  const entries: TimeLogEntry[] = []
+  const entries: TimeLogEntry[] = [];
   for (const valueEntry of value.entries) {
-    const entry = parseTimeLogEntry(valueEntry)
+    const entry = parseTimeLogEntry(valueEntry);
     if (entry === undefined) {
-      if (isObsoleteManualEntry(valueEntry)) continue
-      return undefined
+      if (isObsoleteManualEntry(valueEntry)) continue;
+      return undefined;
     }
-    entries.push(entry)
+    entries.push(entry);
   }
 
-  return { entries }
+  return { entries };
 }
 
 function isObsoleteManualEntry(value: unknown): boolean {
-  return typeof value === "object"
-    && value !== null
-    && "sourceKind" in value
-    && value.sourceKind === "manual_tracked"
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "sourceKind" in value &&
+    value.sourceKind === "manual_tracked"
+  );
 }

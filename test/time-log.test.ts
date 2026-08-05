@@ -1,43 +1,46 @@
-import assert from "node:assert/strict"
-import { execFile } from "node:child_process"
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import path from "node:path"
-import test from "node:test"
-import { promisify } from "node:util"
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { promisify } from "node:util";
 
-import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js"
-import type { AutomaticTimeLogInput, TimeLogEntry } from "../src/time-log/domain/model.js"
-import { parseTimeLogEntry } from "../src/time-log/domain/parse-entry.js"
-import { createAutomaticTimeLogEntry } from "../src/time-log/domain/create-automatic-entry.js"
-import { recordAutomaticTimeLogEntry } from "../src/time-log/domain/record-automatic-entry.js"
-import { AutomaticTimeLogRecorder } from "../src/time-log/recorder.js"
-import { lock } from "../src/vendor/proper-lockfile.js"
+import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js";
+import type {
+  AutomaticTimeLogInput,
+  TimeLogEntry,
+} from "../src/time-log/domain/model.js";
+import { parseTimeLogEntry } from "../src/time-log/domain/parse-entry.js";
+import { createAutomaticTimeLogEntry } from "../src/time-log/domain/create-automatic-entry.js";
+import { recordAutomaticTimeLogEntry } from "../src/time-log/domain/record-automatic-entry.js";
+import { AutomaticTimeLogRecorder } from "../src/time-log/recorder.js";
+import { lock } from "../src/vendor/proper-lockfile.js";
 
-const minute = 60_000
-const start = Date.UTC(2026, 0, 1)
+const minute = 60_000;
+const start = Date.UTC(2026, 0, 1);
 
-const execFileAsync = promisify(execFile)
+const execFileAsync = promisify(execFile);
 
 type ExpectedEntry = {
-  sourceKind: "human_active" | "agent_turn_elapsed"
-  endAtMs: number
-  project: string
-  repositoryId: string
-  repositoryIdentity?: string
-  startAtMs: number
-}
+  sourceKind: "human_active" | "agent_turn_elapsed";
+  endAtMs: number;
+  project: string;
+  repositoryId: string;
+  repositoryIdentity?: string;
+  startAtMs: number;
+};
 
 async function withLedger(
   check: (ledger: TimeLogLedger, ledgerPath: string) => void | Promise<void>,
 ) {
-  const directory = await mkdtemp(path.join(tmpdir(), "time-log-test-"))
-  const ledgerPath = path.join(directory, "ledger.json")
+  const directory = await mkdtemp(path.join(tmpdir(), "time-log-test-"));
+  const ledgerPath = path.join(directory, "ledger.json");
 
   try {
-    await check(new TimeLogLedger(ledgerPath), ledgerPath)
+    await check(new TimeLogLedger(ledgerPath), ledgerPath);
   } finally {
-    await rm(directory, { recursive: true, force: true })
+    await rm(directory, { recursive: true, force: true });
   }
 }
 
@@ -46,14 +49,14 @@ function assertEntries(
   expected: readonly ExpectedEntry[],
 ) {
   for (const entry of entries) {
-    assert.notEqual(entry.id, "")
-    assert.ok(Number.isFinite(entry.createdAtMs))
+    assert.notEqual(entry.id, "");
+    assert.ok(Number.isFinite(entry.createdAtMs));
   }
 
   assert.deepEqual(
     entries.map(({ id: _id, createdAtMs: _createdAtMs, ...entry }) => entry),
     expected,
-  )
+  );
 }
 
 test("rejects legacy entries without a source kind", () => {
@@ -73,8 +76,8 @@ test("rejects legacy entries without a source kind", () => {
       },
     }),
     undefined,
-  )
-})
+  );
+});
 
 test("migrates obsolete manual state when automatic evidence persists", async () => {
   await withLedger(async (ledger, ledgerPath) => {
@@ -86,7 +89,7 @@ test("migrates obsolete manual state when automatic evidence persists", async ()
       startAtMs: start,
       endAtMs: start + minute,
       createdAtMs: start,
-    }
+    };
     await writeFile(
       ledgerPath,
       JSON.stringify({
@@ -105,15 +108,17 @@ test("migrates obsolete manual state when automatic evidence persists", async ()
         ],
         activeManualTimer: {},
       }),
-    )
+    );
 
-    assertEntries(await ledger.entries(), [{
-      sourceKind: "human_active",
-      project: "Project A",
-      repositoryId: "repository-a",
-      startAtMs: start,
-      endAtMs: start + minute,
-    }])
+    assertEntries(await ledger.entries(), [
+      {
+        sourceKind: "human_active",
+        project: "Project A",
+        repositoryId: "repository-a",
+        startAtMs: start,
+        endAtMs: start + minute,
+      },
+    ]);
     await ledger.recordAutomatic({
       sourceKind: "human_active",
       project: "Project B",
@@ -121,16 +126,18 @@ test("migrates obsolete manual state when automatic evidence persists", async ()
       sourceKey: "session-b",
       startAtMs: start,
       endAtMs: start + minute,
-    })
+    });
 
-    const persisted = JSON.parse(await readFile(ledgerPath, "utf8"))
+    const persisted = JSON.parse(await readFile(ledgerPath, "utf8"));
     assert.deepEqual(
-      persisted.entries.map((entry: { sourceKind: string }) => entry.sourceKind),
+      persisted.entries.map(
+        (entry: { sourceKind: string }) => entry.sourceKind,
+      ),
       ["human_active", "human_active"],
-    )
-    assert.equal("activeManualTimer" in persisted, false)
-  })
-})
+    );
+    assert.equal("activeManualTimer" in persisted, false);
+  });
+});
 
 test("rejects entries with removed attribution", () => {
   assert.equal(
@@ -150,8 +157,8 @@ test("rejects entries with removed attribution", () => {
       },
     }),
     undefined,
-  )
-})
+  );
+});
 
 test("rejects malformed remote identities in persisted entries", () => {
   for (const repositoryIdentity of [
@@ -173,9 +180,9 @@ test("rejects malformed remote identities in persisted entries", () => {
         createdAtMs: start,
       }),
       undefined,
-    )
+    );
   }
-})
+});
 
 test("reads legacy entries, typed activity narratives, and work items", () => {
   const entry = {
@@ -186,9 +193,9 @@ test("reads legacy entries, typed activity narratives, and work items", () => {
     startAtMs: start,
     endAtMs: start + minute,
     createdAtMs: start,
-  }
+  };
 
-  assert.deepEqual(parseTimeLogEntry(entry), entry)
+  assert.deepEqual(parseTimeLogEntry(entry), entry);
   assert.deepEqual(
     parseTimeLogEntry({
       ...entry,
@@ -204,7 +211,7 @@ test("reads legacy entries, typed activity narratives, and work items", () => {
         source: "generated",
       },
     },
-  )
+  );
   assert.deepEqual(
     parseTimeLogEntry({
       ...entry,
@@ -220,22 +227,25 @@ test("reads legacy entries, typed activity narratives, and work items", () => {
         source: "user_provided",
       },
     },
-  )
+  );
   const workItem = {
     kind: "issue" as const,
     number: 99,
     repository: "github.com/acme/project-time",
     source: "user_provided" as const,
-  }
-  assert.deepEqual(parseTimeLogEntry({ ...entry, workItem }), { ...entry, workItem })
+  };
+  assert.deepEqual(parseTimeLogEntry({ ...entry, workItem }), {
+    ...entry,
+    workItem,
+  });
   assert.equal(
     parseTimeLogEntry({
       ...entry,
       narrative: { text: " ", source: "user_provided" },
     }),
     undefined,
-  )
-})
+  );
+});
 
 test("limits automatic human intervals to the settled attention duration", () => {
   const entry = createAutomaticTimeLogEntry({
@@ -262,7 +272,7 @@ test("limits automatic human intervals to the settled attention duration", () =>
       lastSettledAtMs: 5 * minute,
       lastPromptAtMs: 0,
     },
-  })
+  });
 
   assert.deepEqual(entry, {
     sourceKind: "human_active",
@@ -273,8 +283,8 @@ test("limits automatic human intervals to the settled attention duration", () =>
     sourceKey: "session-a:repository-a:0:0",
     startAtMs: 4 * minute,
     endAtMs: 5 * minute,
-  })
-})
+  });
+});
 
 test("starts an activity-labelled human interval at its label change", () => {
   const entry = createAutomaticTimeLogEntry({
@@ -301,7 +311,7 @@ test("starts an activity-labelled human interval at its label change", () => {
       activeUntilMs: 5 * minute,
       lastSettledAtMs: 4 * minute,
     },
-  })
+  });
 
   assert.deepEqual(entry, {
     sourceKind: "human_active",
@@ -316,8 +326,8 @@ test("starts an activity-labelled human interval at its label change", () => {
     sourceKey: "session-a:repository-a:0:120000",
     startAtMs: 2 * minute,
     endAtMs: 4 * minute,
-  })
-})
+  });
+});
 
 test("keeps an unlabelled, labelled, then cleared activity separate", () => {
   const createEntry = (
@@ -346,17 +356,17 @@ test("keeps an unlabelled, labelled, then cleared activity separate", () => {
         activeUntilMs: 5 * minute,
         lastSettledAtMs: nowMs,
       },
-    })
+    });
   const inputs = [
     createEntry(0, 2 * minute, undefined, 0),
     createEntry(2 * minute, 3 * minute, "Code Review", 2 * minute),
     createEntry(3 * minute, 4 * minute, undefined, 3 * minute),
-  ]
-  const entries: TimeLogEntry[] = []
+  ];
+  const entries: TimeLogEntry[] = [];
 
   for (const input of inputs) {
-    assert.ok(input)
-    recordAutomaticTimeLogEntry(entries, input, start)
+    assert.ok(input);
+    recordAutomaticTimeLogEntry(entries, input, start);
   }
 
   assert.deepEqual(
@@ -370,11 +380,11 @@ test("keeps an unlabelled, labelled, then cleared activity separate", () => {
       { activity: "Code Review", startAtMs: 2 * minute, endAtMs: 3 * minute },
       { startAtMs: 3 * minute, endAtMs: 4 * minute },
     ],
-  )
-})
+  );
+});
 
 test("extends automatic entries by source key in the domain", () => {
-  const entries: TimeLogEntry[] = []
+  const entries: TimeLogEntry[] = [];
   const first = recordAutomaticTimeLogEntry(
     entries,
     {
@@ -386,7 +396,7 @@ test("extends automatic entries by source key in the domain", () => {
       endAtMs: start + minute,
     },
     start,
-  )
+  );
   const extended = recordAutomaticTimeLogEntry(
     entries,
     {
@@ -399,11 +409,11 @@ test("extends automatic entries by source key in the domain", () => {
       endAtMs: start + 3 * minute,
     },
     start + minute,
-  )
+  );
 
-  assert.equal(first.changed, true)
-  assert.equal(extended.changed, true)
-  assert.equal(extended.entry.id, first.entry.id)
+  assert.equal(first.changed, true);
+  assert.equal(extended.changed, true);
+  assert.equal(extended.entry.id, first.entry.id);
   assertEntries(entries, [
     {
       sourceKind: "human_active",
@@ -413,8 +423,8 @@ test("extends automatic entries by source key in the domain", () => {
       startAtMs: start,
       endAtMs: start + 3 * minute,
     },
-  ])
-})
+  ]);
+});
 
 test("suppresses automatic intervals deterministically by source key", async () => {
   await withLedger(async (ledger) => {
@@ -425,7 +435,7 @@ test("suppresses automatic intervals deterministically by source key", async () 
       sourceKey: "activity-2026-01-01T00:00:00Z",
       startAtMs: start,
       endAtMs: start + minute,
-    })
+    });
     const replay = await ledger.recordAutomatic({
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
@@ -434,9 +444,9 @@ test("suppresses automatic intervals deterministically by source key", async () 
       sourceKey: "activity-2026-01-01T00:00:00Z",
       startAtMs: start,
       endAtMs: start + minute,
-    })
+    });
 
-    assert.equal(replay.id, first.id)
+    assert.equal(replay.id, first.id);
     assertEntries(await ledger.entries(), [
       {
         sourceKind: "human_active",
@@ -446,9 +456,9 @@ test("suppresses automatic intervals deterministically by source key", async () 
         startAtMs: start,
         endAtMs: start + minute,
       },
-    ])
-  })
-})
+    ]);
+  });
+});
 
 test("keeps overlapping automatic intervals from separate repositories", async () => {
   await withLedger(async (ledger, ledgerPath) => {
@@ -459,7 +469,7 @@ test("keeps overlapping automatic intervals from separate repositories", async (
       sourceKey: "alpha-activity",
       startAtMs: start,
       endAtMs: start + 5 * minute,
-    })
+    });
     await ledger.recordAutomatic({
       sourceKind: "human_active",
       project: "github.com/acme/beta",
@@ -467,9 +477,9 @@ test("keeps overlapping automatic intervals from separate repositories", async (
       sourceKey: "beta-activity",
       startAtMs: start + 2 * minute,
       endAtMs: start + 7 * minute,
-    })
+    });
 
-    const entries = await ledger.entries()
+    const entries = await ledger.entries();
     const expected: ExpectedEntry[] = [
       {
         sourceKind: "human_active",
@@ -485,16 +495,16 @@ test("keeps overlapping automatic intervals from separate repositories", async (
         startAtMs: start + 2 * minute,
         endAtMs: start + 7 * minute,
       },
-    ]
+    ];
 
-    assertEntries(entries, expected)
-    await assert.rejects(readFile(`${ledgerPath}.summary.json`, "utf8"))
-  })
-})
+    assertEntries(entries, expected);
+    await assert.rejects(readFile(`${ledgerPath}.summary.json`, "utf8"));
+  });
+});
 
 test("rejects incomplete automatic identities and non-positive intervals", async () => {
   await withLedger(async (ledger) => {
-    for (const input of ([
+    for (const input of [
       {
         sourceKind: "human_active",
         project: " ",
@@ -545,13 +555,13 @@ test("rejects incomplete automatic identities and non-positive intervals", async
         startAtMs: start,
         endAtMs: start + minute,
       },
-    ] as const)) {
-      await assert.rejects(() => ledger.recordAutomatic(input))
+    ] as const) {
+      await assert.rejects(() => ledger.recordAutomatic(input));
     }
 
-    assertEntries(await ledger.entries(), [])
-  })
-})
+    assertEntries(await ledger.entries(), []);
+  });
+});
 
 test("persists activity narratives with their agent evidence intervals", async () => {
   await withLedger(async (ledger) => {
@@ -567,34 +577,36 @@ test("persists activity narratives with their agent evidence intervals", async (
       },
       startAtMs: start,
       endAtMs: start + minute,
-    })
+    });
 
-    const persisted = (await ledger.entries())[0]
-    assert.equal(persisted?.activity, "Code Review")
+    const persisted = (await ledger.entries())[0];
+    assert.equal(persisted?.activity, "Code Review");
     assert.deepEqual(persisted?.narrative, {
       text: "Review PR #84: verify detailed worklog narratives remain attached to their source intervals.",
       source: "generated",
-    })
-    assert.equal(persisted?.endAtMs - (persisted?.startAtMs ?? 0), minute)
-  })
-})
+    });
+    assert.equal(persisted?.endAtMs - (persisted?.startAtMs ?? 0), minute);
+  });
+});
 
 test("persists prompt narratives through the recorder", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "time-log-recorder-test-"))
-  const ledgerPath = path.join(directory, "ledger.json")
+  const directory = await mkdtemp(
+    path.join(tmpdir(), "time-log-recorder-test-"),
+  );
+  const ledgerPath = path.join(directory, "ledger.json");
   const narrative = {
     text: "Review PR #84: capture detailed activity narratives and verify downstream interval-duration access.",
     source: "generated" as const,
-  }
+  };
   const workItem = {
     kind: "pull_request" as const,
     number: 84,
     repository: "github.com/acme/project-time",
     source: "user_provided" as const,
-  }
+  };
 
   try {
-    await execFileAsync("git", ["init", "--quiet", directory])
+    await execFileAsync("git", ["init", "--quiet", directory]);
     await execFileAsync("git", [
       "-C",
       directory,
@@ -602,9 +614,9 @@ test("persists prompt narratives through the recorder", async () => {
       "add",
       "origin",
       "git@github.com:acme/project-time.git",
-    ])
+    ]);
 
-    const recorder = new AutomaticTimeLogRecorder(ledgerPath)
+    const recorder = new AutomaticTimeLogRecorder(ledgerPath);
     recorder.recordPromptStart(
       "session",
       directory,
@@ -613,13 +625,13 @@ test("persists prompt narratives through the recorder", async () => {
       narrative,
       () => {},
       workItem,
-    )
+    );
     const nextWorkItem = {
       kind: "issue" as const,
       number: 99,
       repository: "github.com/acme/project-time",
       source: "user_provided" as const,
-    }
+    };
     recorder.recordActivityChange(
       "session",
       start + minute,
@@ -627,7 +639,7 @@ test("persists prompt narratives through the recorder", async () => {
       narrative,
       () => {},
       nextWorkItem,
-    )
+    );
     recorder.recordSettlement(
       {
         cwd: directory,
@@ -656,30 +668,27 @@ test("persists prompt narratives through the recorder", async () => {
         },
       },
       () => {},
-    )
-    recorder.recordAgentTurnEnd("session", start + 2 * minute, () => {})
-    await recorder.flush("session", () => {})
+    );
+    recorder.recordAgentTurnEnd("session", start + 2 * minute, () => {});
+    await recorder.flush("session", () => {});
 
-    const entries = await recorder.entries()
-    assert.deepEqual(entries.map((entry) => entry.sourceKind), [
-      "agent_turn_elapsed",
-      "human_active",
-      "agent_turn_elapsed",
-    ])
-    assert.deepEqual(entries.map((entry) => entry.workItem), [
-      workItem,
-      nextWorkItem,
-      nextWorkItem,
-    ])
-    assert.deepEqual(entries.map((entry) => entry.narrative), [
-      narrative,
-      narrative,
-      narrative,
-    ])
+    const entries = await recorder.entries();
+    assert.deepEqual(
+      entries.map((entry) => entry.sourceKind),
+      ["agent_turn_elapsed", "human_active", "agent_turn_elapsed"],
+    );
+    assert.deepEqual(
+      entries.map((entry) => entry.workItem),
+      [workItem, nextWorkItem, nextWorkItem],
+    );
+    assert.deepEqual(
+      entries.map((entry) => entry.narrative),
+      [narrative, narrative, narrative],
+    );
   } finally {
-    await rm(directory, { recursive: true, force: true })
+    await rm(directory, { recursive: true, force: true });
   }
-})
+});
 
 test("persists automatic intervals and their deduplication keys", async () => {
   await withLedger(async (ledger, ledgerPath) => {
@@ -691,8 +700,8 @@ test("persists automatic intervals and their deduplication keys", async () => {
       sourceKey: "persisted-activity",
       startAtMs: start + minute,
       endAtMs: start + 3 * minute,
-    })
-    const reopenedLedger = new TimeLogLedger(ledgerPath)
+    });
+    const reopenedLedger = new TimeLogLedger(ledgerPath);
     const replay = await reopenedLedger.recordAutomatic({
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
@@ -701,9 +710,9 @@ test("persists automatic intervals and their deduplication keys", async () => {
       sourceKey: "persisted-activity",
       startAtMs: start + minute,
       endAtMs: start + 3 * minute,
-    })
+    });
 
-    assert.equal(replay.id, entry.id)
+    assert.equal(replay.id, entry.id);
 
     await reopenedLedger.recordAutomatic({
       sourceKind: "human_active",
@@ -713,7 +722,7 @@ test("persists automatic intervals and their deduplication keys", async () => {
       sourceKey: "subsequent-activity",
       startAtMs: start + 4 * minute,
       endAtMs: start + 5 * minute,
-    })
+    });
     assertEntries(await reopenedLedger.entries(), [
       {
         sourceKind: "human_active",
@@ -731,9 +740,9 @@ test("persists automatic intervals and their deduplication keys", async () => {
         startAtMs: start + 4 * minute,
         endAtMs: start + 5 * minute,
       },
-    ])
-  })
-})
+    ]);
+  });
+});
 
 test("writes automatic ledgers with owner-only permissions", async () => {
   await withLedger(async (ledger, ledgerPath) => {
@@ -744,21 +753,21 @@ test("writes automatic ledgers with owner-only permissions", async () => {
       sourceKey: "permission-check",
       startAtMs: start,
       endAtMs: start + minute,
-    })
+    });
 
-    assert.equal((await stat(ledgerPath)).mode & 0o777, 0o600)
-  })
-})
+    assert.equal((await stat(ledgerPath)).mode & 0o777, 0o600);
+  });
+});
 
 test("waits for another OMP window to release the time log lock", async () => {
   await withLedger(async (ledger, ledgerPath) => {
-    const release = await lock(ledgerPath, { realpath: false })
+    const release = await lock(ledgerPath, { realpath: false });
     const releaseAfterContention = new Promise<void>((resolve) => {
       setTimeout(() => {
-        resolve()
-        void release()
-      }, 750)
-    })
+        resolve();
+        void release();
+      }, 750);
+    });
 
     try {
       await ledger.recordAutomatic({
@@ -768,9 +777,9 @@ test("waits for another OMP window to release the time log lock", async () => {
         sourceKey: "contended-lock",
         startAtMs: start,
         endAtMs: start + minute,
-      })
+      });
     } finally {
-      await releaseAfterContention
+      await releaseAfterContention;
     }
 
     assertEntries(await ledger.entries(), [
@@ -781,6 +790,6 @@ test("waits for another OMP window to release the time log lock", async () => {
         startAtMs: start,
         endAtMs: start + minute,
       },
-    ])
-  })
-})
+    ]);
+  });
+});

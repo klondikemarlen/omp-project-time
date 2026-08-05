@@ -1,29 +1,29 @@
-import path from "node:path"
+import path from "node:path";
 
-import { parseProjectTimeConfig } from "@/config/project-time-config.js"
-import { errorMessage } from "@/utils/error-message.js"
-import { MS_PER_SECOND } from "@/utils/time-constants.js"
-import { loadProjectTimeConfig } from "@/config/loader/load-project-time-config.js"
-import type { ProjectTimeConfig } from "@/config/project-time-config.js"
-import { resolveGitRepository } from "@/infrastructure/git-repository.js"
-import { isTopLevelSession } from "@/extension/session-classification.js"
+import { parseProjectTimeConfig } from "@/config/project-time-config.js";
+import { errorMessage } from "@/utils/error-message.js";
+import { MS_PER_SECOND } from "@/utils/time-constants.js";
+import { loadProjectTimeConfig } from "@/config/loader/load-project-time-config.js";
+import type { ProjectTimeConfig } from "@/config/project-time-config.js";
+import { resolveGitRepository } from "@/infrastructure/git-repository.js";
+import { isTopLevelSession } from "@/extension/session-classification.js";
 import {
   defaultProjectTimeDataRoot,
   prepareProjectTimeDataRoot,
-} from "@/extension/local-data-root.js"
-import { SessionStateCoordinator } from "@/extension/application/session-state-coordinator.js"
-import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js"
-import { parseGeneratedActivityLabel } from "@/time-log/domain/activity.js"
-import { parseActivityNarrative } from "@/time-log/domain/narrative.js"
-import { extractWorkItem } from "@/time-log/domain/work-item.js"
+} from "@/extension/local-data-root.js";
+import { SessionStateCoordinator } from "@/extension/application/session-state-coordinator.js";
+import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js";
+import { parseGeneratedActivityLabel } from "@/time-log/domain/activity.js";
+import { parseActivityNarrative } from "@/time-log/domain/narrative.js";
+import { extractWorkItem } from "@/time-log/domain/work-item.js";
 import {
   buildHumanActiveCoverage,
   buildReport,
   type AllocationMode,
   type CoverageRange,
-} from "@/time-log/domain/report.js"
-import type { SourceKind } from "@/time-log/domain/model.js"
-import type { ProjectTimeState } from "@/time-log/domain/state.js"
+} from "@/time-log/domain/report.js";
+import type { SourceKind } from "@/time-log/domain/model.js";
+import type { ProjectTimeState } from "@/time-log/domain/state.js";
 import {
   clearStatus,
   dashboardText,
@@ -33,7 +33,7 @@ import {
   reportText,
   summaryText,
   updateStatus,
-} from "@/extension/status-presenter.js"
+} from "@/extension/status-presenter.js";
 import type {
   ActivityGenerator,
   GeneratedActivity,
@@ -41,25 +41,25 @@ import type {
   ExtensionApi,
   ExtensionContext,
   ExtensionOptions,
-} from "@/extension/types.js"
+} from "@/extension/types.js";
 
-type RefreshTimer = NodeJS.Timeout
+type RefreshTimer = NodeJS.Timeout;
 
 type RuntimeState = {
-  activeContext?: ExtensionContext
-  activeSessionId?: string
-  refreshTimer?: RefreshTimer
-}
+  activeContext?: ExtensionContext;
+  activeSessionId?: string;
+  refreshTimer?: RefreshTimer;
+};
 
 type ReportArgs = {
-  sourceKind: SourceKind
-  mode: AllocationMode | "all"
-  json: boolean
-  weights?: Record<string, number>
-  coverage: boolean
-  coverageDate?: string
-  coverageRange?: CoverageRange
-}
+  sourceKind: SourceKind;
+  mode: AllocationMode | "all";
+  json: boolean;
+  weights?: Record<string, number>;
+  coverage: boolean;
+  coverageDate?: string;
+  coverageRange?: CoverageRange;
+};
 
 const PROJECT_TIME_COMMANDS = [
   {
@@ -77,163 +77,167 @@ const PROJECT_TIME_COMMANDS = [
     label: "report",
     description: "Show separate Project Time evidence totals",
   },
-] as const
+] as const;
 
 const PROJECT_OPTION = {
   value: "--project",
   label: "--project",
   description: "View an exact local Project Time project",
-}
+};
 
 function supportsProjectOption(tokens: readonly string[]): boolean {
-  if (tokens.length === 0) return true
+  if (tokens.length === 0) return true;
 
   if (tokens[0] === "summary" || tokens[0] === "history") {
-    return tokens.length === 1
+    return tokens.length === 1;
   }
 
-  if (tokens[0] !== "report") return false
+  if (tokens[0] !== "report") return false;
   try {
-    parseReportArgs(tokens)
-    return true
+    parseReportArgs(tokens);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
-
 export class ProjectTimeRuntime {
-  private readonly pi: ExtensionApi
-  private readonly loadConfig: ConfigLoader
-  private readonly generateActivity: ActivityGenerator
-  private readonly sessionStateCoordinator: SessionStateCoordinator
-  private readonly timeLogRecorder: AutomaticTimeLogRecorder
-  private readonly usesDefaultDataRoot: boolean
-  private readonly prepareLocalData: () => Promise<void>
-  private localDataPreparation: Promise<void> | undefined
-  private readonly runtimeState: RuntimeState = {}
+  private readonly pi: ExtensionApi;
+  private readonly loadConfig: ConfigLoader;
+  private readonly generateActivity: ActivityGenerator;
+  private readonly sessionStateCoordinator: SessionStateCoordinator;
+  private readonly timeLogRecorder: AutomaticTimeLogRecorder;
+  private readonly usesDefaultDataRoot: boolean;
+  private readonly prepareLocalData: () => Promise<void>;
+  private localDataPreparation: Promise<void> | undefined;
+  private readonly runtimeState: RuntimeState = {};
 
   private static refreshIntervalMs(config: ProjectTimeConfig): number {
-    return config.refreshIntervalSeconds * MS_PER_SECOND
+    return config.refreshIntervalSeconds * MS_PER_SECOND;
   }
 
   private static readonly defaultRefreshIntervalMs =
-    ProjectTimeRuntime.refreshIntervalMs(parseProjectTimeConfig())
+    ProjectTimeRuntime.refreshIntervalMs(parseProjectTimeConfig());
 
   private projectTimeArgumentCompletions(argumentPrefix: string) {
-    const prefix = argumentPrefix.trimStart()
-    const tokens = prefix.trim().split(/\s+/)
-    const projectOptionIndex = tokens.indexOf("--project")
+    const prefix = argumentPrefix.trimStart();
+    const tokens = prefix.trim().split(/\s+/);
+    const projectOptionIndex = tokens.indexOf("--project");
     if (projectOptionIndex !== -1) {
-      const baseTokens = tokens.slice(0, projectOptionIndex)
-      if (!supportsProjectOption(baseTokens)) return null
-      const valueStart = prefix.indexOf("--project") + "--project".length
-      const entered = prefix.slice(valueStart)
-      if (/\s--/.test(entered)) return null
-      if (!prefix.endsWith(" ") && entered.trim() === "") return null
+      const baseTokens = tokens.slice(0, projectOptionIndex);
+      if (!supportsProjectOption(baseTokens)) return null;
+      const valueStart = prefix.indexOf("--project") + "--project".length;
+      const entered = prefix.slice(valueStart);
+      if (/\s--/.test(entered)) return null;
+      if (!prefix.endsWith(" ") && entered.trim() === "") return null;
 
-      const current = entered.trim().replace(/^['"]/, "")
-      const base = prefix.slice(0, valueStart).trimEnd()
+      const current = entered.trim().replace(/^['"]/, "");
+      const base = prefix.slice(0, valueStart).trimEnd();
       return this.timeLogRecorder
         .projectNames()
-        .filter((project) => project.toLowerCase().startsWith(current.toLowerCase()))
+        .filter((project) =>
+          project.toLowerCase().startsWith(current.toLowerCase()),
+        )
         .map((project) => ({
           value: `${base} ${/^[^\s"'\\]+$/.test(project) ? project : JSON.stringify(project)}`,
           label: project,
           description: "Local Project Time project",
-        }))
+        }));
     }
 
     if (tokens.length === 1 && !prefix.endsWith(" ")) {
       const choices = tokens[0].startsWith("--")
         ? [PROJECT_OPTION]
-        : PROJECT_TIME_COMMANDS
+        : PROJECT_TIME_COMMANDS;
       return choices.filter(({ value }) =>
         value.startsWith(tokens[0].toLowerCase()),
-      )
+      );
     }
 
     const currentIsFlagPrefix =
-      !prefix.endsWith(" ") && tokens.at(-1)?.startsWith("--")
-    const commandTokens = currentIsFlagPrefix ? tokens.slice(0, -1) : tokens
+      !prefix.endsWith(" ") && tokens.at(-1)?.startsWith("--");
+    const commandTokens = currentIsFlagPrefix ? tokens.slice(0, -1) : tokens;
     if (
-      supportsProjectOption(commandTokens)
-      && (prefix.endsWith(" ") || currentIsFlagPrefix)
+      supportsProjectOption(commandTokens) &&
+      (prefix.endsWith(" ") || currentIsFlagPrefix)
     ) {
       const value = currentIsFlagPrefix
         ? `${prefix.slice(0, -(tokens.at(-1)?.length ?? 0))}${PROJECT_OPTION.value}`
-        : `${prefix}${PROJECT_OPTION.value}`
-      return [{ ...PROJECT_OPTION, value }]
+        : `${prefix}${PROJECT_OPTION.value}`;
+      return [{ ...PROJECT_OPTION, value }];
     }
 
-    return null
+    return null;
   }
 
   constructor(pi: ExtensionApi, options: ExtensionOptions = {}) {
-    this.pi = pi
-    this.loadConfig = options.loadConfig ?? loadProjectTimeConfig
-    const dataRoot = defaultProjectTimeDataRoot()
-    this.generateActivity = options.generateActivity ?? (async () => ({}))
+    this.pi = pi;
+    this.loadConfig = options.loadConfig ?? loadProjectTimeConfig;
+    const dataRoot = defaultProjectTimeDataRoot();
+    this.generateActivity = options.generateActivity ?? (async () => ({}));
     this.usesDefaultDataRoot =
-      options.prepareLocalData !== undefined || options.timeLogPath === undefined
+      options.prepareLocalData !== undefined ||
+      options.timeLogPath === undefined;
     this.timeLogRecorder = new AutomaticTimeLogRecorder(
       options.timeLogPath ?? path.join(dataRoot, "time-log.json"),
-    )
+    );
     this.sessionStateCoordinator = new SessionStateCoordinator(
       this.timeLogRecorder,
       (customType, data) => this.pi.appendEntry(customType, data),
-    )
-    this.prepareLocalData = options.prepareLocalData ?? prepareProjectTimeDataRoot
+    );
+    this.prepareLocalData =
+      options.prepareLocalData ?? prepareProjectTimeDataRoot;
   }
 
   register(): void {
-    this.scheduleNextRefresh()
+    this.scheduleNextRefresh();
 
     this.pi.registerCommand("project-time", {
       description: "Show Project Time status, summary, history, or reports",
-      getArgumentCompletions: (prefix) => this.projectTimeArgumentCompletions(prefix),
+      getArgumentCompletions: (prefix) =>
+        this.projectTimeArgumentCompletions(prefix),
       handler: async (args, ctx) => {
-        if (!await this.localDataReady(ctx)) return
-        await this.showCurrentStatus(args, ctx)
+        if (!(await this.localDataReady(ctx))) return;
+        await this.showCurrentStatus(args, ctx);
       },
-    })
+    });
 
     this.pi.on("session_start", async (_event, ctx) => {
-      if (!await this.localDataReady(ctx)) return
-      await this.activateSession(ctx)
-    })
+      if (!(await this.localDataReady(ctx))) return;
+      await this.activateSession(ctx);
+    });
 
     this.pi.on("session_switch", async (_event, ctx) => {
-      if (!await this.localDataReady(ctx)) return
-      await this.activateSession(ctx)
-    })
+      if (!(await this.localDataReady(ctx))) return;
+      await this.activateSession(ctx);
+    });
 
     this.pi.on("before_agent_start", async (event, ctx) => {
-      if (!await this.localDataReady(ctx)) return
-      await this.recordPrompt(event.prompt, ctx)
-    })
+      if (!(await this.localDataReady(ctx))) return;
+      await this.recordPrompt(event.prompt, ctx);
+    });
 
     this.pi.on("turn_end", async (_event, ctx) => {
-      if (!await this.localDataReady(ctx)) return
-      await this.settleCurrentTurn(ctx)
-    })
+      if (!(await this.localDataReady(ctx))) return;
+      await this.settleCurrentTurn(ctx);
+    });
 
     this.pi.on("session_shutdown", async (_event, ctx) => {
-      if (!await this.localDataReady(ctx)) return
-      await this.shutdownSession(ctx)
-    })
+      if (!(await this.localDataReady(ctx))) return;
+      await this.shutdownSession(ctx);
+    });
   }
 
   private async localDataReady(ctx: ExtensionContext): Promise<boolean> {
-    if (!this.usesDefaultDataRoot) return true
+    if (!this.usesDefaultDataRoot) return true;
 
     try {
-      this.localDataPreparation ??= this.prepareLocalData()
-      await this.localDataPreparation
-      return true
+      this.localDataPreparation ??= this.prepareLocalData();
+      await this.localDataPreparation;
+      return true;
     } catch (error) {
-      ctx.ui.notify(errorMessage(error), "error")
-      return false
+      ctx.ui.notify(errorMessage(error), "error");
+      return false;
     }
   }
 
@@ -242,63 +246,69 @@ export class ProjectTimeRuntime {
     ctx: ExtensionContext,
   ): Promise<void> {
     if (!isTopLevelSession(ctx.sessionManager)) {
-      ctx.ui.notify("Project Time is only tracked for top-level sessions.", "info")
-      return
+      ctx.ui.notify(
+        "Project Time is only tracked for top-level sessions.",
+        "info",
+      );
+      return;
     }
 
-    let parsed: ProjectTimeCommand
+    let parsed: ProjectTimeCommand;
     try {
-      parsed = parseProjectTimeCommand(args)
+      parsed = parseProjectTimeCommand(args);
     } catch (error) {
-      ctx.ui.notify(`Project Time command error: ${errorMessage(error)}`, "error")
-      return
+      ctx.ui.notify(
+        `Project Time command error: ${errorMessage(error)}`,
+        "error",
+      );
+      return;
     }
 
-    const { command, project, tokens } = parsed
-    const commandName = tokens[0]
+    const { command, project, tokens } = parsed;
+    const commandName = tokens[0];
     if (
-      command !== ""
-      && commandName !== "summary"
-      && commandName !== "history"
-      && commandName !== "report"
+      command !== "" &&
+      commandName !== "summary" &&
+      commandName !== "history" &&
+      commandName !== "report"
     ) {
       ctx.ui.notify(
         "Unknown Project Time command. Use summary, history, or report.",
         "error",
-      )
-      return
+      );
+      return;
     }
 
     if (command === "report" || command.startsWith("report ")) {
-      await this.showReport(tokens, ctx, project)
-      return
+      await this.showReport(tokens, ctx, project);
+      return;
     }
 
     if (project !== undefined) {
       if (command === "history") {
-        await this.showHistory(ctx, project)
-        return
+        await this.showHistory(ctx, project);
+        return;
       }
 
       await this.showProjectView(
         ctx,
         project,
         command === "summary" ? "summary" : "dashboard",
-      )
-      return
+      );
+      return;
     }
 
     if (command === "history") {
-      await this.showHistory(ctx)
-      return
+      await this.showHistory(ctx);
+      return;
     }
 
-    const config = await this.loadConfigForStatus(ctx)
-    if (config === undefined) return
+    const config = await this.loadConfigForStatus(ctx);
+    if (config === undefined) return;
 
-    const sessionId = ctx.sessionManager.getSessionId()
-    const sessionName = ctx.sessionManager.getSessionName?.()
-    const nowMs = Date.now()
+    const sessionId = ctx.sessionManager.getSessionId();
+    const sessionName = ctx.sessionManager.getSessionName?.();
+    const nowMs = Date.now();
     const settledState = await this.sessionStateCoordinator.settle({
       config,
       cwd: ctx.cwd,
@@ -307,16 +317,15 @@ export class ProjectTimeRuntime {
       sessionId,
       notifyTimeLogError: (message) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-    })
-    const currentProject = (await resolveGitRepository(ctx.cwd))?.project
+    });
+    const currentProject = (await resolveGitRepository(ctx.cwd))?.project;
     const message =
       command === "summary"
         ? summaryText(settledState, config, sessionName, nowMs)
-        : dashboardText(settledState, config, currentProject, sessionName)
+        : dashboardText(settledState, config, currentProject, sessionName);
 
-    ctx.ui.notify(message, "info")
+    ctx.ui.notify(message, "info");
   }
-
 
   private async showReport(
     tokens: readonly string[],
@@ -324,8 +333,8 @@ export class ProjectTimeRuntime {
     project: string | undefined,
   ): Promise<void> {
     try {
-      const reportArgs = parseReportArgs(tokens)
-      const entries = await this.timeLogRecorder.entries()
+      const reportArgs = parseReportArgs(tokens);
+      const entries = await this.timeLogRecorder.entries();
 
       if (reportArgs.coverage) {
         ctx.ui.notify(
@@ -344,13 +353,13 @@ export class ProjectTimeRuntime {
             2,
           ),
           "info",
-        )
-        return
+        );
+        return;
       }
       if (reportArgs.mode === "all") {
-        const modes: AllocationMode[] = ["raw", "split", "weighted"]
-        const human: Record<string, unknown> = {}
-        const agent: Record<string, unknown> = {}
+        const modes: AllocationMode[] = ["raw", "split", "weighted"];
+        const human: Record<string, unknown> = {};
+        const agent: Record<string, unknown> = {};
 
         for (const mode of modes) {
           human[mode] = buildReport(
@@ -359,14 +368,14 @@ export class ProjectTimeRuntime {
             mode,
             reportArgs.weights,
             project,
-          )
+          );
           agent[mode] = buildReport(
             entries,
             "agent_turn_elapsed",
             mode,
             reportArgs.weights,
             project,
-          )
+          );
         }
 
         ctx.ui.notify(
@@ -379,8 +388,8 @@ export class ProjectTimeRuntime {
             2,
           ),
           "info",
-        )
-        return
+        );
+        return;
       }
 
       const report = buildReport(
@@ -389,15 +398,16 @@ export class ProjectTimeRuntime {
         reportArgs.mode,
         reportArgs.weights,
         project,
-      )
+      );
       ctx.ui.notify(
-        reportArgs.json
-          ? JSON.stringify(report, null, 2)
-          : reportText(report),
+        reportArgs.json ? JSON.stringify(report, null, 2) : reportText(report),
         "info",
-      )
+      );
     } catch (error) {
-      ctx.ui.notify(`Project Time report error: ${errorMessage(error)}`, "error")
+      ctx.ui.notify(
+        `Project Time report error: ${errorMessage(error)}`,
+        "error",
+      );
     }
   }
 
@@ -406,25 +416,34 @@ export class ProjectTimeRuntime {
     project: string | undefined = undefined,
   ): Promise<void> {
     try {
-      const timeLogEntries = await this.timeLogRecorder.entries()
+      const timeLogEntries = await this.timeLogRecorder.entries();
       if (project !== undefined) {
         const humanEntries = timeLogEntries.filter(
-          (entry) => entry.sourceKind === "human_active" && entry.project === project,
-        )
+          (entry) =>
+            entry.sourceKind === "human_active" && entry.project === project,
+        );
         const agentEntries = timeLogEntries.filter(
-          (entry) => entry.sourceKind === "agent_turn_elapsed" && entry.project === project,
-        )
+          (entry) =>
+            entry.sourceKind === "agent_turn_elapsed" &&
+            entry.project === project,
+        );
         ctx.ui.notify(
-          historyText(project, undefined, undefined, humanEntries, agentEntries),
+          historyText(
+            project,
+            undefined,
+            undefined,
+            humanEntries,
+            agentEntries,
+          ),
           "info",
-        )
-        return
+        );
+        return;
       }
 
-      const config = await this.loadConfigForStatus(ctx)
-      if (config === undefined) return
-      const sessionId = ctx.sessionManager.getSessionId()
-      const nowMs = Date.now()
+      const config = await this.loadConfigForStatus(ctx);
+      if (config === undefined) return;
+      const sessionId = ctx.sessionManager.getSessionId();
+      const nowMs = Date.now();
       const settledState = await this.sessionStateCoordinator.settle({
         config,
         cwd: ctx.cwd,
@@ -433,19 +452,19 @@ export class ProjectTimeRuntime {
         sessionId,
         notifyTimeLogError: (message) =>
           ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-      })
-      const gitRepository = await resolveGitRepository(ctx.cwd)
-      const repositoryId = gitRepository?.repositoryId
+      });
+      const gitRepository = await resolveGitRepository(ctx.cwd);
+      const repositoryId = gitRepository?.repositoryId;
       const humanEntries = timeLogEntries.filter(
         (entry) =>
-          entry.sourceKind === "human_active"
-          && entry.repositoryId === repositoryId,
-      )
+          entry.sourceKind === "human_active" &&
+          entry.repositoryId === repositoryId,
+      );
       const agentEntries = timeLogEntries.filter(
         (entry) =>
-          entry.sourceKind === "agent_turn_elapsed"
-          && entry.repositoryId === repositoryId,
-      )
+          entry.sourceKind === "agent_turn_elapsed" &&
+          entry.repositoryId === repositoryId,
+      );
 
       ctx.ui.notify(
         historyText(
@@ -456,9 +475,12 @@ export class ProjectTimeRuntime {
           agentEntries,
         ),
         "info",
-      )
+      );
     } catch (error) {
-      ctx.ui.notify(`Project Time history error: ${errorMessage(error)}`, "error")
+      ctx.ui.notify(
+        `Project Time history error: ${errorMessage(error)}`,
+        "error",
+      );
     }
   }
 
@@ -468,29 +490,34 @@ export class ProjectTimeRuntime {
     view: "dashboard" | "summary",
   ): Promise<void> {
     try {
-      const entries = await this.timeLogRecorder.entries()
-      const projectEntries = entries.filter((entry) => entry.project === project)
+      const entries = await this.timeLogRecorder.entries();
+      const projectEntries = entries.filter(
+        (entry) => entry.project === project,
+      );
       ctx.ui.notify(
         view === "dashboard"
           ? projectDashboardText(project, projectEntries)
           : projectSummaryText(project, projectEntries),
         "info",
-      )
+      );
     } catch (error) {
-      ctx.ui.notify(`Project Time ${view} error: ${errorMessage(error)}`, "error")
+      ctx.ui.notify(
+        `Project Time ${view} error: ${errorMessage(error)}`,
+        "error",
+      );
     }
   }
 
   private async activateSession(ctx: ExtensionContext): Promise<void> {
-    if (!isTopLevelSession(ctx.sessionManager)) return
+    if (!isTopLevelSession(ctx.sessionManager)) return;
 
-    const config = await this.loadConfigForStatus(ctx)
+    const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
-      this.clearActiveStatus(ctx)
-      return
+      this.clearActiveStatus(ctx);
+      return;
     }
 
-    const sessionId = ctx.sessionManager.getSessionId()
+    const sessionId = ctx.sessionManager.getSessionId();
     const settledState = await this.sessionStateCoordinator.settle({
       config,
       cwd: ctx.cwd,
@@ -499,29 +526,29 @@ export class ProjectTimeRuntime {
       sessionId,
       notifyTimeLogError: (message) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-    })
-    this.rememberActiveSession(ctx, sessionId, settledState)
+    });
+    this.rememberActiveSession(ctx, sessionId, settledState);
     if (settledState.activeUntilMs === undefined) {
-      this.clearActiveStatus(ctx)
-      return
+      this.clearActiveStatus(ctx);
+      return;
     }
 
-    updateStatus(ctx, settledState, config)
+    updateStatus(ctx, settledState, config);
   }
 
   private async recordPrompt(
     prompt: string,
     ctx: ExtensionContext,
   ): Promise<void> {
-    if (!isTopLevelSession(ctx.sessionManager)) return
+    if (!isTopLevelSession(ctx.sessionManager)) return;
 
-    const config = await this.loadConfigForStatus(ctx)
+    const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
-      this.clearActiveStatus(ctx)
-      return
+      this.clearActiveStatus(ctx);
+      return;
     }
 
-    const promptAtMs = Date.now()
+    const promptAtMs = Date.now();
     const update = {
       config,
       cwd: ctx.cwd,
@@ -530,50 +557,53 @@ export class ProjectTimeRuntime {
       sessionId: ctx.sessionManager.getSessionId(),
       notifyTimeLogError: (message: string) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-    }
+    };
     const generatedActivity = await this.generateActivity(prompt, ctx).catch(
       (): GeneratedActivity => ({}),
-    )
+    );
     const currentState = this.sessionStateCoordinator.stateFor(
       update.sessionId,
       update.entries,
-    )
-    const workItem = extractWorkItem(prompt) ?? currentState.workItem
+    );
+    const workItem = extractWorkItem(prompt) ?? currentState.workItem;
     const activity =
-      parseGeneratedActivityLabel(generatedActivity.activity)
-      ?? currentState.activity
-      ?? "General Work"
-    const narrative = parseActivityNarrative(generatedActivity.narrative)
+      parseGeneratedActivityLabel(generatedActivity.activity) ??
+      currentState.activity ??
+      "General Work";
+    const narrative = parseActivityNarrative(generatedActivity.narrative);
     const stateChanged =
-      currentState.activity !== activity
-      || currentState.narrative?.text !== narrative?.text
-      || currentState.narrative?.source !== narrative?.source
-      || currentState.workItem?.kind !== workItem?.kind
-      || currentState.workItem?.number !== workItem?.number
-      || currentState.workItem?.repository !== workItem?.repository
+      currentState.activity !== activity ||
+      currentState.narrative?.text !== narrative?.text ||
+      currentState.narrative?.source !== narrative?.source ||
+      currentState.workItem?.kind !== workItem?.kind ||
+      currentState.workItem?.number !== workItem?.number ||
+      currentState.workItem?.repository !== workItem?.repository;
     if (stateChanged) {
-      await this.sessionStateCoordinator.setActivity(update, activity, narrative, workItem)
+      await this.sessionStateCoordinator.setActivity(
+        update,
+        activity,
+        narrative,
+        workItem,
+      );
     }
-    const nextState = await this.sessionStateCoordinator.recordPrompt(update)
-    updateStatus(ctx, nextState, config)
+    const nextState = await this.sessionStateCoordinator.recordPrompt(update);
+    updateStatus(ctx, nextState, config);
   }
 
   private async settleCurrentTurn(ctx: ExtensionContext): Promise<void> {
-    if (!isTopLevelSession(ctx.sessionManager)) return
+    if (!isTopLevelSession(ctx.sessionManager)) return;
 
-    const sessionId = ctx.sessionManager.getSessionId()
-    const config = await this.loadConfigForStatus(ctx)
+    const sessionId = ctx.sessionManager.getSessionId();
+    const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
-      this.clearActiveStatus(ctx)
-      return
+      this.clearActiveStatus(ctx);
+      return;
     }
 
-    const nowMs = Date.now()
-    this.timeLogRecorder.recordAgentTurnEnd(
-      sessionId,
-      nowMs,
-      (message) => ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-    )
+    const nowMs = Date.now();
+    this.timeLogRecorder.recordAgentTurnEnd(sessionId, nowMs, (message) =>
+      ctx.ui.notify(`Project Time log error: ${message}`, "error"),
+    );
     const settledState = await this.sessionStateCoordinator.settle({
       config,
       cwd: ctx.cwd,
@@ -582,42 +612,41 @@ export class ProjectTimeRuntime {
       sessionId,
       notifyTimeLogError: (message) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-    })
-    this.rememberActiveSession(ctx, sessionId, settledState)
-    updateStatus(ctx, settledState, config)
+    });
+    this.rememberActiveSession(ctx, sessionId, settledState);
+    updateStatus(ctx, settledState, config);
   }
 
   private async shutdownSession(ctx: ExtensionContext): Promise<void> {
-    const sessionId = ctx.sessionManager.getSessionId()
+    const sessionId = ctx.sessionManager.getSessionId();
 
     if (isTopLevelSession(ctx.sessionManager)) {
-      await this.settleCurrentTurn(ctx)
+      await this.settleCurrentTurn(ctx);
     }
 
-    await this.sessionStateCoordinator.flush(
-      sessionId,
-      (message) => ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-    )
+    await this.sessionStateCoordinator.flush(sessionId, (message) =>
+      ctx.ui.notify(`Project Time log error: ${message}`, "error"),
+    );
 
-    if (this.runtimeState.activeSessionId !== sessionId) return
+    if (this.runtimeState.activeSessionId !== sessionId) return;
 
-    this.clearActiveStatus(ctx)
+    this.clearActiveStatus(ctx);
   }
 
   private async refreshActiveStatus(): Promise<number> {
     if (
-      this.runtimeState.activeContext === undefined
-      || this.runtimeState.activeSessionId === undefined
+      this.runtimeState.activeContext === undefined ||
+      this.runtimeState.activeSessionId === undefined
     ) {
-      return ProjectTimeRuntime.defaultRefreshIntervalMs
+      return ProjectTimeRuntime.defaultRefreshIntervalMs;
     }
 
-    const activeContext = this.runtimeState.activeContext
-    const activeSessionId = this.runtimeState.activeSessionId
-    const config = await this.loadConfigForStatus(activeContext)
+    const activeContext = this.runtimeState.activeContext;
+    const activeSessionId = this.runtimeState.activeSessionId;
+    const config = await this.loadConfigForStatus(activeContext);
     if (config === undefined) {
-      this.clearActiveStatus(activeContext)
-      return ProjectTimeRuntime.defaultRefreshIntervalMs
+      this.clearActiveStatus(activeContext);
+      return ProjectTimeRuntime.defaultRefreshIntervalMs;
     }
 
     const settledState = await this.sessionStateCoordinator.settle({
@@ -628,52 +657,55 @@ export class ProjectTimeRuntime {
       sessionId: activeSessionId,
       notifyTimeLogError: (message) =>
         activeContext.ui.notify(`Project Time log error: ${message}`, "error"),
-    })
-    this.rememberActiveSession(activeContext, activeSessionId, settledState)
-    updateStatus(activeContext, settledState, config)
+    });
+    this.rememberActiveSession(activeContext, activeSessionId, settledState);
+    updateStatus(activeContext, settledState, config);
 
-    return ProjectTimeRuntime.refreshIntervalMs(config)
+    return ProjectTimeRuntime.refreshIntervalMs(config);
   }
 
   private scheduleNextRefresh(
     waitMs = ProjectTimeRuntime.defaultRefreshIntervalMs,
   ): void {
-    clearTimeout(this.runtimeState.refreshTimer)
+    clearTimeout(this.runtimeState.refreshTimer);
 
     const timer = setTimeout(async () => {
-      this.runtimeState.refreshTimer = undefined
+      this.runtimeState.refreshTimer = undefined;
       try {
-        const nextWaitMs = await this.refreshActiveStatus()
-        this.scheduleNextRefresh(nextWaitMs)
+        const nextWaitMs = await this.refreshActiveStatus();
+        this.scheduleNextRefresh(nextWaitMs);
       } catch (error) {
-        this.reportUnexpectedRefreshError(error)
-        this.scheduleNextRefresh()
+        this.reportUnexpectedRefreshError(error);
+        this.scheduleNextRefresh();
       }
-    }, waitMs)
+    }, waitMs);
 
-    timer.unref?.()
-    this.runtimeState.refreshTimer = timer
+    timer.unref?.();
+    this.runtimeState.refreshTimer = timer;
   }
 
   private reportUnexpectedRefreshError(error: unknown): void {
-    const activeContext = this.runtimeState.activeContext
-    if (activeContext === undefined) return
+    const activeContext = this.runtimeState.activeContext;
+    if (activeContext === undefined) return;
 
     activeContext.ui.notify(
       `Project Time refresh error: ${errorMessage(error)}`,
       "error",
-    )
-    this.clearActiveStatus(activeContext)
+    );
+    this.clearActiveStatus(activeContext);
   }
 
   private async loadConfigForStatus(
     ctx: ExtensionContext,
   ): Promise<ProjectTimeConfig | undefined> {
     try {
-      return await this.loadConfig(ctx.cwd)
+      return await this.loadConfig(ctx.cwd);
     } catch (error) {
-      ctx.ui.notify(`Project Time config error: ${errorMessage(error)}`, "error")
-      return undefined
+      ctx.ui.notify(
+        `Project Time config error: ${errorMessage(error)}`,
+        "error",
+      );
+      return undefined;
     }
   }
 
@@ -683,196 +715,218 @@ export class ProjectTimeRuntime {
     state: ProjectTimeState,
   ): void {
     if (state.activeUntilMs === undefined) {
-      this.runtimeState.activeContext = undefined
-      this.runtimeState.activeSessionId = undefined
-      return
+      this.runtimeState.activeContext = undefined;
+      this.runtimeState.activeSessionId = undefined;
+      return;
     }
 
-    this.runtimeState.activeContext = ctx
-    this.runtimeState.activeSessionId = sessionId
+    this.runtimeState.activeContext = ctx;
+    this.runtimeState.activeSessionId = sessionId;
   }
 
   private clearActiveStatus(ctx: ExtensionContext): void {
-    clearStatus(ctx)
-    this.runtimeState.activeContext = undefined
-    this.runtimeState.activeSessionId = undefined
+    clearStatus(ctx);
+    this.runtimeState.activeContext = undefined;
+    this.runtimeState.activeSessionId = undefined;
   }
 }
 
 type ProjectTimeCommand = {
-  command: string
-  project?: string
-  tokens: string[]
-}
+  command: string;
+  project?: string;
+  tokens: string[];
+};
 
 function parseProjectTimeCommand(args: string): ProjectTimeCommand {
-  const tokens = parseCommandTokens(args)
+  const tokens = parseCommandTokens(args);
   const projectIndexes = tokens
     .map((token, index) => (token === "--project" ? index : -1))
-    .filter((index) => index !== -1)
+    .filter((index) => index !== -1);
   if (projectIndexes.length === 0) {
-    return { command: tokens.join(" "), tokens }
+    return { command: tokens.join(" "), tokens };
   }
 
-  const projectIndex = projectIndexes[0]
+  const projectIndex = projectIndexes[0];
   if (projectIndexes.length !== 1 || projectIndex !== tokens.length - 2) {
-    throw new Error("Use --project NAME once at the end of the command.")
+    throw new Error("Use --project NAME once at the end of the command.");
   }
 
-  const project = tokens.at(-1)
+  const project = tokens.at(-1);
   if (project === undefined || project.trim() === "") {
-    throw new Error("Project names must not be blank.")
+    throw new Error("Project names must not be blank.");
   }
 
-  const commandTokens = tokens.slice(0, -2)
-  return { command: commandTokens.join(" "), project, tokens: commandTokens }
+  const commandTokens = tokens.slice(0, -2);
+  return { command: commandTokens.join(" "), project, tokens: commandTokens };
 }
 
 function parseCommandTokens(args: string): string[] {
-  const tokens: string[] = []
-  let token = ""
-  let quote: "'" | "\"" | undefined
-  let escaped = false
+  const tokens: string[] = [];
+  let token = "";
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
 
   for (const character of args.trim()) {
     if (escaped) {
-      token += character
-      escaped = false
+      token += character;
+      escaped = false;
     } else if (character === "\\" && quote !== "'") {
-      escaped = true
+      escaped = true;
     } else if (quote !== undefined) {
-      if (character === quote) quote = undefined
-      else token += character
-    } else if (character === "'" || character === "\"") {
-      quote = character
+      if (character === quote) quote = undefined;
+      else token += character;
+    } else if (character === "'" || character === '"') {
+      quote = character;
     } else if (/\s/.test(character)) {
       if (token !== "") {
-        tokens.push(token)
-        token = ""
+        tokens.push(token);
+        token = "";
       }
     } else {
-      token += character
+      token += character;
     }
   }
 
-  if (quote !== undefined || escaped) throw new Error("Use closed quoted arguments.")
-  if (token !== "") tokens.push(token)
-  return tokens
+  if (quote !== undefined || escaped)
+    throw new Error("Use closed quoted arguments.");
+  if (token !== "") tokens.push(token);
+  return tokens;
 }
 
-
 function parseReportArgs(tokens: readonly string[]): ReportArgs {
-  if (tokens[0] !== "report") throw new Error("Expected a report command.")
+  if (tokens[0] !== "report") throw new Error("Expected a report command.");
 
-  const rest = tokens.slice(1)
-  const json = rest[0] === "json"
-  if (json) rest.shift()
+  const rest = tokens.slice(1);
+  const json = rest[0] === "json";
+  if (json) rest.shift();
 
-  let sourceKind: SourceKind = "human_active"
-  let sourceWasSpecified = false
+  let sourceKind: SourceKind = "human_active";
+  let sourceWasSpecified = false;
   if (rest[0] === "agent") {
-    sourceKind = "agent_turn_elapsed"
-    sourceWasSpecified = true
-    rest.shift()
+    sourceKind = "agent_turn_elapsed";
+    sourceWasSpecified = true;
+    rest.shift();
   } else if (rest[0] === "human") {
-    sourceWasSpecified = true
-    rest.shift()
+    sourceWasSpecified = true;
+    rest.shift();
   }
 
-  const coverage = rest[0] === "coverage"
-  if (coverage) rest.shift()
+  const coverage = rest[0] === "coverage";
+  if (coverage) rest.shift();
 
-  let coverageDate: string | undefined
-  let coverageRange: CoverageRange | undefined
+  let coverageDate: string | undefined;
+  let coverageRange: CoverageRange | undefined;
   if (coverage) {
     if (rest[0] !== "--date" || rest[1] === undefined) {
-      throw new Error("Use --date YYYY-MM-DD with report json coverage.")
+      throw new Error("Use --date YYYY-MM-DD with report json coverage.");
     }
 
-    coverageDate = rest[1]
-    coverageRange = parseLocalDateRange(coverageDate)
-    rest.splice(0, 2)
+    coverageDate = rest[1];
+    coverageRange = parseLocalDateRange(coverageDate);
+    rest.splice(0, 2);
   }
 
-  const modeToken = rest[0]
-  let mode: AllocationMode | "all" = json ? "all" : "raw"
+  const modeToken = rest[0];
+  let mode: AllocationMode | "all" = json ? "all" : "raw";
   if (
-    modeToken === "raw"
-    || modeToken === "split"
-    || modeToken === "weighted"
-    || modeToken === "all"
+    modeToken === "raw" ||
+    modeToken === "split" ||
+    modeToken === "weighted" ||
+    modeToken === "all"
   ) {
-    mode = modeToken
-    rest.shift()
+    mode = modeToken;
+    rest.shift();
   } else if (modeToken !== undefined) {
-    throw new Error(`Unknown report mode: ${modeToken}`)
+    throw new Error(`Unknown report mode: ${modeToken}`);
   }
 
   if (coverage && !json) {
-    throw new Error("Use report json coverage for a coverage report.")
+    throw new Error("Use report json coverage for a coverage report.");
   }
 
   if (coverage && sourceWasSpecified) {
-    throw new Error("Coverage reports use human_active evidence.")
+    throw new Error("Coverage reports use human_active evidence.");
   }
 
   if (coverage && mode !== "all") {
-    throw new Error("Coverage reports do not accept an allocation mode.")
+    throw new Error("Coverage reports do not accept an allocation mode.");
   }
 
   if (mode === "all" && !json) {
-    throw new Error("Use report json for an all-modes report.")
+    throw new Error("Use report json for an all-modes report.");
   }
 
   if (mode === "all" && sourceWasSpecified) {
-    throw new Error("All-modes reports cannot select a source.")
+    throw new Error("All-modes reports cannot select a source.");
   }
 
-  let weights: Record<string, number> | undefined
+  let weights: Record<string, number> | undefined;
   if (mode === "weighted") {
-    const weightsJson = rest.join(" ").trim()
+    const weightsJson = rest.join(" ").trim();
     if (weightsJson.length > 0) {
       try {
-        const parsed = JSON.parse(weightsJson)
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          throw new Error("Weights must be a JSON object.")
+        const parsed = JSON.parse(weightsJson);
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
+          throw new Error("Weights must be a JSON object.");
         }
-        weights = {}
+        weights = {};
         for (const [key, value] of Object.entries(parsed)) {
-          if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-            throw new Error(`Weight for ${key} must be a positive finite number.`)
+          if (
+            typeof value !== "number" ||
+            !Number.isFinite(value) ||
+            value <= 0
+          ) {
+            throw new Error(
+              `Weight for ${key} must be a positive finite number.`,
+            );
           }
-          weights[key] = value
+          weights[key] = value;
         }
       } catch {
-        throw new Error("Weights must be valid JSON object mapping repository to weight.")
+        throw new Error(
+          "Weights must be valid JSON object mapping repository to weight.",
+        );
       }
     }
   } else if (rest.length > 0) {
-    throw new Error("Only weighted reports accept repository weights.")
+    throw new Error("Only weighted reports accept repository weights.");
   }
 
-  return { sourceKind, mode, json, coverage, coverageDate, coverageRange, weights }
+  return {
+    sourceKind,
+    mode,
+    json,
+    coverage,
+    coverageDate,
+    coverageRange,
+    weights,
+  };
 }
 
 function parseLocalDateRange(value: string): CoverageRange {
-  const match = /^(?<year>[1-9]\d{3})-(?<month>\d{2})-(?<day>\d{2})$/.exec(value)
+  const match = /^(?<year>[1-9]\d{3})-(?<month>\d{2})-(?<day>\d{2})$/.exec(
+    value,
+  );
   if (match?.groups === undefined) {
-    throw new Error("Coverage dates use YYYY-MM-DD.")
+    throw new Error("Coverage dates use YYYY-MM-DD.");
   }
 
-  const year = Number(match.groups.year)
-  const month = Number(match.groups.month)
-  const day = Number(match.groups.day)
-  const start = new Date(year, month - 1, day)
+  const year = Number(match.groups.year);
+  const month = Number(match.groups.month);
+  const day = Number(match.groups.day);
+  const start = new Date(year, month - 1, day);
   if (
-    start.getFullYear() !== year
-    || start.getMonth() !== month - 1
-    || start.getDate() !== day
+    start.getFullYear() !== year ||
+    start.getMonth() !== month - 1 ||
+    start.getDate() !== day
   ) {
-    throw new Error("Coverage dates must be calendar dates.")
+    throw new Error("Coverage dates must be calendar dates.");
   }
 
-  const end = new Date(year, month - 1, day + 1)
-  return { startAtMs: start.getTime(), endAtMs: end.getTime() }
+  const end = new Date(year, month - 1, day + 1);
+  return { startAtMs: start.getTime(), endAtMs: end.getTime() };
 }

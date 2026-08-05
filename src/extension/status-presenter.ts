@@ -1,30 +1,32 @@
-import type { ProjectTimeConfig } from "@/config/project-time-config.js"
-import type { ExtensionContext } from "@/extension/types.js"
-import type { ProjectTimeState } from "@/time-log/domain/state.js"
-import type { TimeLogEntry } from "@/time-log/domain/model.js"
-import type { Report } from "@/time-log/domain/report.js"
+import type { ProjectTimeConfig } from "@/config/project-time-config.js";
+import type { ExtensionContext } from "@/extension/types.js";
+import type { ProjectTimeState } from "@/time-log/domain/state.js";
+import type { TimeLogEntry } from "@/time-log/domain/model.js";
+import type { Report } from "@/time-log/domain/report.js";
 
-export const STATUS_KEY = "project-time"
+export const STATUS_KEY = "project-time";
 
 export function updateStatus(
   ctx: ExtensionContext,
   state: ProjectTimeState,
   config: ProjectTimeConfig,
 ): void {
-  ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", statusText(state, config)))
+  ctx.ui.setStatus(
+    STATUS_KEY,
+    ctx.ui.theme.fg("dim", statusText(state, config)),
+  );
 }
 
 export function clearStatus(ctx: ExtensionContext): void {
-  ctx.ui.setStatus(STATUS_KEY, undefined)
+  ctx.ui.setStatus(STATUS_KEY, undefined);
 }
 
 export function statusText(
   state: ProjectTimeState,
   config: ProjectTimeConfig,
 ): string {
-  return `${durationText(state.activeMilliseconds)} (${config.label})`
+  return `${durationText(state.activeMilliseconds)} (${config.label})`;
 }
-
 
 export function dashboardText(
   state: ProjectTimeState,
@@ -37,20 +39,22 @@ export function dashboardText(
     `Session: ${sessionName ?? "unnamed"}`,
     `Activity: ${activityText(state.activity)}`,
     "/project-time summary | history | report",
-  ].join("\n")
+  ].join("\n");
 }
 
 export function projectDashboardText(
   project: string,
   entries: readonly TimeLogEntry[],
 ): string {
-  const latest = [...entries].sort((left, right) => right.endAtMs - left.endAtMs)[0]
+  const latest = [...entries].sort(
+    (left, right) => right.endAtMs - left.endAtMs,
+  )[0];
 
   return [
     `Project: ${project} · Ledger view`,
     `Last recorded: ${latest === undefined ? "none" : `${timestampText(latest.endAtMs)} — ${activityText(latest.activity)}`}`,
     `/project-time summary --project ${project} | history --project ${project} | report --project ${project}`,
-  ].join("\n")
+  ].join("\n");
 }
 
 export function historyText(
@@ -63,17 +67,17 @@ export function historyText(
   const humanMilliseconds = humanEntries.reduce(
     (total, entry) => total + entry.endAtMs - entry.startAtMs,
     0,
-  )
+  );
   const agentMilliseconds = agentEntries.reduce(
     (total, entry) => total + entry.endAtMs - entry.startAtMs,
     0,
-  )
-  const recentHuman = recentEntries(humanEntries)
-  const recentAgent = recentEntries(agentEntries)
+  );
+  const recentHuman = recentEntries(humanEntries);
+  const recentAgent = recentEntries(agentEntries);
   const currentActive =
     state === undefined || config === undefined
       ? "Current active: unavailable outside the active session"
-      : `Current active: ${statusText(state, config)}`
+      : `Current active: ${statusText(state, config)}`;
 
   return [
     `Project: ${project ?? "unavailable"}`,
@@ -82,7 +86,7 @@ export function historyText(
     `Agent elapsed: ${agentEntries.length} intervals, ${durationText(agentMilliseconds)}`,
     `Recent human active:${recentHuman.length === 0 ? " none" : `\n${recentHuman.join("\n")}`}`,
     `Recent agent elapsed:${recentAgent.length === 0 ? " none" : `\n${recentAgent.join("\n")}`}`,
-  ].join("\n")
+  ].join("\n");
 }
 
 export function summaryText(
@@ -91,14 +95,14 @@ export function summaryText(
   sessionName: string | undefined,
   nowMs: number,
 ): string {
-  const lastPromptAtMs = state.lastPromptAtMs
-  let lastPrompt = "Last prompt: unavailable"
+  const lastPromptAtMs = state.lastPromptAtMs;
+  let lastPrompt = "Last prompt: unavailable";
 
   if (lastPromptAtMs !== undefined) {
-    const lastPromptAt = new Date(lastPromptAtMs)
+    const lastPromptAt = new Date(lastPromptAtMs);
 
     if (!Number.isNaN(lastPromptAt.getTime())) {
-      lastPrompt = `Last prompt: ${durationText(nowMs - lastPromptAtMs)} ago (${lastPromptAt.toISOString()})`
+      lastPrompt = `Last prompt: ${durationText(nowMs - lastPromptAtMs)} ago (${lastPromptAt.toISOString()})`;
     }
   }
 
@@ -108,7 +112,7 @@ export function summaryText(
     `Active time: ${durationText(state.activeMilliseconds)}`,
     `Prompt count: ${state.promptCount}`,
     lastPrompt,
-  ].join("\n")
+  ].join("\n");
 }
 
 export function projectSummaryText(
@@ -117,76 +121,82 @@ export function projectSummaryText(
 ): string {
   const humanMilliseconds = entries
     .filter((entry) => entry.sourceKind === "human_active")
-    .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0)
+    .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0);
   const agentMilliseconds = entries
     .filter((entry) => entry.sourceKind === "agent_turn_elapsed")
-    .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0)
+    .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0);
 
   return [
     `Project: ${project} · Ledger summary`,
     `Human active: ${durationText(humanMilliseconds)}`,
     `Agent elapsed: ${durationText(agentMilliseconds)}`,
     `Recorded intervals: ${entries.length}`,
-  ].join("\n")
+  ].join("\n");
 }
 
 export function reportText(report: Report): string {
   const entries = [...report.entries].sort(
     (left, right) => right.durationMs - left.durationMs,
-  )
+  );
 
   return [
     `${sourceKindText(report.sourceKind)} — ${allocationText(report.mode)}`,
     `OMP-active: ${durationText(report.ompActiveUnionMs)}`,
     `Projects:${entries.length === 0 ? " none" : `\n${entries.map((entry) => `- ${entry.project}: ${durationText(entry.durationMs)}`).join("\n")}`}`,
-  ].join("\n")
+  ].join("\n");
 }
-
-
 
 function recentEntries(entries: readonly TimeLogEntry[]): string[] {
   return [...entries]
     .sort((left, right) => right.endAtMs - left.endAtMs)
     .slice(0, 3)
     .map((entry) => {
-      const workItem = entry.workItem === undefined
-        ? ""
-        : ` — ${entry.workItem.repository === undefined ? "" : `${entry.workItem.repository} `}${entry.workItem.kind === "issue" ? "Issue" : "PR"} #${entry.workItem.number}`
-      const summary = `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)} — ${activityText(entry.activity)}${workItem}`
+      const workItem =
+        entry.workItem === undefined
+          ? ""
+          : ` — ${entry.workItem.repository === undefined ? "" : `${entry.workItem.repository} `}${entry.workItem.kind === "issue" ? "Issue" : "PR"} #${entry.workItem.number}`;
+      const summary = `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)} — ${activityText(entry.activity)}${workItem}`;
       return entry.narrative === undefined
         ? summary
-        : `${summary}\n${entry.narrative.text.split("\n").map((line) => `  ${line}`).join("\n")}`
-    })
+        : `${summary}\n${entry.narrative.text
+            .split("\n")
+            .map((line) => `  ${line}`)
+            .join("\n")}`;
+    });
 }
 
 function timestampText(milliseconds: number): string {
-  const timestamp = new Date(milliseconds)
-  return Number.isNaN(timestamp.getTime()) ? "unknown time" : timestamp.toISOString()
+  const timestamp = new Date(milliseconds);
+  return Number.isNaN(timestamp.getTime())
+    ? "unknown time"
+    : timestamp.toISOString();
 }
 
 function activityText(activity: string | undefined): string {
-  return activity ?? "unlabelled"
+  return activity ?? "unlabelled";
 }
 
 function sourceKindText(sourceKind: Report["sourceKind"]): string {
-  return sourceKind === "human_active" ? "Human collaboration" : "Agent execution"
+  return sourceKind === "human_active"
+    ? "Human collaboration"
+    : "Agent execution";
 }
 
 function allocationText(mode: Report["mode"]): string {
-  if (mode === "raw") return "full repository time"
-  if (mode === "split") return "equal split"
+  if (mode === "raw") return "full repository time";
+  if (mode === "split") return "equal split";
 
-  return "weighted split"
+  return "weighted split";
 }
 
 function durationText(milliseconds: number): string {
-  const totalSeconds = Math.floor(Math.max(0, milliseconds) / 1_000)
-  const hours = Math.floor(totalSeconds / 3_600)
-  const minutes = Math.floor((totalSeconds % 3_600) / 60)
-  const seconds = totalSeconds % 60
+  const totalSeconds = Math.floor(Math.max(0, milliseconds) / 1_000);
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
 
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
-  if (minutes > 0) return `${minutes}m ${seconds}s`
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
 
-  return `${seconds}s`
+  return `${seconds}s`;
 }
