@@ -63,6 +63,14 @@ export function resolveWorkItemAssociation(
         }
   }
   if (workItems.length !== 1) return { workItemAttribution: "ambiguous" }
+  if (!Number.isSafeInteger(workItems[0]?.number) || workItems[0].number <= 0) {
+    return currentWorkItem === undefined
+      ? { workItemAttribution: "unassigned" }
+      : {
+          workItem: currentWorkItem,
+          workItemAttribution: "carried_forward",
+        }
+  }
 
   return {
     workItem: { ...workItems[0], source: "user_provided" },

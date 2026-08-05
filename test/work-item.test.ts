@@ -35,6 +35,10 @@ test("resolves explicit, carried-forward, unassigned, and ambiguous work items",
     workItemAttribution: "unassigned",
   })
   assert.deepEqual(
+    resolveWorkItemAssociation("Review PR #999999999999999999999."),
+    { workItemAttribution: "unassigned" },
+  )
+  assert.deepEqual(
     resolveWorkItemAssociation("Review PR #84 and PR #85.", explicit),
     { workItemAttribution: "ambiguous" },
   )
