@@ -19,6 +19,7 @@ test("shows concise reports and generates automatic activity labels", async () =
   const persistedActivities: unknown[] = [];
   const persistedNarratives: unknown[] = [];
   const persistedWorkItems: unknown[] = [];
+  const persistedWorkItemAttributions: unknown[] = [];
   const generatedPrompts: string[] = [];
   const coverageDate = "2026-01-01";
   const coverageStart = new Date(2026, 0, 1).getTime();
@@ -51,10 +52,14 @@ test("shows concise reports and generates automatic activity labels", async () =
           "narrative" in data ? data.narrative : undefined,
         );
         persistedWorkItems.push("workItem" in data ? data.workItem : undefined);
+        persistedWorkItemAttributions.push(
+          "workItemAttribution" in data ? data.workItemAttribution : undefined,
+        );
       } else {
         persistedActivities.push(undefined);
         persistedNarratives.push(undefined);
         persistedWorkItems.push(undefined);
+        persistedWorkItemAttributions.push(undefined);
       }
     },
   };
@@ -147,7 +152,20 @@ test("shows concise reports and generates automatic activity labels", async () =
             sourceKind: "human_active",
             project: "wrap",
             repositoryId: "wrap-repository",
+            repositoryIdentity: "github.com/acme/wrap",
+            sessionId: "session-wrap",
             activity: "Code Review",
+            narrative: {
+              text: "Review the evidence-export contract.",
+              source: "generated",
+            },
+            workItem: {
+              kind: "issue",
+              number: 117,
+              repository: "github.com/acme/wrap",
+              source: "user_provided",
+            },
+            workItemAttribution: "explicit_prompt",
             startAtMs: coverageStart,
             endAtMs: coverageStart + 60_000,
             createdAtMs: coverageStart + 60_000,
@@ -157,7 +175,16 @@ test("shows concise reports and generates automatic activity labels", async () =
             sourceKind: "agent_turn_elapsed",
             project: "wrap",
             repositoryId: "wrap-repository",
+            repositoryIdentity: "github.com/acme/wrap",
+            sessionId: "session-wrap",
             activity: "Tests",
+            workItem: {
+              kind: "issue",
+              number: 117,
+              repository: "github.com/acme/wrap",
+              source: "user_provided",
+            },
+            workItemAttribution: "carried_forward",
             startAtMs: coverageStart + 60_000,
             endAtMs: coverageStart + 120_000,
             createdAtMs: coverageStart + 120_000,
@@ -259,6 +286,55 @@ test("shows concise reports and generates automatic activity labels", async () =
       "agent",
     ]);
 
+    await handler("report json entries --project wrap", context);
+    const evidenceSnapshot = JSON.parse(notices.at(-1)?.message ?? "");
+    assert.equal(evidenceSnapshot.format, "omp-project-time/evidence");
+    assert.equal(evidenceSnapshot.version, 1);
+    assert.deepEqual(evidenceSnapshot.entries, [
+      {
+        id: "wrap-human",
+        sourceKind: "human_active",
+        project: "wrap",
+        repositoryId: "wrap-repository",
+        repositoryIdentity: "github.com/acme/wrap",
+        sessionId: "session-wrap",
+        activity: "Code Review",
+        narrative: {
+          text: "Review the evidence-export contract.",
+          source: "generated",
+        },
+        workItem: {
+          kind: "issue",
+          number: 117,
+          repository: "github.com/acme/wrap",
+          source: "user_provided",
+        },
+        workItemAttribution: "explicit_prompt",
+        startAtMs: coverageStart,
+        endAtMs: coverageStart + 60_000,
+        createdAtMs: coverageStart + 60_000,
+      },
+      {
+        id: "wrap-agent",
+        sourceKind: "agent_turn_elapsed",
+        project: "wrap",
+        repositoryId: "wrap-repository",
+        repositoryIdentity: "github.com/acme/wrap",
+        sessionId: "session-wrap",
+        activity: "Tests",
+        workItem: {
+          kind: "issue",
+          number: 117,
+          repository: "github.com/acme/wrap",
+          source: "user_provided",
+        },
+        workItemAttribution: "carried_forward",
+        startAtMs: coverageStart + 60_000,
+        endAtMs: coverageStart + 120_000,
+        createdAtMs: coverageStart + 120_000,
+      },
+    ]);
+
     await handler(
       `report json coverage --date ${coverageDate} --project wrap`,
       context,
@@ -298,6 +374,7 @@ test("shows concise reports and generates automatic activity labels", async () =
     await handlers.beforeAgentStart({ prompt: "initial failure" }, context);
     assert.deepEqual(generatedPrompts, ["initial failure"]);
     assert.equal(persistedActivities.at(-1), "General Work");
+    assert.equal(persistedWorkItemAttributions.at(-1), "unassigned");
 
     await handlers.beforeAgentStart(
       {
@@ -315,6 +392,7 @@ test("shows concise reports and generates automatic activity labels", async () =
       text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
       source: "generated",
     });
+    assert.equal(persistedWorkItemAttributions.at(-1), "explicit_prompt");
 
     await handlers.beforeAgentStart(
       { prompt: "Continue the review without a reference." },
@@ -325,6 +403,7 @@ test("shows concise reports and generates automatic activity labels", async () =
       number: 84,
       source: "user_provided",
     });
+    assert.equal(persistedWorkItemAttributions.at(-1), "carried_forward");
 
     await handlers.beforeAgentStart({ prompt: "Review PR #85." }, context);
     assert.deepEqual(persistedWorkItems.at(-1), {
@@ -332,20 +411,19 @@ test("shows concise reports and generates automatic activity labels", async () =
       number: 85,
       source: "user_provided",
     });
+    assert.equal(persistedWorkItemAttributions.at(-1), "explicit_prompt");
 
     await handlers.beforeAgentStart(
       { prompt: "Review PR #84 and PR #85." },
       context,
     );
-    assert.deepEqual(persistedWorkItems.at(-1), {
-      kind: "pull_request",
-      number: 85,
-      source: "user_provided",
-    });
+    assert.equal(persistedWorkItems.at(-1), undefined);
+    assert.equal(persistedWorkItemAttributions.at(-1), "ambiguous");
     const persistedStateCount = persistedActivities.length;
     await handlers.beforeAgentStart({ prompt: "same activity" }, context);
-    assert.equal(persistedActivities.length, persistedStateCount + 1);
+    assert.equal(persistedActivities.length, persistedStateCount + 2);
     assert.equal(persistedActivities.at(-1), "Code Review");
+    assert.equal(persistedWorkItemAttributions.at(-1), "unassigned");
 
     await handlers.beforeAgentStart({ prompt: "invalid output" }, context);
     assert.equal(persistedActivities.at(-1), "Code Review");

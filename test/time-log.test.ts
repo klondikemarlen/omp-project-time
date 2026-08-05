@@ -54,7 +54,14 @@ function assertEntries(
   }
 
   assert.deepEqual(
-    entries.map(({ id: _id, createdAtMs: _createdAtMs, ...entry }) => entry),
+    entries.map(
+      ({
+        id: _id,
+        createdAtMs: _createdAtMs,
+        workItemAttribution: _workItemAttribution,
+        ...entry
+      }) => entry,
+    ),
     expected,
   );
 }
@@ -195,7 +202,8 @@ test("reads legacy entries, typed activity narratives, and work items", () => {
     createdAtMs: start,
   };
 
-  assert.deepEqual(parseTimeLogEntry(entry), entry);
+  const unassignedEntry = { ...entry, workItemAttribution: "unassigned" };
+  assert.deepEqual(parseTimeLogEntry(entry), unassignedEntry);
   assert.deepEqual(
     parseTimeLogEntry({
       ...entry,
@@ -205,7 +213,7 @@ test("reads legacy entries, typed activity narratives, and work items", () => {
       },
     }),
     {
-      ...entry,
+      ...unassignedEntry,
       narrative: {
         text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
         source: "generated",
@@ -221,7 +229,7 @@ test("reads legacy entries, typed activity narratives, and work items", () => {
       },
     }),
     {
-      ...entry,
+      ...unassignedEntry,
       narrative: {
         text: "Prepared release notes for the activity report.",
         source: "user_provided",
@@ -237,6 +245,7 @@ test("reads legacy entries, typed activity narratives, and work items", () => {
   assert.deepEqual(parseTimeLogEntry({ ...entry, workItem }), {
     ...entry,
     workItem,
+    workItemAttribution: "legacy_unknown",
   });
   assert.equal(
     parseTimeLogEntry({
@@ -280,7 +289,8 @@ test("limits automatic human intervals to the settled attention duration", () =>
     repositoryId: "repository-a",
     repositoryIdentity: "github.com/acme/project-a",
     sessionId: "session-a",
-    sourceKey: "session-a:repository-a:0:0",
+    workItemAttribution: "unassigned",
+    sourceKey: "session-a:repository-a:0:0:unassigned:::",
     startAtMs: 4 * minute,
     endAtMs: 5 * minute,
   });
@@ -323,7 +333,8 @@ test("starts an activity-labelled human interval at its label change", () => {
       text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
       source: "generated",
     },
-    sourceKey: "session-a:repository-a:0:120000",
+    workItemAttribution: "unassigned",
+    sourceKey: "session-a:repository-a:0:120000:unassigned:::",
     startAtMs: 2 * minute,
     endAtMs: 4 * minute,
   });
@@ -379,6 +390,82 @@ test("keeps an unlabelled, labelled, then cleared activity separate", () => {
       { startAtMs: 0, endAtMs: 2 * minute },
       { activity: "Code Review", startAtMs: 2 * minute, endAtMs: 3 * minute },
       { startAtMs: 3 * minute, endAtMs: 4 * minute },
+    ],
+  );
+});
+
+test("segments human evidence when work-item provenance changes", () => {
+  const workItem = {
+    kind: "issue" as const,
+    number: 117,
+    source: "user_provided" as const,
+  };
+  const options = {
+    repository: { project: "Project A", repositoryId: "repository-a" },
+    sessionId: "session-a",
+    sourceStartedAtMs: 0,
+    activity: "Code Review",
+    workItem,
+  };
+  const entries: TimeLogEntry[] = [];
+  const explicit = createAutomaticTimeLogEntry({
+    ...options,
+    nowMs: minute,
+    workItemAttribution: "explicit_prompt",
+    activityStartedAtMs: 0,
+    stateBeforeSettlement: {
+      promptCount: 1,
+      activeMilliseconds: 0,
+      activeStartAtMs: 0,
+      activeUntilMs: 5 * minute,
+    },
+    settledState: {
+      promptCount: 1,
+      activeMilliseconds: minute,
+      activeStartAtMs: 0,
+      activeUntilMs: 5 * minute,
+    },
+  });
+  const carriedForward = createAutomaticTimeLogEntry({
+    ...options,
+    nowMs: 2 * minute,
+    workItemAttribution: "carried_forward",
+    activityStartedAtMs: minute,
+    stateBeforeSettlement: {
+      promptCount: 2,
+      activeMilliseconds: minute,
+      activeStartAtMs: 0,
+      activeUntilMs: 5 * minute,
+    },
+    settledState: {
+      promptCount: 2,
+      activeMilliseconds: 2 * minute,
+      activeStartAtMs: 0,
+      activeUntilMs: 5 * minute,
+    },
+  });
+  assert.ok(explicit);
+  assert.ok(carriedForward);
+  recordAutomaticTimeLogEntry(entries, explicit, start);
+  recordAutomaticTimeLogEntry(entries, carriedForward, start);
+
+  assert.deepEqual(
+    entries.map((entry) => ({
+      startAtMs: entry.startAtMs,
+      endAtMs: entry.endAtMs,
+      workItemAttribution: entry.workItemAttribution,
+    })),
+    [
+      {
+        startAtMs: 0,
+        endAtMs: minute,
+        workItemAttribution: "explicit_prompt",
+      },
+      {
+        startAtMs: minute,
+        endAtMs: 2 * minute,
+        workItemAttribution: "carried_forward",
+      },
     ],
   );
 });
@@ -723,6 +810,11 @@ test("persists automatic intervals and their deduplication keys", async () => {
       startAtMs: start + 4 * minute,
       endAtMs: start + 5 * minute,
     });
+    assert.deepEqual(
+      JSON.parse(await readFile(ledgerPath, "utf8")).format,
+      "omp-project-time/evidence",
+    );
+    assert.equal(JSON.parse(await readFile(ledgerPath, "utf8")).version, 1);
     assertEntries(await reopenedLedger.entries(), [
       {
         sourceKind: "human_active",

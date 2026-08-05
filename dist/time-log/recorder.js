@@ -24,6 +24,7 @@ export class AutomaticTimeLogRecorder {
     narrative,
     notifyError,
     workItem,
+    workItemAttribution,
   ) {
     const repository = this.repositoryFor(cwd);
     const activity = this.sessionActivityFor(sessionId);
@@ -44,6 +45,7 @@ export class AutomaticTimeLogRecorder {
       activityLabel,
       narrative,
       workItem,
+      workItemAttribution,
     );
   }
 
@@ -81,6 +83,7 @@ export class AutomaticTimeLogRecorder {
     narrative,
     notifyError,
     workItem,
+    workItemAttribution,
   ) {
     const activity = this.sessionActivities.get(sessionId);
     if (activity === undefined) return;
@@ -98,6 +101,7 @@ export class AutomaticTimeLogRecorder {
     activity.activity = activityLabel;
     activity.narrative = narrative;
     activity.workItem = workItem;
+    activity.workItemAttribution = workItemAttribution;
   }
 
   async flush(sessionId, notifyError) {
@@ -128,6 +132,7 @@ export class AutomaticTimeLogRecorder {
     const agentActivity = activity.activity;
     const agentNarrative = activity.narrative;
     const agentWorkItem = activity.workItem;
+    const agentWorkItemAttribution = activity.workItemAttribution;
     if (startAtMs === undefined) return;
     activity.agentTurnStartAtMs = undefined;
     activity.agentRepository = undefined;
@@ -140,6 +145,7 @@ export class AutomaticTimeLogRecorder {
           activity: agentActivity,
           narrative: agentNarrative,
           workItem: agentWorkItem,
+          workItemAttribution: agentWorkItemAttribution,
         }),
       (entry) => this.ledger.recordAutomatic(entry),
       () => {
@@ -169,6 +175,11 @@ export class AutomaticTimeLogRecorder {
       activity: stateBeforeSettlement.activity,
       narrative: stateBeforeSettlement.narrative,
       workItem: stateBeforeSettlement.workItem,
+      workItemAttribution:
+        stateBeforeSettlement.workItemAttribution ??
+        (stateBeforeSettlement.workItem === undefined
+          ? "unassigned"
+          : "legacy_unknown"),
       activityStartedAtMs: stateBeforeSettlement.activityStartedAtMs,
       stateBeforeSettlement,
       settledState: settlement.settledState,
@@ -192,7 +203,10 @@ export class AutomaticTimeLogRecorder {
       ...(turn.activity === undefined ? {} : { activity: turn.activity }),
       ...(turn.narrative === undefined ? {} : { narrative: turn.narrative }),
       ...(turn.workItem === undefined ? {} : { workItem: turn.workItem }),
-      sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent`,
+      workItemAttribution:
+        turn.workItemAttribution ??
+        (turn.workItem === undefined ? "unassigned" : "legacy_unknown"),
+      sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent:${turn.workItemAttribution ?? (turn.workItem === undefined ? "unassigned" : "legacy_unknown")}:${turn.workItem?.kind ?? ""}:${turn.workItem?.number ?? ""}:${turn.workItem?.repository ?? ""}`,
       startAtMs: turn.startAtMs,
       endAtMs: turn.endAtMs,
     };
@@ -254,7 +268,16 @@ class SessionActivity {
 
   workItem;
 
-  setPromptStart(repository, startedAtMs, activity, narrative, workItem) {
+  workItemAttribution;
+
+  setPromptStart(
+    repository,
+    startedAtMs,
+    activity,
+    narrative,
+    workItem,
+    workItemAttribution,
+  ) {
     this.repository = repository;
     this.agentRepository = repository;
     this.startedAtMs = startedAtMs;
@@ -262,6 +285,7 @@ class SessionActivity {
     this.activity = activity;
     this.narrative = narrative;
     this.workItem = workItem;
+    this.workItemAttribution = workItemAttribution;
   }
 
   enqueue(createEntry, persist, onSuccess, onError) {

@@ -1,9 +1,14 @@
 import { parseTimeLogEntry } from "@/time-log/domain/parse-entry.js";
 import type { TimeLogEntry } from "@/time-log/domain/model.js";
 
+export const TIME_LOG_EVIDENCE_FORMAT = "omp-project-time/evidence"
+export const TIME_LOG_EVIDENCE_VERSION = 1
+
 export type TimeLogState = {
-  entries: TimeLogEntry[];
-};
+  format: typeof TIME_LOG_EVIDENCE_FORMAT
+  version: typeof TIME_LOG_EVIDENCE_VERSION
+  entries: TimeLogEntry[]
+}
 
 export function parseTimeLogState(value: unknown): TimeLogState | undefined {
   if (
@@ -13,6 +18,14 @@ export function parseTimeLogState(value: unknown): TimeLogState | undefined {
     !Array.isArray(value.entries)
   ) {
     return undefined;
+  }
+  const candidate = value as Record<string, unknown>
+  if (
+    (candidate.format !== undefined || candidate.version !== undefined) &&
+    (candidate.format !== TIME_LOG_EVIDENCE_FORMAT ||
+      candidate.version !== TIME_LOG_EVIDENCE_VERSION)
+  ) {
+    return undefined
   }
 
   const entries: TimeLogEntry[] = [];
@@ -25,7 +38,11 @@ export function parseTimeLogState(value: unknown): TimeLogState | undefined {
     entries.push(entry);
   }
 
-  return { entries };
+  return {
+    format: TIME_LOG_EVIDENCE_FORMAT,
+    version: TIME_LOG_EVIDENCE_VERSION,
+    entries,
+  }
 }
 
 function isObsoleteManualEntry(value: unknown): boolean {

@@ -1,7 +1,10 @@
 import { MS_PER_MINUTE } from "../../utils/time-constants.js";
 import { parseActivityLabel } from "../../time-log/domain/activity.js";
 import { parseActivityNarrative } from "../../time-log/domain/narrative.js";
-import { parseWorkItem } from "../../time-log/domain/work-item.js";
+import {
+  parseWorkItem,
+  parseWorkItemAttribution,
+} from "../../time-log/domain/work-item.js";
 import { parseOptionalNumber } from "../../utils/parse-optional-number.js";
 
 export function emptyProjectTimeState() {
@@ -24,9 +27,17 @@ export function parseProjectTimeState(value) {
   );
   const narrative = parseActivityNarrative(candidate.narrative);
   const workItem = parseWorkItem(candidate.workItem);
+  const workItemAttribution = parseWorkItemAttribution(
+    candidate.workItemAttribution,
+  );
   if (candidate.narrative !== undefined && narrative === undefined)
     return undefined;
   if (candidate.workItem !== undefined && workItem === undefined)
+    return undefined;
+  if (
+    candidate.workItemAttribution !== undefined &&
+    workItemAttribution === undefined
+  )
     return undefined;
   return {
     promptCount,
@@ -39,6 +50,7 @@ export function parseProjectTimeState(value) {
     ...(activityStartedAtMs === undefined ? {} : { activityStartedAtMs }),
     ...(narrative === undefined ? {} : { narrative }),
     ...(workItem === undefined ? {} : { workItem }),
+    ...(workItemAttribution === undefined ? {} : { workItemAttribution }),
   };
 }
 
@@ -73,6 +85,7 @@ export function setProjectTimeActivity(
   activity,
   narrative,
   workItem,
+  workItemAttribution,
   nowMs,
 ) {
   const nextState = { ...state };
@@ -82,6 +95,8 @@ export function setProjectTimeActivity(
   else nextState.narrative = narrative;
   if (workItem === undefined) delete nextState.workItem;
   else nextState.workItem = workItem;
+  if (workItemAttribution === undefined) delete nextState.workItemAttribution;
+  else nextState.workItemAttribution = workItemAttribution;
   if (
     nextState.activeStartAtMs !== undefined &&
     nextState.activeUntilMs !== undefined

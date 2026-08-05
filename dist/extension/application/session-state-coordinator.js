@@ -43,6 +43,7 @@ export class SessionStateCoordinator {
       state.narrative,
       update.notifyTimeLogError,
       state.workItem,
+      state.workItemAttribution,
     );
     this.persist(update.sessionId, state);
     return state;
@@ -58,7 +59,13 @@ export class SessionStateCoordinator {
     return state;
   }
 
-  async setActivity(update, activity, narrative, workItem) {
+  async setActivity(
+    update,
+    activity,
+    narrative,
+    workItem,
+    workItemAttribution,
+  ) {
     const stateBeforeSettlement = {
       ...this.stateFor(update.sessionId, update.entries),
     };
@@ -72,6 +79,7 @@ export class SessionStateCoordinator {
       activity,
       narrative,
       workItem,
+      workItemAttribution,
       update.nowMs,
     );
     this.timeLogRecorder.recordActivityChange(
@@ -81,6 +89,7 @@ export class SessionStateCoordinator {
       narrative,
       update.notifyTimeLogError,
       workItem,
+      workItemAttribution,
     );
     this.persist(update.sessionId, state);
     return state;

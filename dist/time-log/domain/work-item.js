@@ -14,9 +14,9 @@ function workItemMatches(prompt) {
   }));
 }
 
-export function extractWorkItem(prompt) {
+function uniqueWorkItems(prompt) {
   const matches = workItemMatches(prompt);
-  const unique = matches
+  return matches
     .filter(
       (match) =>
         match.repository !== undefined ||
@@ -36,13 +36,23 @@ export function extractWorkItem(prompt) {
             candidate.repository === match.repository,
         ) === index,
     );
-  if (
-    unique.length !== 1 ||
-    !Number.isSafeInteger(unique[0]?.number) ||
-    unique[0].number <= 0
-  )
-    return undefined;
-  return { ...unique[0], source: "user_provided" };
+}
+
+export function resolveWorkItemAssociation(prompt, currentWorkItem) {
+  const workItems = uniqueWorkItems(prompt);
+  if (workItems.length === 0) {
+    return currentWorkItem === undefined
+      ? { workItemAttribution: "unassigned" }
+      : {
+          workItem: currentWorkItem,
+          workItemAttribution: "carried_forward",
+        };
+  }
+  if (workItems.length !== 1) return { workItemAttribution: "ambiguous" };
+  return {
+    workItem: { ...workItems[0], source: "user_provided" },
+    workItemAttribution: "explicit_prompt",
+  };
 }
 
 export function parseWorkItem(value) {
@@ -69,4 +79,14 @@ export function parseWorkItem(value) {
       : { repository: candidate.repository.toLowerCase() }),
     source: candidate.source,
   };
+}
+
+export function parseWorkItemAttribution(value) {
+  return value === "explicit_prompt" ||
+    value === "carried_forward" ||
+    value === "unassigned" ||
+    value === "ambiguous" ||
+    value === "legacy_unknown"
+    ? value
+    : undefined;
 }

@@ -1,6 +1,9 @@
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
 import type { ActivityNarrative } from "@/time-log/domain/narrative.js"
-import type { WorkItem } from "@/time-log/domain/work-item.js"
+import type {
+  WorkItem,
+  WorkItemAttribution,
+} from "@/time-log/domain/work-item.js"
 import type { AutomaticTimeLogInput, Repository } from "@/time-log/domain/model.js"
 
 type AutomaticEntryOptions = {
@@ -11,6 +14,7 @@ type AutomaticEntryOptions = {
   activity?: string
   narrative?: ActivityNarrative
   workItem?: WorkItem
+  workItemAttribution?: WorkItemAttribution
   activityStartedAtMs?: number
   stateBeforeSettlement: ProjectTimeState
   settledState: ProjectTimeState
@@ -33,6 +37,9 @@ export function createAutomaticTimeLogEntry(
   if (settledMilliseconds <= 0) return undefined
 
   const settledUntilMs = Math.min(options.nowMs, stateBeforeSettlement.activeUntilMs)
+  const workItemAttribution =
+    options.workItemAttribution
+    ?? (options.workItem === undefined ? "unassigned" : "legacy_unknown")
   const startAtMs = Math.max(
     stateBeforeSettlement.activeStartAtMs,
     settledUntilMs - settledMilliseconds,
@@ -55,7 +62,8 @@ export function createAutomaticTimeLogEntry(
     ...(options.activity === undefined ? {} : { activity: options.activity }),
     ...(options.narrative === undefined ? {} : { narrative: options.narrative }),
     ...(options.workItem === undefined ? {} : { workItem: options.workItem }),
-    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}`,
+    workItemAttribution,
+    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}:${workItemAttribution}:${options.workItem?.kind ?? ""}:${options.workItem?.number ?? ""}:${options.workItem?.repository ?? ""}`,
     startAtMs: entryStartAtMs,
     endAtMs: settledUntilMs,
   }

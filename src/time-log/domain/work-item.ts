@@ -5,6 +5,18 @@ export type WorkItem = {
   source: "user_provided"
 }
 
+export type WorkItemAttribution =
+  | "explicit_prompt"
+  | "carried_forward"
+  | "unassigned"
+  | "ambiguous"
+  | "legacy_unknown"
+
+export type WorkItemAssociation = {
+  workItem?: WorkItem
+  workItemAttribution: WorkItemAttribution
+}
+
 const workItemPattern = /\b(?:(issue)\s*#\s*|(pull\s*request|pr)\s*#\s*)(\d+)\b|github\.com\/([^/\s]+\/[^/\s]+)\/(issues|pull)\/(\d+)\b/giu
 
 function workItemMatches(prompt: string) {
@@ -17,9 +29,9 @@ function workItemMatches(prompt: string) {
   }))
 }
 
-export function extractWorkItem(prompt: string): WorkItem | undefined {
+function uniqueWorkItems(prompt: string) {
   const matches = workItemMatches(prompt)
-  const unique = matches
+  return matches
     .filter((match) =>
       match.repository !== undefined
       || !matches.some((candidate) =>
@@ -35,11 +47,28 @@ export function extractWorkItem(prompt: string): WorkItem | undefined {
         && candidate.repository === match.repository,
       ) === index,
     )
-  if (unique.length !== 1 || !Number.isSafeInteger(unique[0]?.number) || unique[0].number <= 0) return undefined
-
-  return { ...unique[0], source: "user_provided" }
 }
 
+export function resolveWorkItemAssociation(
+  prompt: string,
+  currentWorkItem?: WorkItem,
+): WorkItemAssociation {
+  const workItems = uniqueWorkItems(prompt)
+  if (workItems.length === 0) {
+    return currentWorkItem === undefined
+      ? { workItemAttribution: "unassigned" }
+      : {
+          workItem: currentWorkItem,
+          workItemAttribution: "carried_forward",
+        }
+  }
+  if (workItems.length !== 1) return { workItemAttribution: "ambiguous" }
+
+  return {
+    workItem: { ...workItems[0], source: "user_provided" },
+    workItemAttribution: "explicit_prompt",
+  }
+}
 
 export function parseWorkItem(value: unknown): WorkItem | undefined {
   if (typeof value !== "object" || value === null) return undefined
@@ -47,4 +76,16 @@ export function parseWorkItem(value: unknown): WorkItem | undefined {
   if ((candidate.kind !== "issue" && candidate.kind !== "pull_request") || typeof candidate.number !== "number" || !Number.isSafeInteger(candidate.number) || candidate.number <= 0 || candidate.source !== "user_provided" || (candidate.repository !== undefined && (typeof candidate.repository !== "string" || !/^github\.com\/[a-z0-9_.-]+\/[a-z0-9_.-]+$/iu.test(candidate.repository)))) return undefined
 
   return { kind: candidate.kind, number: candidate.number, ...(candidate.repository === undefined ? {} : { repository: candidate.repository.toLowerCase() }), source: candidate.source }
+}
+
+export function parseWorkItemAttribution(
+  value: unknown,
+): WorkItemAttribution | undefined {
+  return value === "explicit_prompt"
+    || value === "carried_forward"
+    || value === "unassigned"
+    || value === "ambiguous"
+    || value === "legacy_unknown"
+    ? value
+    : undefined
 }

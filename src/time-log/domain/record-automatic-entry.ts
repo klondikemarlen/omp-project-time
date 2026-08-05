@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { parseActivityLabel } from "@/time-log/domain/activity.js";
 import { parseActivityNarrative } from "@/time-log/domain/narrative.js";
-import { parseWorkItem } from "@/time-log/domain/work-item.js";
+import {
+  parseWorkItem,
+  parseWorkItemAttribution,
+} from "@/time-log/domain/work-item.js";
 import { parseRepositoryIdentity } from "@/utils/parse-repository-identity.js";
 
 import type {
@@ -60,6 +63,12 @@ function createTimeLogEntry(
   const activity = parseActivityLabel(input.activity);
   const narrative = parseActivityNarrative(input.narrative);
   const workItem = parseWorkItem(input.workItem);
+  const parsedWorkItemAttribution = parseWorkItemAttribution(
+    input.workItemAttribution,
+  );
+  const workItemAttribution =
+    parsedWorkItemAttribution
+    ?? (workItem === undefined ? "unassigned" : "legacy_unknown");
   if (input.activity !== undefined && activity === undefined) {
     throw new Error("Time log activity label is invalid.");
   }
@@ -68,6 +77,20 @@ function createTimeLogEntry(
   }
   if (input.workItem !== undefined && workItem === undefined) {
     throw new Error("Time log work item is invalid.");
+  }
+  if (
+    input.workItemAttribution !== undefined
+    && parsedWorkItemAttribution === undefined
+  ) {
+    throw new Error("Time log work item attribution is invalid.");
+  }
+  if (
+    (workItem === undefined) !== (
+      workItemAttribution === "unassigned" ||
+      workItemAttribution === "ambiguous"
+    )
+  ) {
+    throw new Error("Time log work item attribution does not match work item.");
   }
 
   if (
@@ -102,6 +125,7 @@ function createTimeLogEntry(
     ...(activity === undefined ? {} : { activity }),
     ...(narrative === undefined ? {} : { narrative }),
     ...(workItem === undefined ? {} : { workItem }),
+    workItemAttribution,
     startAtMs,
     endAtMs,
     createdAtMs,
