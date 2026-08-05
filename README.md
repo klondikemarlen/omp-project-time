@@ -85,7 +85,6 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 
 `--project NAME` may follow any read-only view to select the exact persisted Project Time project label from the local ledger, for example `/project-time report --project wrap`. Quote labels containing spaces, such as `/project-time history --project "Ice Fog Analytics"`. The selected dashboard and summary are explicitly ledger views because another project's live session state is unavailable. Targeted history also labels current activity as unavailable rather than attributing this session to the selected project. Reports preserve full-ledger concurrent allocation before returning only the selected project. Type `--project ` after a valid view to complete stored project labels.
 
-
 `report` is a concise human-active, raw-allocation summary. Add `human` or `agent` to select one evidence source and `split` or `weighted` to select an allocation policy. `report json` is the explicit machine-readable form and includes both automatic sources with all allocation modes.
 
 - `raw`: one total per sanitized project label. Concurrent durations remain fully attributed.
