@@ -15,13 +15,17 @@ import { SessionStateCoordinator } from "@/extension/application/session-state-c
 import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js";
 import { parseGeneratedActivityLabel } from "@/time-log/domain/activity.js";
 import { parseActivityNarrative } from "@/time-log/domain/narrative.js";
-import { extractWorkItem } from "@/time-log/domain/work-item.js";
+import { resolveWorkItemAssociation } from "@/time-log/domain/work-item.js";
 import {
   buildHumanActiveCoverage,
   buildReport,
   type AllocationMode,
   type CoverageRange,
 } from "@/time-log/domain/report.js";
+import {
+  TIME_LOG_EVIDENCE_FORMAT,
+  TIME_LOG_EVIDENCE_VERSION,
+} from "@/time-log/infrastructure/state-mapper.js";
 import type { SourceKind } from "@/time-log/domain/model.js";
 import type { ProjectTimeState } from "@/time-log/domain/state.js";
 import {
@@ -59,6 +63,7 @@ type ReportArgs = {
   coverage: boolean;
   coverageDate?: string;
   coverageRange?: CoverageRange;
+  entries: boolean;
 };
 
 const PROJECT_TIME_COMMANDS = [
@@ -335,6 +340,23 @@ export class ProjectTimeRuntime {
     try {
       const reportArgs = parseReportArgs(tokens);
       const entries = await this.timeLogRecorder.entries();
+      if (reportArgs.entries) {
+        ctx.ui.notify(
+          JSON.stringify(
+            {
+              format: TIME_LOG_EVIDENCE_FORMAT,
+              version: TIME_LOG_EVIDENCE_VERSION,
+              entries: project === undefined
+                ? entries
+                : entries.filter((entry) => entry.project === project),
+            },
+            null,
+            2,
+          ),
+          "info",
+        );
+        return;
+      }
 
       if (reportArgs.coverage) {
         ctx.ui.notify(
@@ -565,7 +587,10 @@ export class ProjectTimeRuntime {
       update.sessionId,
       update.entries,
     );
-    const workItem = extractWorkItem(prompt) ?? currentState.workItem;
+    const { workItem, workItemAttribution } = resolveWorkItemAssociation(
+      prompt,
+      currentState.workItem,
+    );
     const activity =
       parseGeneratedActivityLabel(generatedActivity.activity) ??
       currentState.activity ??
@@ -577,13 +602,15 @@ export class ProjectTimeRuntime {
       currentState.narrative?.source !== narrative?.source ||
       currentState.workItem?.kind !== workItem?.kind ||
       currentState.workItem?.number !== workItem?.number ||
-      currentState.workItem?.repository !== workItem?.repository;
+      currentState.workItem?.repository !== workItem?.repository ||
+      currentState.workItemAttribution !== workItemAttribution;
     if (stateChanged) {
       await this.sessionStateCoordinator.setActivity(
         update,
         activity,
         narrative,
         workItem,
+        workItemAttribution,
       );
     }
     const nextState = await this.sessionStateCoordinator.recordPrompt(update);
@@ -800,6 +827,22 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
   const json = rest[0] === "json";
   if (json) rest.shift();
 
+  const entries = rest[0] === "entries";
+  if (entries) {
+    rest.shift();
+    if (!json) throw new Error("Use report json entries for raw evidence.");
+    if (rest.length > 0) {
+      throw new Error("Raw evidence snapshots do not accept report options.");
+    }
+    return {
+      sourceKind: "human_active",
+      mode: "all",
+      json,
+      entries,
+      coverage: false,
+    };
+  }
+
   let sourceKind: SourceKind = "human_active";
   let sourceWasSpecified = false;
   if (rest[0] === "agent") {
@@ -904,6 +947,7 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
     coverageDate,
     coverageRange,
     weights,
+    entries,
   };
 }
 

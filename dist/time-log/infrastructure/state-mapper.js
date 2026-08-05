@@ -1,11 +1,21 @@
 import { parseTimeLogEntry } from "../../time-log/domain/parse-entry.js";
 
+export const TIME_LOG_EVIDENCE_FORMAT = "omp-project-time/evidence";
+export const TIME_LOG_EVIDENCE_VERSION = 1;
 export function parseTimeLogState(value) {
   if (
     typeof value !== "object" ||
     value === null ||
     !("entries" in value) ||
     !Array.isArray(value.entries)
+  ) {
+    return undefined;
+  }
+  const candidate = value;
+  if (
+    (candidate.format !== undefined || candidate.version !== undefined) &&
+    (candidate.format !== TIME_LOG_EVIDENCE_FORMAT ||
+      candidate.version !== TIME_LOG_EVIDENCE_VERSION)
   ) {
     return undefined;
   }
@@ -18,7 +28,11 @@ export function parseTimeLogState(value) {
     }
     entries.push(entry);
   }
-  return { entries };
+  return {
+    format: TIME_LOG_EVIDENCE_FORMAT,
+    version: TIME_LOG_EVIDENCE_VERSION,
+    entries,
+  };
 }
 
 function isObsoleteManualEntry(value) {

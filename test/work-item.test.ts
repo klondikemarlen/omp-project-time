@@ -1,13 +1,45 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { extractWorkItem } from "../src/time-log/domain/work-item.js"
+import { resolveWorkItemAssociation } from "../src/time-log/domain/work-item.js"
 
-test("extracts one explicit stable work item", () => {
-  assert.deepEqual(extractWorkItem("Review PR #84"), { kind: "pull_request", number: 84, source: "user_provided" })
-  assert.deepEqual(extractWorkItem("https://github.com/acme/app/issues/99"), { kind: "issue", number: 99, repository: "github.com/acme/app", source: "user_provided" })
+test("resolves explicit, carried-forward, unassigned, and ambiguous work items", () => {
+  const explicit = {
+    kind: "pull_request" as const,
+    number: 84,
+    source: "user_provided" as const,
+  }
+  assert.deepEqual(resolveWorkItemAssociation("Review PR #84"), {
+    workItem: explicit,
+    workItemAttribution: "explicit_prompt",
+  })
   assert.deepEqual(
-    extractWorkItem("Issue #99 — https://github.com/acme/app/issues/99"),
-    { kind: "issue", number: 99, repository: "github.com/acme/app", source: "user_provided" },
+    resolveWorkItemAssociation("Continue the review.", explicit),
+    {
+      workItem: explicit,
+      workItemAttribution: "carried_forward",
+    },
   )
-  assert.equal(extractWorkItem("Review PR #84 and PR #85"), undefined)
+  assert.deepEqual(
+    resolveWorkItemAssociation("https://github.com/acme/app/issues/99"),
+    {
+      workItem: {
+        kind: "issue",
+        number: 99,
+        repository: "github.com/acme/app",
+        source: "user_provided",
+      },
+      workItemAttribution: "explicit_prompt",
+    },
+  )
+  assert.deepEqual(resolveWorkItemAssociation("No ticket reference."), {
+    workItemAttribution: "unassigned",
+  })
+  assert.deepEqual(
+    resolveWorkItemAssociation("Review PR #999999999999999999999."),
+    { workItemAttribution: "unassigned" },
+  )
+  assert.deepEqual(
+    resolveWorkItemAssociation("Review PR #84 and PR #85.", explicit),
+    { workItemAttribution: "ambiguous" },
+  )
 })

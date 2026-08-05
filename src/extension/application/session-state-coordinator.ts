@@ -14,7 +14,10 @@ import {
 } from "@/time-log/domain/state.js"
 import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js"
 import type { ActivityNarrative } from "@/time-log/domain/narrative.js"
-import type { WorkItem } from "@/time-log/domain/work-item.js"
+import type {
+  WorkItem,
+  WorkItemAttribution,
+} from "@/time-log/domain/work-item.js"
 
 type TimeLogErrorNotifier = (message: string) => void
 
@@ -58,6 +61,7 @@ export class SessionStateCoordinator {
       state.narrative,
       update.notifyTimeLogError,
       state.workItem,
+      state.workItemAttribution,
     )
     this.persist(update.sessionId, state)
     return state
@@ -78,6 +82,7 @@ export class SessionStateCoordinator {
     activity: string | undefined,
     narrative: ActivityNarrative | undefined,
     workItem: WorkItem | undefined,
+    workItemAttribution: WorkItemAttribution | undefined,
   ): Promise<ProjectTimeState> {
     const stateBeforeSettlement = {
       ...this.stateFor(update.sessionId, update.entries),
@@ -92,6 +97,7 @@ export class SessionStateCoordinator {
       activity,
       narrative,
       workItem,
+      workItemAttribution,
       update.nowMs,
     )
     this.timeLogRecorder.recordActivityChange(
@@ -101,6 +107,7 @@ export class SessionStateCoordinator {
       narrative,
       update.notifyTimeLogError,
       workItem,
+      workItemAttribution,
     )
     this.persist(update.sessionId, state)
     return state

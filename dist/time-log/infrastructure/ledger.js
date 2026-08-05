@@ -5,7 +5,11 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { lock } from "../../vendor/proper-lockfile.js";
 import { recordAutomaticTimeLogEntry } from "../../time-log/domain/record-automatic-entry.js";
-import { parseTimeLogState } from "../../time-log/infrastructure/state-mapper.js";
+import {
+  parseTimeLogState,
+  TIME_LOG_EVIDENCE_FORMAT,
+  TIME_LOG_EVIDENCE_VERSION,
+} from "../../time-log/infrastructure/state-mapper.js";
 
 export class TimeLogLedger {
   filePath;
@@ -90,7 +94,11 @@ export class TimeLogLedger {
         "code" in error &&
         error.code === "ENOENT"
       ) {
-        return { entries: [] };
+        return {
+          format: TIME_LOG_EVIDENCE_FORMAT,
+          version: TIME_LOG_EVIDENCE_VERSION,
+          entries: [],
+        };
       }
       throw error;
     }

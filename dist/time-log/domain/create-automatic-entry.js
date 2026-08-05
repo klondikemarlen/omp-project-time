@@ -14,6 +14,9 @@ export function createAutomaticTimeLogEntry(options) {
     options.nowMs,
     stateBeforeSettlement.activeUntilMs,
   );
+  const workItemAttribution =
+    options.workItemAttribution ??
+    (options.workItem === undefined ? "unassigned" : "legacy_unknown");
   const startAtMs = Math.max(
     stateBeforeSettlement.activeStartAtMs,
     settledUntilMs - settledMilliseconds,
@@ -34,7 +37,8 @@ export function createAutomaticTimeLogEntry(options) {
       ? {}
       : { narrative: options.narrative }),
     ...(options.workItem === undefined ? {} : { workItem: options.workItem }),
-    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}`,
+    workItemAttribution,
+    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}:${workItemAttribution}:${options.workItem?.kind ?? ""}:${options.workItem?.number ?? ""}:${options.workItem?.repository ?? ""}`,
     startAtMs: entryStartAtMs,
     endAtMs: settledUntilMs,
   };

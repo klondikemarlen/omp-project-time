@@ -1,7 +1,12 @@
 import { MS_PER_MINUTE } from "@/utils/time-constants.js"
 import { parseActivityLabel } from "@/time-log/domain/activity.js"
 import { parseActivityNarrative, type ActivityNarrative } from "@/time-log/domain/narrative.js"
-import { parseWorkItem, type WorkItem } from "@/time-log/domain/work-item.js"
+import {
+  parseWorkItem,
+  parseWorkItemAttribution,
+  type WorkItem,
+  type WorkItemAttribution,
+} from "@/time-log/domain/work-item.js"
 import { parseOptionalNumber } from "@/utils/parse-optional-number.js"
 
 export type ProjectTimeState = {
@@ -15,6 +20,7 @@ export type ProjectTimeState = {
   activityStartedAtMs?: number
   narrative?: ActivityNarrative
   workItem?: WorkItem
+  workItemAttribution?: WorkItemAttribution
 }
 
 export function emptyProjectTimeState(): ProjectTimeState {
@@ -37,8 +43,15 @@ export function parseProjectTimeState(
   const activityStartedAtMs = parseOptionalNumber(candidate.activityStartedAtMs)
   const narrative = parseActivityNarrative(candidate.narrative)
   const workItem = parseWorkItem(candidate.workItem)
+  const workItemAttribution = parseWorkItemAttribution(
+    candidate.workItemAttribution,
+  )
   if (candidate.narrative !== undefined && narrative === undefined) return undefined
   if (candidate.workItem !== undefined && workItem === undefined) return undefined
+  if (
+    candidate.workItemAttribution !== undefined
+    && workItemAttribution === undefined
+  ) return undefined
 
   return {
     promptCount,
@@ -51,6 +64,9 @@ export function parseProjectTimeState(
     ...(activityStartedAtMs === undefined ? {} : { activityStartedAtMs }),
     ...(narrative === undefined ? {} : { narrative }),
     ...(workItem === undefined ? {} : { workItem }),
+    ...(workItemAttribution === undefined
+      ? {}
+      : { workItemAttribution }),
   }
 }
 
@@ -91,6 +107,7 @@ export function setProjectTimeActivity(
   activity: string | undefined,
   narrative: ActivityNarrative | undefined,
   workItem: WorkItem | undefined,
+  workItemAttribution: WorkItemAttribution | undefined,
   nowMs: number,
 ): ProjectTimeState {
   const nextState = { ...state }
@@ -101,6 +118,8 @@ export function setProjectTimeActivity(
   else nextState.narrative = narrative
   if (workItem === undefined) delete nextState.workItem
   else nextState.workItem = workItem
+  if (workItemAttribution === undefined) delete nextState.workItemAttribution
+  else nextState.workItemAttribution = workItemAttribution
   if (nextState.activeStartAtMs !== undefined && nextState.activeUntilMs !== undefined) {
     nextState.activityStartedAtMs = nowMs
   } else {

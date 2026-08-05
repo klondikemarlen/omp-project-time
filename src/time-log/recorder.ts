@@ -7,7 +7,10 @@ import type {
 } from "@/time-log/domain/model.js";
 import type { ProjectTimeState } from "@/time-log/domain/state.js";
 import type { ActivityNarrative } from "@/time-log/domain/narrative.js";
-import type { WorkItem } from "@/time-log/domain/work-item.js";
+import type {
+  WorkItem,
+  WorkItemAttribution,
+} from "@/time-log/domain/work-item.js";
 import {
   resolveGitRepository,
   type GitRepository,
@@ -25,6 +28,7 @@ type AgentTurn = {
   activity?: string;
   narrative?: ActivityNarrative;
   workItem?: WorkItem;
+  workItemAttribution?: WorkItemAttribution;
   endAtMs: number;
   sessionId: string;
   startAtMs: number;
@@ -53,6 +57,7 @@ export class AutomaticTimeLogRecorder {
     narrative: ActivityNarrative | undefined,
     notifyError: ErrorNotifier,
     workItem?: WorkItem,
+    workItemAttribution?: WorkItemAttribution,
   ): void {
     const repository = this.repositoryFor(cwd);
     const activity = this.sessionActivityFor(sessionId);
@@ -75,6 +80,7 @@ export class AutomaticTimeLogRecorder {
       activityLabel,
       narrative,
       workItem,
+      workItemAttribution,
     );
   }
 
@@ -117,6 +123,7 @@ export class AutomaticTimeLogRecorder {
     narrative: ActivityNarrative | undefined,
     notifyError: ErrorNotifier,
     workItem?: WorkItem,
+    workItemAttribution?: WorkItemAttribution,
   ): void {
     const activity = this.sessionActivities.get(sessionId);
     if (activity === undefined) return;
@@ -136,6 +143,7 @@ export class AutomaticTimeLogRecorder {
     activity.activity = activityLabel;
     activity.narrative = narrative;
     activity.workItem = workItem;
+    activity.workItemAttribution = workItemAttribution;
   }
 
   async flush(sessionId: string, notifyError: ErrorNotifier): Promise<void> {
@@ -171,6 +179,7 @@ export class AutomaticTimeLogRecorder {
     const agentActivity = activity.activity;
     const agentNarrative = activity.narrative;
     const agentWorkItem = activity.workItem;
+    const agentWorkItemAttribution = activity.workItemAttribution;
     if (startAtMs === undefined) return;
 
     activity.agentTurnStartAtMs = undefined;
@@ -185,6 +194,7 @@ export class AutomaticTimeLogRecorder {
           activity: agentActivity,
           narrative: agentNarrative,
           workItem: agentWorkItem,
+          workItemAttribution: agentWorkItemAttribution,
         }),
       (entry) => this.ledger.recordAutomatic(entry),
       () => {
@@ -219,6 +229,11 @@ export class AutomaticTimeLogRecorder {
       activity: stateBeforeSettlement.activity,
       narrative: stateBeforeSettlement.narrative,
       workItem: stateBeforeSettlement.workItem,
+      workItemAttribution:
+        stateBeforeSettlement.workItemAttribution
+        ?? (stateBeforeSettlement.workItem === undefined
+          ? "unassigned"
+          : "legacy_unknown"),
       activityStartedAtMs: stateBeforeSettlement.activityStartedAtMs,
       stateBeforeSettlement,
       settledState: settlement.settledState,
@@ -247,7 +262,10 @@ export class AutomaticTimeLogRecorder {
       ...(turn.activity === undefined ? {} : { activity: turn.activity }),
       ...(turn.narrative === undefined ? {} : { narrative: turn.narrative }),
       ...(turn.workItem === undefined ? {} : { workItem: turn.workItem }),
-      sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent`,
+      workItemAttribution:
+        turn.workItemAttribution
+        ?? (turn.workItem === undefined ? "unassigned" : "legacy_unknown"),
+      sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent:${turn.workItemAttribution ?? (turn.workItem === undefined ? "unassigned" : "legacy_unknown")}:${turn.workItem?.kind ?? ""}:${turn.workItem?.number ?? ""}:${turn.workItem?.repository ?? ""}`,
       startAtMs: turn.startAtMs,
       endAtMs: turn.endAtMs,
     };
@@ -309,12 +327,14 @@ class SessionActivity {
   narrative?: ActivityNarrative;
 
   workItem?: WorkItem;
+  workItemAttribution?: WorkItemAttribution;
   setPromptStart(
     repository: Promise<GitRepository | undefined>,
     startedAtMs: number,
     activity: string | undefined,
     narrative: ActivityNarrative | undefined,
     workItem: WorkItem | undefined,
+    workItemAttribution: WorkItemAttribution | undefined,
   ): void {
     this.repository = repository;
     this.agentRepository = repository;
@@ -323,6 +343,7 @@ class SessionActivity {
     this.activity = activity;
     this.narrative = narrative;
     this.workItem = workItem;
+    this.workItemAttribution = workItemAttribution;
   }
 
   enqueue(

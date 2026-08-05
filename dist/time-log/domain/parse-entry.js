@@ -1,6 +1,9 @@
 import { parseActivityLabel } from "../../time-log/domain/activity.js";
 import { parseActivityNarrative } from "../../time-log/domain/narrative.js";
-import { parseWorkItem } from "../../time-log/domain/work-item.js";
+import {
+  parseWorkItem,
+  parseWorkItemAttribution,
+} from "../../time-log/domain/work-item.js";
 import { isFiniteNumber } from "../../utils/is-finite-number.js";
 import { parseRepositoryIdentity } from "../../utils/parse-repository-identity.js";
 
@@ -21,6 +24,12 @@ export function parseTimeLogEntry(value) {
   const activity = parseActivityLabel(candidate.activity);
   const narrative = parseActivityNarrative(candidate.narrative);
   const workItem = parseWorkItem(candidate.workItem);
+  const parsedWorkItemAttribution = parseWorkItemAttribution(
+    candidate.workItemAttribution,
+  );
+  const workItemAttribution =
+    parsedWorkItemAttribution ??
+    (workItem === undefined ? "unassigned" : "legacy_unknown");
   if (
     typeof id !== "string" ||
     id.length === 0 ||
@@ -40,6 +49,11 @@ export function parseTimeLogEntry(value) {
     (candidate.activity !== undefined && activity === undefined) ||
     (candidate.narrative !== undefined && narrative === undefined) ||
     (candidate.workItem !== undefined && workItem === undefined) ||
+    (candidate.workItemAttribution !== undefined &&
+      parsedWorkItemAttribution === undefined) ||
+    (workItem === undefined) !==
+      (workItemAttribution === "unassigned" ||
+        workItemAttribution === "ambiguous") ||
     candidate.timeZone !== undefined ||
     "attribution" in candidate
   ) {
@@ -55,6 +69,7 @@ export function parseTimeLogEntry(value) {
     ...(activity === undefined ? {} : { activity }),
     ...(narrative === undefined ? {} : { narrative }),
     ...(workItem === undefined ? {} : { workItem }),
+    workItemAttribution,
     startAtMs,
     endAtMs,
     createdAtMs,
