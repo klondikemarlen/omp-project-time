@@ -87,7 +87,7 @@ test("shows concise reports and generates automatic activity labels", async () =
       },
       timeLogPath: path.join(directory, "time-log.json"),
     }).register()
-    assert.deepEqual(completionValues, ["summary", "history", "report", "start", "stop"])
+    assert.deepEqual(completionValues, ["summary", "history", "report"])
     assert.deepEqual(
       argumentCompletions?.("--p")?.map(({ value }) => value),
       ["--project"],
@@ -146,17 +146,6 @@ test("shows concise reports and generates automatic activity labels", async () =
             startAtMs: coverageStart + 60_000,
             endAtMs: coverageStart + 120_000,
             createdAtMs: coverageStart + 120_000,
-          },
-          {
-            id: "wrap-manual",
-            sourceKind: "manual_tracked",
-            project: "wrap",
-            repositoryId: "wrap-repository",
-            activity: "Client Review",
-            startAtMs: coverageStart + 120_000,
-            endAtMs: coverageStart + 180_000,
-            createdAtMs: coverageStart + 180_000,
-            timeZone: "America/New_York",
           },
           {
             id: "other-human",
@@ -239,14 +228,10 @@ test("shows concise reports and generates automatic activity labels", async () =
       ),
       ["wrap"],
     )
-    const manualReport = JSON.parse(notices.at(-1)?.message ?? "")
-    assert.equal(manualReport.manual.raw.sourceKind, "manual_tracked")
-    assert.deepEqual(manualReport.manualTrackedDaily.map(
-      (entry: { sourceKind: string; durationMs: number }) => ({
-        sourceKind: entry.sourceKind,
-        durationMs: entry.durationMs,
-      }),
-    ), [{ sourceKind: "manual_tracked", durationMs: 60_000 }])
+    assert.deepEqual(
+      Object.keys(JSON.parse(notices.at(-1)?.message ?? "")),
+      ["human", "agent"],
+    )
 
     await handler(`report json coverage --date ${coverageDate} --project wrap`, context)
     assert.deepEqual(JSON.parse(notices.at(-1)?.message ?? ""), {
@@ -320,10 +305,10 @@ test("shows concise reports and generates automatic activity labels", async () =
     await handlers.beforeAgentStart({ prompt: "generator failure" }, context)
     assert.equal(persistedActivities.at(-1), "Code Review")
 
-    await handler("activity Code Review", context)
+    await handler("start", context)
     assert.match(
       notices.at(-1)?.message ?? "",
-      /Unknown Project Time command. Use start, stop, summary, history, or report/,
+      /Unknown Project Time command. Use summary, history, or report/,
     )
   } finally {
     await rm(directory, { recursive: true, force: true })

@@ -11,17 +11,13 @@ import {
 } from "../extension/local-data-root.js";
 import { SessionStateCoordinator } from "../extension/application/session-state-coordinator.js";
 import { AutomaticTimeLogRecorder } from "../time-log/recorder.js";
-import {
-  parseActivityLabel,
-  parseGeneratedActivityLabel,
-} from "../time-log/domain/activity.js";
+import { parseGeneratedActivityLabel } from "../time-log/domain/activity.js";
 import { parseActivityNarrative } from "../time-log/domain/narrative.js";
 import { extractWorkItem } from "../time-log/domain/work-item.js";
 import {
   buildHumanActiveCoverage,
   buildReport,
 } from "../time-log/domain/report.js";
-import { buildManualTrackedDailyReport } from "../time-log/domain/manual-tracked-report.js";
 import {
   clearStatus,
   dashboardText,
@@ -42,23 +38,12 @@ const PROJECT_TIME_COMMANDS = [
   {
     value: "history",
     label: "history",
-    description:
-      "Show recent manual, human, and agent intervals for this project",
+    description: "Show recent human and agent intervals for this project",
   },
   {
     value: "report",
     label: "report",
     description: "Show separate Project Time evidence totals",
-  },
-  {
-    value: "start",
-    label: "start",
-    description: "Start manual time tracking for this repository",
-  },
-  {
-    value: "stop",
-    label: "stop",
-    description: "Stop the active manual timer",
   },
 ];
 const PROJECT_OPTION = {
@@ -71,7 +56,6 @@ function supportsProjectOption(tokens) {
   if (tokens[0] === "summary" || tokens[0] === "history") {
     return tokens.length === 1;
   }
-  if (tokens[0] === "start" || tokens[0] === "stop") return false;
   if (tokens[0] !== "report") return false;
   try {
     parseReportArgs(tokens);
@@ -239,28 +223,6 @@ export class ProjectTimeRuntime {
     }
     const { command, project, tokens } = parsed;
     const commandName = tokens[0];
-    if (commandName === "start") {
-      if (project !== undefined) {
-        ctx.ui.notify(
-          "Manual tracking always uses the current repository.",
-          "error",
-        );
-        return;
-      }
-      await this.startManualTracking(tokens, ctx);
-      return;
-    }
-    if (commandName === "stop") {
-      if (project !== undefined) {
-        ctx.ui.notify(
-          "Manual tracking always uses the current repository.",
-          "error",
-        );
-        return;
-      }
-      await this.stopManualTracking(tokens, ctx);
-      return;
-    }
     if (
       command !== "" &&
       commandName !== "summary" &&
@@ -268,7 +230,7 @@ export class ProjectTimeRuntime {
       commandName !== "report"
     ) {
       ctx.ui.notify(
-        "Unknown Project Time command. Use start, stop, summary, history, or report.",
+        "Unknown Project Time command. Use summary, history, or report.",
         "error",
       );
       return;
@@ -315,43 +277,6 @@ export class ProjectTimeRuntime {
     ctx.ui.notify(message, "info");
   }
 
-  async startManualTracking(tokens, ctx) {
-    const label = tokens.slice(1).join(" ");
-    const activity = label === "" ? undefined : parseActivityLabel(label);
-    if (label !== "" && activity === undefined) {
-      ctx.ui.notify(
-        "Manual tracking activity labels must use letters, numbers, spaces, or hyphens.",
-        "error",
-      );
-      return;
-    }
-    try {
-      const timer = await this.timeLogRecorder.startManual(ctx.cwd, activity);
-      ctx.ui.notify(`Manual tracking started for ${timer.project}.`, "info");
-    } catch (error) {
-      ctx.ui.notify(
-        `Project Time manual tracking error: ${errorMessage(error)}`,
-        "error",
-      );
-    }
-  }
-
-  async stopManualTracking(tokens, ctx) {
-    if (tokens.length !== 1) {
-      ctx.ui.notify("Manual tracking stop takes no activity label.", "error");
-      return;
-    }
-    try {
-      const entry = await this.timeLogRecorder.stopManual();
-      ctx.ui.notify(`Manual tracking stopped for ${entry.project}.`, "info");
-    } catch (error) {
-      ctx.ui.notify(
-        `Project Time manual tracking error: ${errorMessage(error)}`,
-        "error",
-      );
-    }
-  }
-
   async showReport(tokens, ctx, project) {
     try {
       const reportArgs = parseReportArgs(tokens);
@@ -378,17 +303,9 @@ export class ProjectTimeRuntime {
       }
       if (reportArgs.mode === "all") {
         const modes = ["raw", "split", "weighted"];
-        const manual = {};
         const human = {};
         const agent = {};
         for (const mode of modes) {
-          manual[mode] = buildReport(
-            entries,
-            "manual_tracked",
-            mode,
-            reportArgs.weights,
-            project,
-          );
           human[mode] = buildReport(
             entries,
             "human_active",
@@ -407,11 +324,6 @@ export class ProjectTimeRuntime {
         ctx.ui.notify(
           JSON.stringify(
             {
-              manual,
-              manualTrackedDaily: buildManualTrackedDailyReport(
-                entries,
-                project,
-              ),
               human,
               agent,
             },
@@ -454,10 +366,6 @@ export class ProjectTimeRuntime {
             entry.sourceKind === "agent_turn_elapsed" &&
             entry.project === project,
         );
-        const manualEntries = timeLogEntries.filter(
-          (entry) =>
-            entry.sourceKind === "manual_tracked" && entry.project === project,
-        );
         ctx.ui.notify(
           historyText(
             project,
@@ -465,7 +373,6 @@ export class ProjectTimeRuntime {
             undefined,
             humanEntries,
             agentEntries,
-            manualEntries,
           ),
           "info",
         );
@@ -496,11 +403,6 @@ export class ProjectTimeRuntime {
           entry.sourceKind === "agent_turn_elapsed" &&
           entry.repositoryId === repositoryId,
       );
-      const manualEntries = timeLogEntries.filter(
-        (entry) =>
-          entry.sourceKind === "manual_tracked" &&
-          entry.repositoryId === repositoryId,
-      );
       ctx.ui.notify(
         historyText(
           gitRepository?.project,
@@ -508,7 +410,6 @@ export class ProjectTimeRuntime {
           config,
           humanEntries,
           agentEntries,
-          manualEntries,
         ),
         "info",
       );
@@ -792,11 +693,7 @@ function parseReportArgs(tokens) {
   if (json) rest.shift();
   let sourceKind = "human_active";
   let sourceWasSpecified = false;
-  if (rest[0] === "manual") {
-    sourceKind = "manual_tracked";
-    sourceWasSpecified = true;
-    rest.shift();
-  } else if (rest[0] === "agent") {
+  if (rest[0] === "agent") {
     sourceKind = "agent_turn_elapsed";
     sourceWasSpecified = true;
     rest.shift();

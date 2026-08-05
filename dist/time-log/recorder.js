@@ -122,27 +122,6 @@ export class AutomaticTimeLogRecorder {
     return this.ledger.projectNames();
   }
 
-  async startManual(cwd, activity) {
-    const repository = await this.repositoryFor(cwd);
-    if (repository === undefined) {
-      throw new Error("Manual tracking requires a Git repository.");
-    }
-    return this.ledger.startManual({
-      project: repository.project,
-      repositoryId: repository.repositoryId,
-      ...(repository.repositoryIdentity === undefined
-        ? {}
-        : { repositoryIdentity: repository.repositoryIdentity }),
-      ...(activity === undefined ? {} : { activity }),
-      startAtMs: Date.now(),
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    });
-  }
-
-  async stopManual() {
-    return this.ledger.stopManual(Date.now());
-  }
-
   closeAgentTurn(activity, turn, notifyError) {
     const startAtMs = activity.agentTurnStartAtMs;
     const agentRepository = activity.agentRepository;

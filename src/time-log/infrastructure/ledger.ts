@@ -11,15 +11,10 @@ import {
 } from "@/time-log/infrastructure/state-mapper.js"
 import type {
   AutomaticTimeLogInput,
-  ManualTimer,
-  ManualTimerInput,
   TimeLogEntry,
 } from "@/time-log/domain/model.js"
-import { parseManualTimer } from "@/time-log/domain/manual-timer.js"
 export type {
   AutomaticTimeLogInput,
-  ManualTimer,
-  ManualTimerInput,
   TimeLogEntry,
 } from "@/time-log/domain/model.js"
 
@@ -50,47 +45,6 @@ export class TimeLogLedger {
     })
   }
 
-  async startManual(input: ManualTimerInput): Promise<ManualTimer> {
-    const timer = parseManualTimer({ ...input, id: randomUUID() })
-    if (timer === undefined) throw new Error("Manual timer is invalid.")
-
-    return this.withLock(async () => {
-      const state = await this.readState()
-      if (state.activeManualTimer !== undefined) {
-        throw new Error("A manual timer is already active.")
-      }
-
-      state.activeManualTimer = timer
-      await this.writeState(state)
-      return timer
-    })
-  }
-
-  async stopManual(nowMs: number): Promise<TimeLogEntry> {
-    return this.withLock(async () => {
-      const state = await this.readState()
-      const timer = state.activeManualTimer
-      if (timer === undefined) throw new Error("No manual timer is active.")
-
-      const recorded = recordAutomaticTimeLogEntry(state.entries, {
-        sourceKind: "manual_tracked",
-        project: timer.project,
-        repositoryId: timer.repositoryId,
-        ...(timer.repositoryIdentity === undefined
-          ? {}
-          : { repositoryIdentity: timer.repositoryIdentity }),
-        ...(timer.activity === undefined ? {} : { activity: timer.activity }),
-        sourceKey: `manual:${timer.id}`,
-        startAtMs: timer.startAtMs,
-        endAtMs: nowMs,
-        timeZone: timer.timeZone,
-      })
-
-      delete state.activeManualTimer
-      await this.writeState(state)
-      return recorded.entry
-    })
-  }
 
   async entries(): Promise<TimeLogEntry[]> {
     return this.withLock(async () => {

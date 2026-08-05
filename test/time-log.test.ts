@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFile } from "node:child_process"
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -74,6 +74,62 @@ test("rejects legacy entries without a source kind", () => {
     }),
     undefined,
   )
+})
+
+test("migrates obsolete manual state when automatic evidence persists", async () => {
+  await withLedger(async (ledger, ledgerPath) => {
+    const humanEntry = {
+      id: "human-entry",
+      sourceKind: "human_active" as const,
+      project: "Project A",
+      repositoryId: "repository-a",
+      startAtMs: start,
+      endAtMs: start + minute,
+      createdAtMs: start,
+    }
+    await writeFile(
+      ledgerPath,
+      JSON.stringify({
+        entries: [
+          humanEntry,
+          {
+            id: "manual-entry",
+            sourceKind: "manual_tracked",
+            project: "Project A",
+            repositoryId: "repository-a",
+            startAtMs: start,
+            endAtMs: start + minute,
+            createdAtMs: start,
+            timeZone: "America/New_York",
+          },
+        ],
+        activeManualTimer: {},
+      }),
+    )
+
+    assertEntries(await ledger.entries(), [{
+      sourceKind: "human_active",
+      project: "Project A",
+      repositoryId: "repository-a",
+      startAtMs: start,
+      endAtMs: start + minute,
+    }])
+    await ledger.recordAutomatic({
+      sourceKind: "human_active",
+      project: "Project B",
+      repositoryId: "repository-b",
+      sourceKey: "session-b",
+      startAtMs: start,
+      endAtMs: start + minute,
+    })
+
+    const persisted = JSON.parse(await readFile(ledgerPath, "utf8"))
+    assert.deepEqual(
+      persisted.entries.map((entry: { sourceKind: string }) => entry.sourceKind),
+      ["human_active", "human_active"],
+    )
+    assert.equal("activeManualTimer" in persisted, false)
+  })
 })
 
 test("rejects entries with removed attribution", () => {
@@ -726,69 +782,5 @@ test("waits for another OMP window to release the time log lock", async () => {
         endAtMs: start + minute,
       },
     ])
-  })
-})
-
-test("allows one of two OMP processes to start a manual timer", async () => {
-  await withLedger(async (ledger, ledgerPath) => {
-    const timer = {
-      project: "github.com/acme/alpha",
-      repositoryId: "repo-alpha",
-      repositoryIdentity: "github.com/acme/alpha",
-      activity: "Code Review",
-      startAtMs: start,
-      timeZone: "America/New_York",
-    }
-    const startScript = `
-      import { TimeLogLedger } from "./src/time-log/infrastructure/ledger.ts"
-      const ledger = new TimeLogLedger(process.argv[1])
-      try {
-        await ledger.startManual(JSON.parse(process.argv[2]))
-        process.stdout.write("started")
-      } catch {
-        process.stdout.write("rejected")
-      }
-    `
-    const startArgs = [
-      "--import",
-      "tsx",
-      "--input-type=module",
-      "--eval",
-      startScript,
-      ledgerPath,
-      JSON.stringify(timer),
-    ]
-    const starts = await Promise.all([
-      execFileAsync(process.execPath, startArgs),
-      execFileAsync(process.execPath, startArgs),
-    ])
-
-    assert.deepEqual(starts.map(({ stdout }) => stdout).sort(), ["rejected", "started"])
-
-    const stopped = await ledger.stopManual(start + minute)
-    assert.deepEqual(
-      {
-        sourceKind: stopped.sourceKind,
-        project: stopped.project,
-        repositoryId: stopped.repositoryId,
-        activity: stopped.activity,
-        startAtMs: stopped.startAtMs,
-        endAtMs: stopped.endAtMs,
-        timeZone: stopped.timeZone,
-      },
-      {
-        sourceKind: "manual_tracked",
-        project: "github.com/acme/alpha",
-        repositoryId: "repo-alpha",
-        activity: "Code Review",
-        startAtMs: start,
-        endAtMs: start + minute,
-        timeZone: "America/New_York",
-      },
-    )
-    assert.equal((await ledger.entries()).filter(
-      (entry) => entry.sourceKind === "manual_tracked",
-    ).length, 1)
-    await assert.rejects(() => ledger.stopManual(start + 2 * minute), /No manual timer/)
   })
 })
