@@ -74,6 +74,7 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 /project-time report agent raw
 /project-time report human weighted '{"<repository-id>": 2}'
 /project-time report json
+/project-time report json entries --project wrap
 /project-time report json coverage --date 2026-07-21 --project wrap
 /project-time --project wrap
 /project-time summary --project wrap
@@ -85,7 +86,7 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 
 `--project NAME` may follow any read-only view to select the exact persisted Project Time project label from the local ledger, for example `/project-time report --project wrap`. Quote labels containing spaces, such as `/project-time history --project "Ice Fog Analytics"`. The selected dashboard and summary are explicitly ledger views because another project's live session state is unavailable. Targeted history also labels current activity as unavailable rather than attributing this session to the selected project. Reports preserve full-ledger concurrent allocation before returning only the selected project. Type `--project ` after a valid view to complete stored project labels.
 
-`report` is a concise human-active, raw-allocation summary. Add `human` or `agent` to select one evidence source and `split` or `weighted` to select an allocation policy. `report json` is the explicit machine-readable form and includes both automatic sources with all allocation modes.
+`report json` is the explicit machine-readable aggregate form and includes both automatic sources with all allocation modes. `report json entries` is the public, versioned raw-evidence snapshot for downstream tools; it returns stored intervals, never allocation totals.
 
 - `raw`: one total per sanitized project label. Concurrent durations remain fully attributed.
 - `split`: divides every overlapping interval equally across active repositories.
@@ -107,7 +108,22 @@ It is a single JSON ledger guarded by a cross-window lock and atomically replace
 
 Entries may include `narrative: { text, source }` alongside `activity`, `startAtMs`, and `endAtMs`. `source` is either `generated` or `user_provided`; omitted `narrative` means no description was captured. Project Time deliberately preserves each detailed interval narrative without aggregation or summarization so downstream worklog tools can deduplicate and summarize with the original interval and duration available for review.
 
-Entries may also include `workItem: { kind, number, repository?, source: "user_provided" }` when a prompt explicitly names a GitHub issue or pull request. The active work item persists through unrelated prompts, so downstream tools can group raw intervals without inferring context from activity labels or narratives.
+### Evidence snapshot v1
+
+`/project-time report json entries` publishes the `omp-project-time/evidence` v1 contract. Its read-only JSON object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
+
+Every entry preserves its stable `id`, source kind, sanitized project and repository identity, interval bounds, creation time, activity, and optional narrative and work item. `workItemAttribution` makes the work-item provenance explicit:
+
+- `explicit_prompt`: the prompt named exactly one issue or pull request.
+- `carried_forward`: the prior unambiguous work item remained active.
+- `unassigned`: no work item is known.
+- `ambiguous`: the prompt named multiple work items, so none was guessed.
+
+An attribution transition creates a new interval segment; Project Time never extends an existing interval across it. The ledger writes this format and version on its next normal persistence. Legacy version-8 automatic ledgers without those fields remain readable.
+
+Billing mapping and copyable review-only drafts belong to [Harvest Worklog](https://github.com/klondikemarlen/harvest-worklog). Project Time never maps evidence to billing targets, calculates billable time, or writes Harvest data.
+
+Entries may also include `workItem: { kind, number, repository?, source: "user_provided" }` when a prompt explicitly names a GitHub issue or pull request. The active work item persists through unrelated prompts, and its attribution states above let downstream tools distinguish that carry-forward context from an explicit reference.
 
 Version 8 ignores v7.7 manual timer state and manual entries while retaining valid automatic evidence; the next normal ledger write persists only supported state. Earlier incompatible legacy data is intentionally not converted.
 
