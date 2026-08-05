@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.0.0] - 2026-08-05
+
+### Removed
+
+- Remove manual timers, manual evidence, and billable-hours review from Project Time; v7.7 manual state is ignored while automatic evidence remains readable.
+
 ## [7.7.0] - 2026-08-04
 
 ### Added
