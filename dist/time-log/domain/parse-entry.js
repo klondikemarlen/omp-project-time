@@ -3,7 +3,6 @@ import { parseActivityNarrative } from "../../time-log/domain/narrative.js";
 import { parseWorkItem } from "../../time-log/domain/work-item.js";
 import { isFiniteNumber } from "../../utils/is-finite-number.js";
 import { parseRepositoryIdentity } from "../../utils/parse-repository-identity.js";
-import { parseIanaTimeZone } from "../../utils/parse-iana-time-zone.js";
 
 export function parseTimeLogEntry(value) {
   if (typeof value !== "object" || value === null) return undefined;
@@ -22,7 +21,6 @@ export function parseTimeLogEntry(value) {
   const activity = parseActivityLabel(candidate.activity);
   const narrative = parseActivityNarrative(candidate.narrative);
   const workItem = parseWorkItem(candidate.workItem);
-  const timeZone = parseIanaTimeZone(candidate.timeZone);
   if (
     typeof id !== "string" ||
     id.length === 0 ||
@@ -42,8 +40,7 @@ export function parseTimeLogEntry(value) {
     (candidate.activity !== undefined && activity === undefined) ||
     (candidate.narrative !== undefined && narrative === undefined) ||
     (candidate.workItem !== undefined && workItem === undefined) ||
-    (sourceKind === "manual_tracked" && timeZone === undefined) ||
-    (sourceKind !== "manual_tracked" && candidate.timeZone !== undefined) ||
+    candidate.timeZone !== undefined ||
     "attribution" in candidate
   ) {
     return undefined;
@@ -58,7 +55,6 @@ export function parseTimeLogEntry(value) {
     ...(activity === undefined ? {} : { activity }),
     ...(narrative === undefined ? {} : { narrative }),
     ...(workItem === undefined ? {} : { workItem }),
-    ...(timeZone === undefined ? {} : { timeZone }),
     startAtMs,
     endAtMs,
     createdAtMs,
@@ -66,12 +62,7 @@ export function parseTimeLogEntry(value) {
 }
 
 function parseSourceKind(value) {
-  if (
-    value === "human_active" ||
-    value === "agent_turn_elapsed" ||
-    value === "manual_tracked"
-  )
-    return value;
+  if (value === "human_active" || value === "agent_turn_elapsed") return value;
   return undefined;
 }
 

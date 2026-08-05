@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.0.0] - 2026-08-05
+
+### Removed
+
+- Remove manual timers, manual evidence, and billable-hours review from Project Time; v7.7 manual state is ignored while automatic evidence remains readable.
+
 ## [7.7.0] - 2026-08-04
 
 ### Added
@@ -89,7 +95,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remove manual `/project-time activity` labels and clearing.
 
-
 ## [6.1.0] - 2026-07-18
 
 ### Added
@@ -163,7 +168,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Configure repository timesheets with project and billing-category mappings; generated session tasks stay local.
 
-
 ## [3.3.1] - 2026-07-16
 
 ### Changed
@@ -185,20 +189,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rename cost settings around annual gross salary and expected working time; legacy setting values continue to load.
 - Replace the default billable-policy `{}` with an explicit `disabled` state and a named structured policy setting.
 
-
 ## [3.2.0] - 2026-07-16
 
 ### Added
 
 - Add configurable locale formatting for developer and billable CAD amounts.
 
-
 ## [3.1.0] - 2026-07-16
 
 ### Changed
 
 - Keep persisted Project Time values scalar and use a generic tracking-data marker.
-
 
 ## [3.0.0] - 2026-07-16
 
@@ -210,7 +211,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Remove per-client billable currency configuration and persisted currency fields.
-
 
 ## [2.3.2] - 2026-07-15
 
