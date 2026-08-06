@@ -27,7 +27,7 @@ requirements:
     rationale: Downstream reconciliation needs transparent interval coverage without reimplementing the local ledger analysis or silently combining evidence sources.
   - id: versioned_raw_evidence
     title: Versioned raw evidence snapshot
-    requirement: "`report json entries` must emit the public omp-project-time/evidence v1 snapshot of raw automatic entries. The owner-only ledger must write the same format and version while accepting valid legacy automatic ledgers without those fields. Every snapshot entry retains its stable ID, source kind, project and repository identity, bounds, creation time, activity, optional narrative, optional work item, and explicit work-item provenance. A provenance change creates a new interval segment; ambiguous references remain unassigned rather than guessed."
+    requirement: "`report json entries` must emit the public omp-project-time/evidence v1 snapshot of raw automatic entries. The owner-only SQLite ledger must preserve every snapshot field and, on first access, transactionally import valid legacy automatic JSON ledger entries while leaving the original JSON file intact as a rollback backup. Invalid legacy JSON must remain untouched and unimported. Every snapshot entry retains its stable ID, source kind, project and repository identity, bounds, creation time, activity, optional narrative, optional work item, and explicit work-item provenance. A provenance change creates a new interval segment; ambiguous references remain unassigned rather than guessed."
     rationale: Downstream review tools need a stable, non-aggregated evidence contract without coupling to internal storage or silently assigning a task.
   - id: top_level_only
     title: Top-level sessions only
@@ -39,8 +39,8 @@ requirements:
     rationale: Time tracking must not create sensitive activity logging.
   - id: local_data_reset
     title: Incompatible local data reset
-    requirement: On the first startup after the major data-model change, delete legacy Project Time, developer-cost, and billable ledger data and write a local schema marker.
-    rationale: This single-owner plugin deliberately discards incompatible local history instead of pretending it can safely convert it.
+    requirement: On the first startup after the major data-model change, remove incompatible legacy Project Time, developer-cost, and billable data while preserving any existing `time-log.json` for SQLite migration or recovery. Write a local schema marker and never delete an unimportable JSON ledger.
+    rationale: This single-owner plugin may discard incompatible history, but it must preserve a user ledger until migration has validated it.
   - id: settings_ui
     title: Clear plugin settings
     requirement: Expose only the scalar Active Window Minutes, Refresh Interval Seconds, and Status Label settings with Title Case labels and action-oriented descriptions.

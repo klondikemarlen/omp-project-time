@@ -32,6 +32,10 @@ The plugin writes only through `ctx.ui.setStatus(...)`. OMP renders each extensi
 
 `Refresh Interval Seconds` controls status display cadence, not interval length.
 
+### Migrate to Version 8.2
+
+On first ledger access, version 8.2 validates and imports `time-log.json` into SQLite. The original JSON file remains untouched as a rollback backup; invalid JSON remains untouched and is not partially imported. Restart OMP after upgrading so older plugin processes do not keep appending to the backup.
+
 ### Migrate to version 6
 
 Version 6 keeps the three scalar settings, removes JSON repository attribution, and resets the incompatible local Project Time ledger on first startup. Then remove every retired setting:
@@ -98,13 +102,15 @@ Every report contains `ompActiveUnionMs`, the union of its source-kind intervals
 
 ## Local data
 
-The owner-only ledger is:
+The owner-only SQLite ledger is:
 
 ```text
-~/.omp/project-time/time-log.json
+~/.omp/project-time/time-log.sqlite
 ```
 
-It is a single JSON ledger guarded by a cross-window lock and atomically replaced. Reports read the whole local ledger. SQLite would add schema and dependency overhead without a query or transaction need.
+On its first access, version 8.2 validates and transactionally imports a valid `~/.omp/project-time/time-log.json` ledger. The original JSON remains untouched as a rollback backup. Invalid JSON is left untouched and is never partially imported. Restart OMP after upgrading so older plugin processes do not append to the backup.
+
+SQLite stores each automatic evidence entry separately, so recording no longer rewrites the complete ledger. A cross-window lock keeps record-and-update operations safe; reports still read the local evidence they need.
 
 Entries may include `narrative: { text, source }` alongside `activity`, `startAtMs`, and `endAtMs`. `source` is either `generated` or `user_provided`; omitted `narrative` means no description was captured. Project Time deliberately preserves each detailed interval narrative without aggregation or summarization so downstream worklog tools can deduplicate and summarize with the original interval and duration available for review.
 
@@ -119,15 +125,17 @@ Every entry preserves its stable `id`, source kind, sanitized project and reposi
 - `unassigned`: no work item is known.
 - `ambiguous`: the prompt named multiple work items, so none was guessed.
 
-An attribution transition creates a new interval segment; Project Time never extends an existing interval across it. The ledger writes this format and version on its next normal persistence. Legacy version-8 automatic ledgers without those fields remain readable.
+An attribution transition creates a new interval segment; Project Time never extends an existing interval across it. SQLite storage is internal: `report json entries` remains the v1 evidence contract. Valid legacy automatic JSON ledgers without provenance fields are imported with their legacy attribution.
 
 Billing mapping and copyable review-only drafts belong to [Harvest Worklog](https://github.com/klondikemarlen/harvest-worklog). Project Time never maps evidence to billing targets, calculates billable time, or writes Harvest data.
 
 Entries may also include `workItem: { kind, number, repository?, source: "user_provided" }` when a prompt explicitly names a GitHub issue or pull request. The active work item persists through unrelated prompts, and its attribution states above let downstream tools distinguish that carry-forward context from an explicit reference.
 
-Version 8 ignores v7.7 manual timer state and manual entries while retaining valid automatic evidence; the next normal ledger write persists only supported state. Earlier incompatible legacy data is intentionally not converted.
+SQLite migration ignores v7.7 manual timer state and manual entries while preserving valid automatic evidence. Earlier incompatible legacy data is intentionally not imported.
 
 ## Development
+
+Development and test tooling require Node.js 22.13 or newer. OMP continues to host the plugin with Bun.
 
 ```bash
 npm install

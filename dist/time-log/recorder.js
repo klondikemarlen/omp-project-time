@@ -12,8 +12,8 @@ export class AutomaticTimeLogRecorder {
 
   sessionActivities = new Map();
 
-  constructor(timeLogPath) {
-    this.ledger = new TimeLogLedger(timeLogPath);
+  constructor(databasePath, legacyJsonPath) {
+    this.ledger = new TimeLogLedger(databasePath, legacyJsonPath);
   }
 
   recordPromptStart(

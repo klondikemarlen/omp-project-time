@@ -44,7 +44,7 @@ test("replaces legacy local tracking data once and retains new records", async (
   }
 })
 
-test("resets records marked by the previous data model", async () => {
+test("retains unrecognized time logs for migration review", async () => {
   const root = path.join(tmpdir(), `project-time-marker-${Date.now()}`)
   const newRoot = path.join(root, "project-time")
   const priorMarkerPath = path.join(newRoot, ".project-time-v5")
@@ -61,7 +61,7 @@ test("resets records marked by the previous data model", async () => {
     await prepareProjectTimeDataRoot(newRoot)
 
     assert.equal(await readFile(markerPath, "utf8"), "project-time-v6\n")
-    await assert.rejects(readFile(recordPath))
+    assert.equal(await readFile(recordPath, "utf8"), "legacy time log\n")
     await assert.rejects(readFile(priorMarkerPath))
   } finally {
     await rm(root, { recursive: true, force: true })

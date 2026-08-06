@@ -17,6 +17,10 @@ export type RecordedAutomaticTimeLogEntry = {
   entry: TimeLogEntry;
 };
 
+export function automaticTimeLogEntryId(sourceKey: string): string {
+  return `auto-${createHash("sha256").update(sourceKey.trim()).digest("hex")}`;
+}
+
 export function recordAutomaticTimeLogEntry(
   entries: TimeLogEntry[],
   input: AutomaticTimeLogInput,
@@ -116,7 +120,7 @@ function createTimeLogEntry(
   }
 
   return {
-    id: `auto-${createHash("sha256").update(sourceKey).digest("hex")}`,
+    id: automaticTimeLogEntryId(sourceKey),
     sourceKind,
     project,
     repositoryId,

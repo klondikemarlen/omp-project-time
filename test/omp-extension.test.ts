@@ -7,6 +7,7 @@ import test from "node:test";
 
 import ompProjectTimeExtension from "../src/omp-extension.js";
 import { parseProjectTimeConfig } from "../src/config/project-time-config.js";
+import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js";
 import type {
   BeforeAgentStartHandler,
   ExtensionApi,
@@ -16,7 +17,7 @@ import type {
 
 test("records automatic evidence when optional generation never settles", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-timeout-"));
-  const timeLogPath = path.join(directory, "time-log.json");
+  const timeLogPath = path.join(directory, "time-log.sqlite");
   const persisted: unknown[] = [];
   let beforeAgentStart: BeforeAgentStartHandler | undefined;
   let sessionShutdown: SessionHandler | undefined;
@@ -91,12 +92,11 @@ test("records automatic evidence when optional generation never settles", async 
         workItemAttribution: "unassigned",
       },
     );
-    const entries = JSON.parse(await readFile(timeLogPath, "utf8"))
-      .entries as Array<Record<string, unknown>>;
-    assert.deepEqual(entries.map((entry) => entry.sourceKind).sort(), [
-      "agent_turn_elapsed",
-      "human_active",
-    ]);
+    const entries = await new TimeLogLedger(timeLogPath).entries();
+    assert.deepEqual(
+      entries.map((entry) => entry.sourceKind).sort(),
+      ["agent_turn_elapsed", "human_active"],
+    );
     assert.equal(
       entries.every(
         (entry) =>

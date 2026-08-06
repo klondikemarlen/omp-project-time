@@ -85,64 +85,6 @@ test("shows concise reports and generates automatic activity labels", async () =
   };
 
   try {
-    new ProjectTimeRuntime(extensionApi, {
-      generateActivity: async (prompt) => {
-        generatedPrompts.push(prompt);
-        if (prompt === "initial failure") return {};
-        if (prompt === "invalid output") return { activity: "Review #84" };
-        if (prompt === "generator failure") throw new Error("unavailable");
-        return {
-          activity: "Code Review",
-          narrative: {
-            text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
-            source: "generated",
-          },
-        };
-      },
-      timeLogPath: path.join(directory, "time-log.json"),
-    }).register();
-    assert.deepEqual(completionValues, ["summary", "history", "report"]);
-    assert.deepEqual(
-      argumentCompletions?.("--p")?.map(({ value }) => value),
-      ["--project"],
-    );
-    assert.deepEqual(
-      argumentCompletions?.("summary ")?.map(({ value }) => value),
-      ["summary --project"],
-    );
-    assert.deepEqual(
-      argumentCompletions?.("report ")?.map(({ value }) => value),
-      ["report --project"],
-    );
-    assert.deepEqual(
-      argumentCompletions?.("summary --p")?.map(({ value }) => value),
-      ["summary --project"],
-    );
-    assert.equal(argumentCompletions?.("garbage "), null);
-    assert.equal(argumentCompletions?.("summary extra "), null);
-    assert.equal(argumentCompletions?.("garbage --project "), null);
-    assert.ok(handler);
-    assert.ok(handlers.beforeAgentStart);
-
-    await handler("", context);
-    assert.match(notices.at(-1)?.message ?? "", /Session: Project Time Audit/);
-
-    await handler("report", context);
-    assert.equal(notices.at(-1)?.type, "info");
-    assert.match(
-      notices.at(-1)?.message ?? "",
-      /Human collaboration — full repository time/,
-    );
-
-    await handler("report json human raw", context);
-    assert.equal(JSON.parse(notices.at(-1)?.message ?? "").mode, "raw");
-
-    await handler("report all", context);
-    assert.match(
-      notices.at(-1)?.message ?? "",
-      /Use report json for an all-modes report/,
-    );
-
     await writeFile(
       path.join(directory, "time-log.json"),
       JSON.stringify({
@@ -212,6 +154,64 @@ test("shows concise reports and generates automatic activity labels", async () =
         ],
       }),
     );
+    new ProjectTimeRuntime(extensionApi, {
+      generateActivity: async (prompt) => {
+        generatedPrompts.push(prompt);
+        if (prompt === "initial failure") return {};
+        if (prompt === "invalid output") return { activity: "Review #84" };
+        if (prompt === "generator failure") throw new Error("unavailable");
+        return {
+          activity: "Code Review",
+          narrative: {
+            text: "Review PR #84, Capture activity narratives for downstream worklogs: verify typed persistence, legacy-log compatibility, and interval-duration access.",
+            source: "generated",
+          },
+        };
+      },
+      timeLogPath: path.join(directory, "time-log.json"),
+    }).register();
+    assert.deepEqual(completionValues, ["summary", "history", "report"]);
+    assert.deepEqual(
+      argumentCompletions?.("--p")?.map(({ value }) => value),
+      ["--project"],
+    );
+    assert.deepEqual(
+      argumentCompletions?.("summary ")?.map(({ value }) => value),
+      ["summary --project"],
+    );
+    assert.deepEqual(
+      argumentCompletions?.("report ")?.map(({ value }) => value),
+      ["report --project"],
+    );
+    assert.deepEqual(
+      argumentCompletions?.("summary --p")?.map(({ value }) => value),
+      ["summary --project"],
+    );
+    assert.equal(argumentCompletions?.("garbage "), null);
+    assert.equal(argumentCompletions?.("summary extra "), null);
+    assert.equal(argumentCompletions?.("garbage --project "), null);
+    assert.ok(handler);
+    assert.ok(handlers.beforeAgentStart);
+
+    await handler("", context);
+    assert.match(notices.at(-1)?.message ?? "", /Session: Project Time Audit/);
+
+    await handler("report", context);
+    assert.equal(notices.at(-1)?.type, "info");
+    assert.match(
+      notices.at(-1)?.message ?? "",
+      /Human collaboration — full repository time/,
+    );
+
+    await handler("report json human raw", context);
+    assert.equal(JSON.parse(notices.at(-1)?.message ?? "").mode, "raw");
+
+    await handler("report all", context);
+    assert.match(
+      notices.at(-1)?.message ?? "",
+      /Use report json for an all-modes report/,
+    );
+
 
     assert.equal(argumentCompletions?.("history --project"), null);
 
