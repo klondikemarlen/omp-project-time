@@ -84,6 +84,9 @@ const PROJECT_TIME_COMMANDS = [
   },
 ] as const;
 
+// ponytail: leave 25 seconds for prompt persistence before OMP's 30-second handler deadline.
+const DEFAULT_ACTIVITY_GENERATION_TIMEOUT_MS = 5_000;
+
 const PROJECT_OPTION = {
   value: "--project",
   label: "--project",
@@ -110,6 +113,7 @@ export class ProjectTimeRuntime {
   private readonly pi: ExtensionApi;
   private readonly loadConfig: ConfigLoader;
   private readonly generateActivity: ActivityGenerator;
+  private readonly activityGenerationTimeoutMs: number;
   private readonly sessionStateCoordinator: SessionStateCoordinator;
   private readonly timeLogRecorder: AutomaticTimeLogRecorder;
   private readonly usesDefaultDataRoot: boolean;
@@ -180,6 +184,9 @@ export class ProjectTimeRuntime {
     this.loadConfig = options.loadConfig ?? loadProjectTimeConfig;
     const dataRoot = defaultProjectTimeDataRoot();
     this.generateActivity = options.generateActivity ?? (async () => ({}));
+    this.activityGenerationTimeoutMs =
+      options.activityGenerationTimeoutMs ??
+      DEFAULT_ACTIVITY_GENERATION_TIMEOUT_MS;
     this.usesDefaultDataRoot =
       options.prepareLocalData !== undefined ||
       options.timeLogPath === undefined;
@@ -580,9 +587,7 @@ export class ProjectTimeRuntime {
       notifyTimeLogError: (message: string) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     };
-    const generatedActivity = await this.generateActivity(prompt, ctx).catch(
-      (): GeneratedActivity => ({}),
-    );
+    const generatedActivity = await this.resolveGeneratedActivity(prompt, ctx);
     const currentState = this.sessionStateCoordinator.stateFor(
       update.sessionId,
       update.entries,
@@ -615,6 +620,28 @@ export class ProjectTimeRuntime {
     }
     const nextState = await this.sessionStateCoordinator.recordPrompt(update);
     updateStatus(ctx, nextState, config);
+  }
+
+  private resolveGeneratedActivity(
+    prompt: string,
+    ctx: ExtensionContext,
+  ): Promise<GeneratedActivity> {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(
+        () => resolve({}),
+        this.activityGenerationTimeoutMs,
+      );
+      void this.generateActivity(prompt, ctx).then(
+        (activity) => {
+          clearTimeout(timeout);
+          resolve(activity);
+        },
+        () => {
+          clearTimeout(timeout);
+          resolve({});
+        },
+      );
+    });
   }
 
   private async settleCurrentTurn(ctx: ExtensionContext): Promise<void> {
