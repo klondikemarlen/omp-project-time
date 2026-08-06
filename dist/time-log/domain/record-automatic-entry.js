@@ -7,6 +7,10 @@ import {
 } from "../../time-log/domain/work-item.js";
 import { parseRepositoryIdentity } from "../../utils/parse-repository-identity.js";
 
+export function automaticTimeLogEntryId(sourceKey) {
+  return `auto-${createHash("sha256").update(sourceKey.trim()).digest("hex")}`;
+}
+
 export function recordAutomaticTimeLogEntry(
   entries,
   input,
@@ -97,7 +101,7 @@ function createTimeLogEntry(input, createdAtMs) {
     throw new Error("Time log timestamps must define a positive interval.");
   }
   return {
-    id: `auto-${createHash("sha256").update(sourceKey).digest("hex")}`,
+    id: automaticTimeLogEntryId(sourceKey),
     sourceKind,
     project,
     repositoryId,

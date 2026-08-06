@@ -17,8 +17,11 @@ export async function prepareProjectTimeDataRoot(
 ) {
   const markerPath = path.join(rootPath, trackingDataMarker);
   if (!(await exists(markerPath))) {
+    const retainTimeLog = await exists(path.join(rootPath, "time-log.json"));
     await Promise.all([
-      rm(rootPath, { recursive: true, force: true }),
+      retainTimeLog
+        ? rm(path.join(rootPath, ".project-time-v5"), { force: true })
+        : rm(rootPath, { recursive: true, force: true }),
       rm(oldRoot, { recursive: true, force: true }),
       rm(oldSpreadLedgerDirectory, { recursive: true, force: true }),
     ]);
@@ -33,7 +36,9 @@ async function exists(filePath) {
     await lstat(filePath);
     return true;
   } catch (error) {
-    if (error.code === "ENOENT") return false;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
     throw error;
   }
 }

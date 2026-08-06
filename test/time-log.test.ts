@@ -32,13 +32,22 @@ type ExpectedEntry = {
 };
 
 async function withLedger(
-  check: (ledger: TimeLogLedger, ledgerPath: string) => void | Promise<void>,
+  check: (
+    ledger: TimeLogLedger,
+    databasePath: string,
+    legacyJsonPath: string,
+  ) => void | Promise<void>,
 ) {
   const directory = await mkdtemp(path.join(tmpdir(), "time-log-test-"));
-  const ledgerPath = path.join(directory, "ledger.json");
+  const databasePath = path.join(directory, "ledger.sqlite");
+  const legacyJsonPath = path.join(directory, "time-log.json");
 
   try {
-    await check(new TimeLogLedger(ledgerPath), ledgerPath);
+    await check(
+      new TimeLogLedger(databasePath, legacyJsonPath),
+      databasePath,
+      legacyJsonPath,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -86,8 +95,8 @@ test("rejects legacy entries without a source kind", () => {
   );
 });
 
-test("migrates obsolete manual state when automatic evidence persists", async () => {
-  await withLedger(async (ledger, ledgerPath) => {
+test("migrates automatic evidence while retaining the legacy JSON backup", async () => {
+  await withLedger(async (ledger, _databasePath, legacyJsonPath) => {
     const humanEntry = {
       id: "human-entry",
       sourceKind: "human_active" as const,
@@ -97,25 +106,23 @@ test("migrates obsolete manual state when automatic evidence persists", async ()
       endAtMs: start + minute,
       createdAtMs: start,
     };
-    await writeFile(
-      ledgerPath,
-      JSON.stringify({
-        entries: [
-          humanEntry,
-          {
-            id: "manual-entry",
-            sourceKind: "manual_tracked",
-            project: "Project A",
-            repositoryId: "repository-a",
-            startAtMs: start,
-            endAtMs: start + minute,
-            createdAtMs: start,
-            timeZone: "America/New_York",
-          },
-        ],
-        activeManualTimer: {},
-      }),
-    );
+    const legacyContent = JSON.stringify({
+      entries: [
+        humanEntry,
+        {
+          id: "manual-entry",
+          sourceKind: "manual_tracked",
+          project: "Project A",
+          repositoryId: "repository-a",
+          startAtMs: start,
+          endAtMs: start + minute,
+          createdAtMs: start,
+          timeZone: "America/New_York",
+        },
+      ],
+      activeManualTimer: {},
+    });
+    await writeFile(legacyJsonPath, legacyContent);
 
     assertEntries(await ledger.entries(), [
       {
@@ -135,14 +142,38 @@ test("migrates obsolete manual state when automatic evidence persists", async ()
       endAtMs: start + minute,
     });
 
-    const persisted = JSON.parse(await readFile(ledgerPath, "utf8"));
-    assert.deepEqual(
-      persisted.entries.map(
-        (entry: { sourceKind: string }) => entry.sourceKind,
-      ),
-      ["human_active", "human_active"],
+    assert.equal(await readFile(legacyJsonPath, "utf8"), legacyContent);
+  });
+});
+
+test("does not partially import invalid legacy JSON", async () => {
+  await withLedger(async (ledger, _databasePath, legacyJsonPath) => {
+    const humanEntry = {
+      id: "human-entry",
+      sourceKind: "human_active",
+      project: "Project A",
+      repositoryId: "repository-a",
+      startAtMs: start,
+      endAtMs: start + minute,
+      createdAtMs: start,
+    };
+    await writeFile(
+      legacyJsonPath,
+      JSON.stringify({ entries: [humanEntry, { id: "invalid-entry" }] }),
     );
-    assert.equal("activeManualTimer" in persisted, false);
+
+    await assert.rejects(ledger.entries(), /Time log state is invalid/);
+    await writeFile(legacyJsonPath, JSON.stringify({ entries: [humanEntry] }));
+
+    assertEntries(await ledger.entries(), [
+      {
+        sourceKind: "human_active",
+        project: "Project A",
+        repositoryId: "repository-a",
+        startAtMs: start,
+        endAtMs: start + minute,
+      },
+    ]);
   });
 });
 
@@ -548,7 +579,7 @@ test("suppresses automatic intervals deterministically by source key", async () 
 });
 
 test("keeps overlapping automatic intervals from separate repositories", async () => {
-  await withLedger(async (ledger, ledgerPath) => {
+  await withLedger(async (ledger, databasePath) => {
     await ledger.recordAutomatic({
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
@@ -585,7 +616,7 @@ test("keeps overlapping automatic intervals from separate repositories", async (
     ];
 
     assertEntries(entries, expected);
-    await assert.rejects(readFile(`${ledgerPath}.summary.json`, "utf8"));
+    await assert.rejects(readFile(`${databasePath}.summary.json`, "utf8"));
   });
 });
 
@@ -680,7 +711,7 @@ test("persists prompt narratives through the recorder", async () => {
   const directory = await mkdtemp(
     path.join(tmpdir(), "time-log-recorder-test-"),
   );
-  const ledgerPath = path.join(directory, "ledger.json");
+  const databasePath = path.join(directory, "ledger.sqlite");
   const narrative = {
     text: "Review PR #84: capture detailed activity narratives and verify downstream interval-duration access.",
     source: "generated" as const,
@@ -703,7 +734,7 @@ test("persists prompt narratives through the recorder", async () => {
       "git@github.com:acme/project-time.git",
     ]);
 
-    const recorder = new AutomaticTimeLogRecorder(ledgerPath);
+    const recorder = new AutomaticTimeLogRecorder(databasePath);
     recorder.recordPromptStart(
       "session",
       directory,
@@ -778,7 +809,7 @@ test("persists prompt narratives through the recorder", async () => {
 });
 
 test("persists automatic intervals and their deduplication keys", async () => {
-  await withLedger(async (ledger, ledgerPath) => {
+  await withLedger(async (ledger, databasePath, legacyJsonPath) => {
     const entry = await ledger.recordAutomatic({
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
@@ -788,7 +819,7 @@ test("persists automatic intervals and their deduplication keys", async () => {
       startAtMs: start + minute,
       endAtMs: start + 3 * minute,
     });
-    const reopenedLedger = new TimeLogLedger(ledgerPath);
+    const reopenedLedger = new TimeLogLedger(databasePath, legacyJsonPath);
     const replay = await reopenedLedger.recordAutomatic({
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
@@ -810,11 +841,10 @@ test("persists automatic intervals and their deduplication keys", async () => {
       startAtMs: start + 4 * minute,
       endAtMs: start + 5 * minute,
     });
-    assert.deepEqual(
-      JSON.parse(await readFile(ledgerPath, "utf8")).format,
-      "omp-project-time/evidence",
+    assert.equal(
+      (await readFile(databasePath)).subarray(0, 16).toString(),
+      "SQLite format 3\u0000",
     );
-    assert.equal(JSON.parse(await readFile(ledgerPath, "utf8")).version, 1);
     assertEntries(await reopenedLedger.entries(), [
       {
         sourceKind: "human_active",
@@ -836,8 +866,8 @@ test("persists automatic intervals and their deduplication keys", async () => {
   });
 });
 
-test("writes automatic ledgers with owner-only permissions", async () => {
-  await withLedger(async (ledger, ledgerPath) => {
+test("writes automatic databases with owner-only permissions", async () => {
+  await withLedger(async (ledger, databasePath) => {
     await ledger.recordAutomatic({
       sourceKind: "human_active",
       project: "github.com/acme/alpha",
@@ -847,13 +877,13 @@ test("writes automatic ledgers with owner-only permissions", async () => {
       endAtMs: start + minute,
     });
 
-    assert.equal((await stat(ledgerPath)).mode & 0o777, 0o600);
+    assert.equal((await stat(databasePath)).mode & 0o777, 0o600);
   });
 });
 
 test("waits for another OMP window to release the time log lock", async () => {
-  await withLedger(async (ledger, ledgerPath) => {
-    const release = await lock(ledgerPath, { realpath: false });
+  await withLedger(async (ledger, databasePath) => {
+    const release = await lock(databasePath, { realpath: false });
     const releaseAfterContention = new Promise<void>((resolve) => {
       setTimeout(() => {
         resolve();

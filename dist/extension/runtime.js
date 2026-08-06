@@ -159,7 +159,10 @@ export class ProjectTimeRuntime {
       options.prepareLocalData !== undefined ||
       options.timeLogPath === undefined;
     this.timeLogRecorder = new AutomaticTimeLogRecorder(
-      options.timeLogPath ?? path.join(dataRoot, "time-log.json"),
+      options.timeLogPath ?? path.join(dataRoot, "time-log.sqlite"),
+      options.timeLogPath === undefined
+        ? path.join(dataRoot, "time-log.json")
+        : undefined,
     );
     this.sessionStateCoordinator = new SessionStateCoordinator(
       this.timeLogRecorder,
