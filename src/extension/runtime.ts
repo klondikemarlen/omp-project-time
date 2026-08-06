@@ -353,10 +353,9 @@ export class ProjectTimeRuntime {
             {
               format: TIME_LOG_EVIDENCE_FORMAT,
               version: TIME_LOG_EVIDENCE_VERSION,
-              entries:
-                project === undefined
-                  ? entries
-                  : entries.filter((entry) => entry.project === project),
+              entries: project === undefined
+                ? entries
+                : entries.filter((entry) => entry.project === project),
             },
             null,
             2,
