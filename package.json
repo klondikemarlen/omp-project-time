@@ -1,6 +1,6 @@
 {
   "name": "omp-project-time",
-  "version": "8.1.1",
+  "version": "8.2.0",
   "description": "Verifiable concurrent project-work logs for OMP.",
   "type": "module",
   "license": "MIT",
@@ -74,6 +74,6 @@
     "typescript": "^5.8.2"
   },
   "engines": {
-    "node": ">=20.6.0"
+    "node": ">=22.13.0"
   }
 }
