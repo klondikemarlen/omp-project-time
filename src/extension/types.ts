@@ -102,6 +102,7 @@ export type ActivityGenerator = (
 ) => Promise<GeneratedActivity>
 export type ExtensionOptions = {
   generateActivity?: ActivityGenerator
+  activityGenerationTimeoutMs?: number
   loadConfig?: ConfigLoader
   prepareLocalData?: () => Promise<void>
   timeLogPath?: string

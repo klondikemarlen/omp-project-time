@@ -4,6 +4,8 @@ import projectTimeExtension from "./index.js";
 export default function ompProjectTimeExtension(pi, options = {}) {
   projectTimeExtension(pi, {
     ...options,
-    generateActivity: (prompt, ctx) => generateActivity(prompt, ctx),
+    generateActivity:
+      options.generateActivity ??
+      ((prompt, ctx) => generateActivity(prompt, ctx)),
   });
 }
