@@ -96,9 +96,15 @@ export type GeneratedActivity = {
   narrative?: ActivityNarrative
 }
 
+export type ActivityGenerationContext = {
+  project: string
+  repositoryIdentity?: string
+}
+
 export type ActivityGenerator = (
   prompt: string,
   ctx: ExtensionContext,
+  activityContext: ActivityGenerationContext | undefined,
 ) => Promise<GeneratedActivity>
 export type ExtensionOptions = {
   generateActivity?: ActivityGenerator
