@@ -297,7 +297,7 @@ export class AutomaticTimeLogRecorder {
     notifyError(message);
   }
 
-  private repositoryFor(cwd: string): Promise<GitRepository | undefined> {
+  repositoryFor(cwd: string): Promise<GitRepository | undefined> {
     const cachedRepository = this.repositoryLookups.get(cwd);
     if (cachedRepository !== undefined) return cachedRepository;
 

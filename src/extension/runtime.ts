@@ -1,4 +1,5 @@
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { parseProjectTimeConfig } from "@/config/project-time-config.js";
 import { errorMessage } from "@/utils/error-message.js";
@@ -599,10 +600,7 @@ export class ProjectTimeRuntime {
       prompt,
       currentState.workItem,
     );
-    const activity =
-      parseGeneratedActivityLabel(generatedActivity.activity) ??
-      currentState.activity ??
-      "General Work";
+    const activity = parseGeneratedActivityLabel(generatedActivity.activity);
     const narrative = parseActivityNarrative(generatedActivity.narrative);
     const stateChanged =
       currentState.activity !== activity ||
@@ -629,22 +627,29 @@ export class ProjectTimeRuntime {
     prompt: string,
     ctx: ExtensionContext,
   ): Promise<GeneratedActivity> {
-    return new Promise((resolve) => {
-      const timeout = setTimeout(
-        () => resolve({}),
-        this.activityGenerationTimeoutMs,
+    const activityContext = this.timeLogRecorder
+      .repositoryFor(ctx.cwd)
+      .then((repository) =>
+        repository === undefined
+          ? undefined
+          : {
+              project: repository.project,
+              ...(repository.repositoryIdentity === undefined
+                ? {}
+                : { repositoryIdentity: repository.repositoryIdentity }),
+            },
       );
-      void this.generateActivity(prompt, ctx).then(
-        (activity) => {
-          clearTimeout(timeout);
-          resolve(activity);
-        },
-        () => {
-          clearTimeout(timeout);
-          resolve({});
-        },
-      );
-    });
+    const timeoutController = new AbortController();
+    const generatedActivity = activityContext
+      .then((context) => this.generateActivity(prompt, ctx, context))
+      .catch(() => ({}));
+    const timeout = delay(this.activityGenerationTimeoutMs, undefined, {
+      signal: timeoutController.signal,
+    }).then(() => ({}));
+
+    return Promise.race([generatedActivity, timeout]).finally(() =>
+      timeoutController.abort(),
+    );
   }
 
   private async settleCurrentTurn(ctx: ExtensionContext): Promise<void> {

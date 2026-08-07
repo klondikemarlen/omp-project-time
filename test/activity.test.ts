@@ -18,10 +18,14 @@ test("accepts only concise activity labels", () => {
   assert.equal(parseActivityLabel(`${nonBmpLetters}\u{10400}`), undefined)
 })
 
-test("keeps generated labels coarse without accepting invalid manual labels", () => {
+test("keeps generated labels coarse and omits process-only outputs", () => {
   assert.equal(
     parseGeneratedActivityLabel("Pull Request Review: Code Quality"),
     "Pull Request Review",
   )
   assert.equal(parseGeneratedActivityLabel("Review #84"), undefined)
+  assert.equal(parseGeneratedActivityLabel("COMMIT"), undefined)
+  assert.equal(parseGeneratedActivityLabel("Project Exit"), undefined)
+  assert.equal(parseGeneratedActivityLabel("Project Time"), undefined)
+  assert.equal(parseGeneratedActivityLabel("unlabelled"), undefined)
 })

@@ -6,6 +6,7 @@ export default function ompProjectTimeExtension(pi, options = {}) {
     ...options,
     generateActivity:
       options.generateActivity ??
-      ((prompt, ctx) => generateActivity(prompt, ctx)),
+      ((prompt, ctx, activityContext) =>
+        generateActivity(prompt, ctx, activityContext)),
   });
 }

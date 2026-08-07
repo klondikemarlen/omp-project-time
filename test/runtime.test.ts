@@ -373,7 +373,7 @@ test("shows concise reports and generates automatic activity labels", async () =
 
     await handlers.beforeAgentStart({ prompt: "initial failure" }, context);
     assert.deepEqual(generatedPrompts, ["initial failure"]);
-    assert.equal(persistedActivities.at(-1), "General Work");
+    assert.equal(persistedActivities.at(-1), undefined);
     assert.equal(persistedWorkItemAttributions.at(-1), "unassigned");
 
     await handlers.beforeAgentStart(
@@ -426,10 +426,10 @@ test("shows concise reports and generates automatic activity labels", async () =
     assert.equal(persistedWorkItemAttributions.at(-1), "unassigned");
 
     await handlers.beforeAgentStart({ prompt: "invalid output" }, context);
-    assert.equal(persistedActivities.at(-1), "Code Review");
+    assert.equal(persistedActivities.at(-1), undefined);
 
     await handlers.beforeAgentStart({ prompt: "generator failure" }, context);
-    assert.equal(persistedActivities.at(-1), "Code Review");
+    assert.equal(persistedActivities.at(-1), undefined);
 
     await handler("start", context);
     assert.match(
