@@ -98,17 +98,6 @@ export function projectSummaryText(project, entries) {
   ].join("\n");
 }
 
-export function reportText(report) {
-  const entries = [...report.entries].sort(
-    (left, right) => right.durationMs - left.durationMs,
-  );
-  return [
-    `${sourceKindText(report.sourceKind)} — ${allocationText(report.mode)}`,
-    `OMP-active: ${durationText(report.ompActiveUnionMs)}`,
-    `Projects:${entries.length === 0 ? " none" : `\n${entries.map((entry) => `- ${entry.project}: ${durationText(entry.durationMs)}`).join("\n")}`}`,
-  ].join("\n");
-}
-
 function recentEntries(entries) {
   return [...entries]
     .sort((left, right) => right.endAtMs - left.endAtMs)
@@ -137,18 +126,6 @@ function timestampText(milliseconds) {
 
 function activityText(activity) {
   return activity ?? "unlabelled";
-}
-
-function sourceKindText(sourceKind) {
-  return sourceKind === "human_active"
-    ? "Human collaboration"
-    : "Agent execution";
-}
-
-function allocationText(mode) {
-  if (mode === "raw") return "full repository time";
-  if (mode === "split") return "equal split";
-  return "weighted split";
 }
 
 function durationText(milliseconds) {

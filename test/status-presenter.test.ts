@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   dashboardText,
   historyText,
-  reportText,
   summaryText,
 } from "../src/extension/status-presenter.js";
 
@@ -54,15 +53,6 @@ test("presents automatic activity and OMP session name", () => {
   assert.doesNotMatch(
     historyText("project-time", state, config, [entry], []),
     /^Project Time history/,
-  );
-  assert.match(
-    reportText({
-      sourceKind: "human_active",
-      mode: "raw",
-      ompActiveUnionMs: 60_000,
-      entries: [{ ...entry, mode: "raw", durationMs: 60_000 }],
-    }),
-    /project-time: 1m 0s/,
   );
 });
 

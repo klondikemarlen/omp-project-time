@@ -29,7 +29,6 @@ import {
   historyText,
   projectDashboardText,
   projectSummaryText,
-  reportText,
   summaryText,
   updateStatus,
 } from "../extension/status-presenter.js";
@@ -58,6 +57,80 @@ const PROJECT_OPTION = {
   label: "--project",
   description: "View an exact local Project Time project",
 };
+const REPORT_ARGUMENTS = [
+  {
+    value: "entries",
+    description: "Return the raw evidence snapshot",
+  },
+  {
+    value: "coverage",
+    description: "Report human-active coverage for one date",
+  },
+  {
+    value: "human",
+    description: "Report human-active evidence",
+  },
+  {
+    value: "agent",
+    description: "Report agent-turn evidence",
+  },
+  {
+    value: "raw",
+    description: "Keep concurrent intervals fully attributed",
+  },
+  {
+    value: "split",
+    description: "Split concurrent intervals equally",
+  },
+  {
+    value: "weighted",
+    description: "Split concurrent intervals by JSON weights",
+  },
+  {
+    value: "all",
+    description: "Return every allocation mode",
+  },
+];
+const REPORT_ALLOCATION_MODES = REPORT_ARGUMENTS.slice(4, 7);
+function reportArgumentCompletions(prefix, tokens) {
+  if (tokens[0] !== "report") return null;
+  const completedArguments = prefix.endsWith(" ")
+    ? tokens.slice(1)
+    : tokens.slice(1, -1);
+  const currentArgument = prefix.endsWith(" ") ? "" : (tokens.at(-1) ?? "");
+  let choices = null;
+  if (completedArguments.length === 0) {
+    choices = REPORT_ARGUMENTS;
+  } else if (
+    completedArguments.length === 1 &&
+    (completedArguments[0] === "human" || completedArguments[0] === "agent")
+  ) {
+    choices = REPORT_ALLOCATION_MODES;
+  } else if (
+    completedArguments.length === 1 &&
+    completedArguments[0] === "coverage"
+  ) {
+    choices = [
+      {
+        value: "--date",
+        description: "Select the local calendar date",
+      },
+    ];
+  }
+  if (choices === null) return null;
+  const completions = choices.filter(({ value }) =>
+    value.startsWith(currentArgument.toLowerCase()),
+  );
+  if (completions.length === 0 && currentArgument.startsWith("--")) {
+    return null;
+  }
+  return completions.map(({ value, description }) => ({
+    value: `${prefix.slice(0, prefix.length - currentArgument.length)}${value}`,
+    label: value,
+    description,
+  }));
+}
+
 function supportsProjectOption(tokens) {
   if (tokens.length === 0) return true;
   if (tokens[0] === "summary" || tokens[0] === "history") {
@@ -132,6 +205,17 @@ export class ProjectTimeRuntime {
       return choices.filter(({ value }) =>
         value.startsWith(tokens[0].toLowerCase()),
       );
+    }
+    const reportCompletions = reportArgumentCompletions(prefix, tokens);
+    if (reportCompletions !== null) {
+      if (!supportsProjectOption(tokens)) return reportCompletions;
+      return [
+        ...reportCompletions,
+        {
+          ...PROJECT_OPTION,
+          value: `${prefix}${prefix.endsWith(" ") ? "" : " "}--project`,
+        },
+      ];
     }
     const currentIsFlagPrefix =
       !prefix.endsWith(" ") && tokens.at(-1)?.startsWith("--");
@@ -374,10 +458,7 @@ export class ProjectTimeRuntime {
         reportArgs.weights,
         project,
       );
-      ctx.ui.notify(
-        reportArgs.json ? JSON.stringify(report, null, 2) : reportText(report),
-        "info",
-      );
+      ctx.ui.notify(JSON.stringify(report, null, 2), "info");
     } catch (error) {
       ctx.ui.notify(
         `Project Time report error: ${errorMessage(error)}`,
@@ -747,19 +828,15 @@ function parseCommandTokens(args) {
 function parseReportArgs(tokens) {
   if (tokens[0] !== "report") throw new Error("Expected a report command.");
   const rest = tokens.slice(1);
-  const json = rest[0] === "json";
-  if (json) rest.shift();
   const entries = rest[0] === "entries";
   if (entries) {
     rest.shift();
-    if (!json) throw new Error("Use report json entries for raw evidence.");
     if (rest.length > 0) {
       throw new Error("Raw evidence snapshots do not accept report options.");
     }
     return {
       sourceKind: "human_active",
       mode: "all",
-      json,
       entries,
       coverage: false,
     };
@@ -780,14 +857,14 @@ function parseReportArgs(tokens) {
   let coverageRange;
   if (coverage) {
     if (rest[0] !== "--date" || rest[1] === undefined) {
-      throw new Error("Use --date YYYY-MM-DD with report json coverage.");
+      throw new Error("Use --date YYYY-MM-DD with report coverage.");
     }
     coverageDate = rest[1];
     coverageRange = parseLocalDateRange(coverageDate);
     rest.splice(0, 2);
   }
   const modeToken = rest[0];
-  let mode = json ? "all" : "raw";
+  let mode = sourceWasSpecified ? "raw" : "all";
   if (
     modeToken === "raw" ||
     modeToken === "split" ||
@@ -799,17 +876,11 @@ function parseReportArgs(tokens) {
   } else if (modeToken !== undefined) {
     throw new Error(`Unknown report mode: ${modeToken}`);
   }
-  if (coverage && !json) {
-    throw new Error("Use report json coverage for a coverage report.");
-  }
   if (coverage && sourceWasSpecified) {
     throw new Error("Coverage reports use human_active evidence.");
   }
   if (coverage && mode !== "all") {
     throw new Error("Coverage reports do not accept an allocation mode.");
-  }
-  if (mode === "all" && !json) {
-    throw new Error("Use report json for an all-modes report.");
   }
   if (mode === "all" && sourceWasSpecified) {
     throw new Error("All-modes reports cannot select a source.");
@@ -852,7 +923,6 @@ function parseReportArgs(tokens) {
   return {
     sourceKind,
     mode,
-    json,
     coverage,
     coverageDate,
     coverageRange,
