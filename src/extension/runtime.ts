@@ -162,7 +162,6 @@ function reportArgumentCompletions(
 
   if (choices === null) return null;
 
-
   const completions = choices.filter(({ value }) =>
     value.startsWith(currentArgument.toLowerCase()),
   );
@@ -176,6 +175,7 @@ function reportArgumentCompletions(
     description,
   }));
 }
+
 function supportsProjectOption(tokens: readonly string[]): boolean {
   if (tokens.length === 0) return true;
 
@@ -270,7 +270,6 @@ export class ProjectTimeRuntime {
         : `${prefix}${PROJECT_OPTION.value}`;
       return [{ ...PROJECT_OPTION, value }];
     }
-
 
     return null;
   }

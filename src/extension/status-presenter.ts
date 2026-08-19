@@ -133,7 +133,6 @@ export function projectSummaryText(
   ].join("\n");
 }
 
-
 function recentEntries(entries: readonly TimeLogEntry[]): string[] {
   return [...entries]
     .sort((left, right) => right.endAtMs - left.endAtMs)
@@ -163,7 +162,6 @@ function timestampText(milliseconds: number): string {
 function activityText(activity: string | undefined): string {
   return activity ?? "unlabelled";
 }
-
 
 function durationText(milliseconds: number): string {
   const totalSeconds = Math.floor(Math.max(0, milliseconds) / 1_000);
