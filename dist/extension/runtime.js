@@ -16,39 +16,21 @@ import { parseGeneratedActivityLabel } from "../time-log/domain/activity.js";
 import { parseActivityNarrative } from "../time-log/domain/narrative.js";
 import { resolveWorkItemAssociation } from "../time-log/domain/work-item.js";
 import {
-  buildHumanActiveCoverage,
-  buildReport,
-} from "../time-log/domain/report.js";
-import {
   TIME_LOG_EVIDENCE_FORMAT,
   TIME_LOG_EVIDENCE_VERSION,
 } from "../time-log/infrastructure/state-mapper.js";
 import {
   clearStatus,
   dashboardText,
-  historyText,
   projectDashboardText,
-  projectSummaryText,
-  reportText,
-  summaryText,
   updateStatus,
 } from "../extension/status-presenter.js";
 
 const PROJECT_TIME_COMMANDS = [
   {
-    value: "summary",
-    label: "summary",
-    description: "Show active time, prompt count, and last prompt",
-  },
-  {
-    value: "history",
-    label: "history",
-    description: "Show recent human and agent intervals for this project",
-  },
-  {
-    value: "report",
-    label: "report",
-    description: "Show separate Project Time evidence totals",
+    value: "entries",
+    label: "entries",
+    description: "Export versioned raw Project Time evidence",
   },
 ];
 // ponytail: leave 25 seconds for prompt persistence before OMP's 30-second handler deadline.
@@ -58,111 +40,10 @@ const PROJECT_OPTION = {
   label: "--project",
   description: "View an exact local Project Time project",
 };
-const REPORT_FIRST_ARGUMENTS = [
-  {
-    value: "json",
-    description: "Return a machine-readable report",
-  },
-  {
-    value: "human",
-    description: "Report human-active evidence",
-  },
-  {
-    value: "agent",
-    description: "Report agent-turn evidence",
-  },
-  {
-    value: "raw",
-    description: "Keep concurrent intervals fully attributed",
-  },
-  {
-    value: "split",
-    description: "Split concurrent intervals equally",
-  },
-  {
-    value: "weighted",
-    description: "Split concurrent intervals by JSON weights",
-  },
-];
-const REPORT_ALLOCATION_MODES = REPORT_FIRST_ARGUMENTS.slice(3);
-const JSON_REPORT_ARGUMENTS = [
-  {
-    value: "entries",
-    description: "Return the raw evidence snapshot",
-  },
-  {
-    value: "coverage",
-    description: "Report human-active coverage for one date",
-  },
-  ...REPORT_FIRST_ARGUMENTS.slice(1),
-  {
-    value: "all",
-    description: "Return every allocation mode",
-  },
-];
-function reportArgumentCompletions(prefix, tokens) {
-  if (tokens[0] !== "report") return null;
-  const completedArguments = prefix.endsWith(" ")
-    ? tokens.slice(1)
-    : tokens.slice(1, -1);
-  const currentArgument = prefix.endsWith(" ") ? "" : (tokens.at(-1) ?? "");
-  let choices = null;
-  if (completedArguments.length === 0) {
-    choices = REPORT_FIRST_ARGUMENTS;
-  } else if (
-    completedArguments.length === 1 &&
-    completedArguments[0] === "json"
-  ) {
-    choices = JSON_REPORT_ARGUMENTS;
-  } else if (
-    completedArguments.length === 1 &&
-    (completedArguments[0] === "human" || completedArguments[0] === "agent")
-  ) {
-    choices = REPORT_ALLOCATION_MODES;
-  } else if (
-    completedArguments.length === 2 &&
-    completedArguments[0] === "json" &&
-    (completedArguments[1] === "human" || completedArguments[1] === "agent")
-  ) {
-    choices = REPORT_ALLOCATION_MODES;
-  } else if (
-    completedArguments.length === 2 &&
-    completedArguments[0] === "json" &&
-    completedArguments[1] === "coverage"
-  ) {
-    choices = [
-      {
-        value: "--date",
-        description: "Select the local calendar date",
-      },
-    ];
-  }
-  if (choices === null) return null;
-  const completions = choices.filter(({ value }) =>
-    value.startsWith(currentArgument.toLowerCase()),
-  );
-  if (completions.length === 0 && currentArgument.startsWith("--")) {
-    return null;
-  }
-  return completions.map(({ value, description }) => ({
-    value: `${prefix.slice(0, prefix.length - currentArgument.length)}${value}`,
-    label: value,
-    description,
-  }));
-}
-
 function supportsProjectOption(tokens) {
-  if (tokens.length === 0) return true;
-  if (tokens[0] === "summary" || tokens[0] === "history") {
-    return tokens.length === 1;
-  }
-  if (tokens[0] !== "report") return false;
-  try {
-    parseReportArgs(tokens);
-    return true;
-  } catch {
-    return false;
-  }
+  return (
+    tokens.length === 0 || (tokens.length === 1 && tokens[0] === "entries")
+  );
 }
 
 export class ProjectTimeRuntime {
@@ -226,17 +107,6 @@ export class ProjectTimeRuntime {
         value.startsWith(tokens[0].toLowerCase()),
       );
     }
-    const reportCompletions = reportArgumentCompletions(prefix, tokens);
-    if (reportCompletions !== null) {
-      if (!supportsProjectOption(tokens)) return reportCompletions;
-      return [
-        ...reportCompletions,
-        {
-          ...PROJECT_OPTION,
-          value: `${prefix}${prefix.endsWith(" ") ? "" : " "}--project`,
-        },
-      ];
-    }
     const currentIsFlagPrefix =
       !prefix.endsWith(" ") && tokens.at(-1)?.startsWith("--");
     const commandTokens = currentIsFlagPrefix ? tokens.slice(0, -1) : tokens;
@@ -280,7 +150,7 @@ export class ProjectTimeRuntime {
   register() {
     this.scheduleNextRefresh();
     this.pi.registerCommand("project-time", {
-      description: "Show Project Time status, summary, history, or reports",
+      description: "Show Project Time status or export raw evidence",
       getArgumentCompletions: (prefix) =>
         this.projectTimeArgumentCompletions(prefix),
       handler: async (args, ctx) => {
@@ -342,36 +212,16 @@ export class ProjectTimeRuntime {
     }
     const { command, project, tokens } = parsed;
     const commandName = tokens[0];
-    if (
-      command !== "" &&
-      commandName !== "summary" &&
-      commandName !== "history" &&
-      commandName !== "report"
-    ) {
-      ctx.ui.notify(
-        "Unknown Project Time command. Use summary, history, or report.",
-        "error",
-      );
+    if (command !== "" && commandName !== "entries") {
+      ctx.ui.notify("Unknown Project Time command. Use entries.", "error");
       return;
     }
-    if (command === "report" || command.startsWith("report ")) {
-      await this.showReport(tokens, ctx, project);
+    if (command === "entries") {
+      await this.showEntries(ctx, project);
       return;
     }
     if (project !== undefined) {
-      if (command === "history") {
-        await this.showHistory(ctx, project);
-        return;
-      }
-      await this.showProjectView(
-        ctx,
-        project,
-        command === "summary" ? "summary" : "dashboard",
-      );
-      return;
-    }
-    if (command === "history") {
-      await this.showHistory(ctx);
+      await this.showProjectView(ctx, project);
       return;
     }
     const config = await this.loadConfigForStatus(ctx);
@@ -389,190 +239,48 @@ export class ProjectTimeRuntime {
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     });
     const currentProject = (await resolveGitRepository(ctx.cwd))?.project;
-    const message =
-      command === "summary"
-        ? summaryText(settledState, config, sessionName, nowMs)
-        : dashboardText(settledState, config, currentProject, sessionName);
-    ctx.ui.notify(message, "info");
+    ctx.ui.notify(
+      dashboardText(settledState, config, currentProject, sessionName),
+      "info",
+    );
   }
 
-  async showReport(tokens, ctx, project) {
+  async showEntries(ctx, project) {
     try {
-      const reportArgs = parseReportArgs(tokens);
       const entries = await this.timeLogRecorder.entries();
-      if (reportArgs.entries) {
-        ctx.ui.notify(
-          JSON.stringify(
-            {
-              format: TIME_LOG_EVIDENCE_FORMAT,
-              version: TIME_LOG_EVIDENCE_VERSION,
-              entries:
-                project === undefined
-                  ? entries
-                  : entries.filter((entry) => entry.project === project),
-            },
-            null,
-            2,
-          ),
-          "info",
-        );
-        return;
-      }
-      if (reportArgs.coverage) {
-        ctx.ui.notify(
-          JSON.stringify(
-            {
-              humanActiveCoverage: {
-                localDate: reportArgs.coverageDate,
-                projects: buildHumanActiveCoverage(
-                  entries,
-                  project,
-                  reportArgs.coverageRange,
-                ),
-              },
-            },
-            null,
-            2,
-          ),
-          "info",
-        );
-        return;
-      }
-      if (reportArgs.mode === "all") {
-        const modes = ["raw", "split", "weighted"];
-        const human = {};
-        const agent = {};
-        for (const mode of modes) {
-          human[mode] = buildReport(
-            entries,
-            "human_active",
-            mode,
-            reportArgs.weights,
-            project,
-          );
-          agent[mode] = buildReport(
-            entries,
-            "agent_turn_elapsed",
-            mode,
-            reportArgs.weights,
-            project,
-          );
-        }
-        ctx.ui.notify(
-          JSON.stringify(
-            {
-              human,
-              agent,
-            },
-            null,
-            2,
-          ),
-          "info",
-        );
-        return;
-      }
-      const report = buildReport(
-        entries,
-        reportArgs.sourceKind,
-        reportArgs.mode,
-        reportArgs.weights,
-        project,
-      );
       ctx.ui.notify(
-        reportArgs.json ? JSON.stringify(report, null, 2) : reportText(report),
-        "info",
-      );
-    } catch (error) {
-      ctx.ui.notify(
-        `Project Time report error: ${errorMessage(error)}`,
-        "error",
-      );
-    }
-  }
-
-  async showHistory(ctx, project = undefined) {
-    try {
-      const timeLogEntries = await this.timeLogRecorder.entries();
-      if (project !== undefined) {
-        const humanEntries = timeLogEntries.filter(
-          (entry) =>
-            entry.sourceKind === "human_active" && entry.project === project,
-        );
-        const agentEntries = timeLogEntries.filter(
-          (entry) =>
-            entry.sourceKind === "agent_turn_elapsed" &&
-            entry.project === project,
-        );
-        ctx.ui.notify(
-          historyText(
-            project,
-            undefined,
-            undefined,
-            humanEntries,
-            agentEntries,
-          ),
-          "info",
-        );
-        return;
-      }
-      const config = await this.loadConfigForStatus(ctx);
-      if (config === undefined) return;
-      const sessionId = ctx.sessionManager.getSessionId();
-      const nowMs = Date.now();
-      const settledState = await this.sessionStateCoordinator.settle({
-        config,
-        cwd: ctx.cwd,
-        entries: ctx.sessionManager.getEntries(),
-        nowMs,
-        sessionId,
-        notifyTimeLogError: (message) =>
-          ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-      });
-      const gitRepository = await resolveGitRepository(ctx.cwd);
-      const repositoryId = gitRepository?.repositoryId;
-      const humanEntries = timeLogEntries.filter(
-        (entry) =>
-          entry.sourceKind === "human_active" &&
-          entry.repositoryId === repositoryId,
-      );
-      const agentEntries = timeLogEntries.filter(
-        (entry) =>
-          entry.sourceKind === "agent_turn_elapsed" &&
-          entry.repositoryId === repositoryId,
-      );
-      ctx.ui.notify(
-        historyText(
-          gitRepository?.project,
-          settledState,
-          config,
-          humanEntries,
-          agentEntries,
+        JSON.stringify(
+          {
+            format: TIME_LOG_EVIDENCE_FORMAT,
+            version: TIME_LOG_EVIDENCE_VERSION,
+            entries:
+              project === undefined
+                ? entries
+                : entries.filter((entry) => entry.project === project),
+          },
+          null,
+          2,
         ),
         "info",
       );
     } catch (error) {
       ctx.ui.notify(
-        `Project Time history error: ${errorMessage(error)}`,
+        `Project Time entries error: ${errorMessage(error)}`,
         "error",
       );
     }
   }
 
-  async showProjectView(ctx, project, view) {
+  async showProjectView(ctx, project) {
     try {
       const entries = await this.timeLogRecorder.entries();
       const projectEntries = entries.filter(
         (entry) => entry.project === project,
       );
-      ctx.ui.notify(
-        view === "dashboard"
-          ? projectDashboardText(project, projectEntries)
-          : projectSummaryText(project, projectEntries),
-        "info",
-      );
+      ctx.ui.notify(projectDashboardText(project, projectEntries), "info");
     } catch (error) {
       ctx.ui.notify(
-        `Project Time ${view} error: ${errorMessage(error)}`,
+        `Project Time dashboard error: ${errorMessage(error)}`,
         "error",
       );
     }
@@ -846,143 +554,4 @@ function parseCommandTokens(args) {
     throw new Error("Use closed quoted arguments.");
   if (token !== "") tokens.push(token);
   return tokens;
-}
-
-function parseReportArgs(tokens) {
-  if (tokens[0] !== "report") throw new Error("Expected a report command.");
-  const rest = tokens.slice(1);
-  const json = rest[0] === "json";
-  if (json) rest.shift();
-  const entries = rest[0] === "entries";
-  if (entries) {
-    rest.shift();
-    if (!json) throw new Error("Use report json entries for raw evidence.");
-    if (rest.length > 0) {
-      throw new Error("Raw evidence snapshots do not accept report options.");
-    }
-    return {
-      sourceKind: "human_active",
-      mode: "all",
-      json,
-      entries,
-      coverage: false,
-    };
-  }
-  let sourceKind = "human_active";
-  let sourceWasSpecified = false;
-  if (rest[0] === "agent") {
-    sourceKind = "agent_turn_elapsed";
-    sourceWasSpecified = true;
-    rest.shift();
-  } else if (rest[0] === "human") {
-    sourceWasSpecified = true;
-    rest.shift();
-  }
-  const coverage = rest[0] === "coverage";
-  if (coverage) rest.shift();
-  let coverageDate;
-  let coverageRange;
-  if (coverage) {
-    if (rest[0] !== "--date" || rest[1] === undefined) {
-      throw new Error("Use --date YYYY-MM-DD with report json coverage.");
-    }
-    coverageDate = rest[1];
-    coverageRange = parseLocalDateRange(coverageDate);
-    rest.splice(0, 2);
-  }
-  const modeToken = rest[0];
-  let mode = json ? "all" : "raw";
-  if (
-    modeToken === "raw" ||
-    modeToken === "split" ||
-    modeToken === "weighted" ||
-    modeToken === "all"
-  ) {
-    mode = modeToken;
-    rest.shift();
-  } else if (modeToken !== undefined) {
-    throw new Error(`Unknown report mode: ${modeToken}`);
-  }
-  if (coverage && !json) {
-    throw new Error("Use report json coverage for a coverage report.");
-  }
-  if (coverage && sourceWasSpecified) {
-    throw new Error("Coverage reports use human_active evidence.");
-  }
-  if (coverage && mode !== "all") {
-    throw new Error("Coverage reports do not accept an allocation mode.");
-  }
-  if (mode === "all" && !json) {
-    throw new Error("Use report json for an all-modes report.");
-  }
-  if (mode === "all" && sourceWasSpecified) {
-    throw new Error("All-modes reports cannot select a source.");
-  }
-  let weights;
-  if (mode === "weighted") {
-    const weightsJson = rest.join(" ").trim();
-    if (weightsJson.length > 0) {
-      try {
-        const parsed = JSON.parse(weightsJson);
-        if (
-          typeof parsed !== "object" ||
-          parsed === null ||
-          Array.isArray(parsed)
-        ) {
-          throw new Error("Weights must be a JSON object.");
-        }
-        weights = {};
-        for (const [key, value] of Object.entries(parsed)) {
-          if (
-            typeof value !== "number" ||
-            !Number.isFinite(value) ||
-            value <= 0
-          ) {
-            throw new Error(
-              `Weight for ${key} must be a positive finite number.`,
-            );
-          }
-          weights[key] = value;
-        }
-      } catch {
-        throw new Error(
-          "Weights must be valid JSON object mapping repository to weight.",
-        );
-      }
-    }
-  } else if (rest.length > 0) {
-    throw new Error("Only weighted reports accept repository weights.");
-  }
-  return {
-    sourceKind,
-    mode,
-    json,
-    coverage,
-    coverageDate,
-    coverageRange,
-    weights,
-    entries,
-  };
-}
-
-function parseLocalDateRange(value) {
-  const match = /^(?<year>[1-9]\d{3})-(?<month>\d{2})-(?<day>\d{2})$/.exec(
-    value,
-  );
-  if (match?.groups === undefined) {
-    throw new Error("Coverage dates use YYYY-MM-DD.");
-  }
-  const year = Number(match.groups.year);
-  const month = Number(match.groups.month);
-  const day = Number(match.groups.day);
-  const start = new Date(year, month - 1, day);
-  if (
-    start.getFullYear() !== year ||
-    start.getMonth() !== month - 1 ||
-    start.getDate() !== day
-  ) {
-    throw new Error("Coverage dates must be calendar dates.");
-  }
-  const end = new Date(year, month - 1, day + 1);
-  return { startAtMs: start.getTime(), endAtMs: end.getTime() };
 }
