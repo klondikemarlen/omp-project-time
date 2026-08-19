@@ -172,6 +172,10 @@ test("shows concise reports and generates automatic activity labels", async () =
     }).register();
     assert.deepEqual(completionValues, ["summary", "history", "report"]);
     assert.deepEqual(
+      argumentCompletions?.("report")?.map(({ value }) => value),
+      ["report"],
+    );
+    assert.deepEqual(
       argumentCompletions?.("--p")?.map(({ value }) => value),
       ["--project"],
     );
@@ -181,7 +185,38 @@ test("shows concise reports and generates automatic activity labels", async () =
     );
     assert.deepEqual(
       argumentCompletions?.("report ")?.map(({ value }) => value),
-      ["report --project"],
+      [
+        "report entries",
+        "report coverage",
+        "report human",
+        "report agent",
+        "report raw",
+        "report split",
+        "report weighted",
+        "report all",
+        "report --project",
+      ],
+    );
+    assert.deepEqual(
+      argumentCompletions?.("report human ")?.map(({ value }) => value),
+      [
+        "report human raw",
+        "report human split",
+        "report human weighted",
+        "report human --project",
+      ],
+    );
+    assert.deepEqual(
+      argumentCompletions?.("report human")?.map(({ value }) => value),
+      ["report human", "report human --project"],
+    );
+    assert.deepEqual(
+      argumentCompletions?.("report human --p")?.map(({ value }) => value),
+      ["report human --project"],
+    );
+    assert.deepEqual(
+      argumentCompletions?.("report coverage ")?.map(({ value }) => value),
+      ["report coverage --date"],
     );
     assert.deepEqual(
       argumentCompletions?.("summary --p")?.map(({ value }) => value),
@@ -198,19 +233,13 @@ test("shows concise reports and generates automatic activity labels", async () =
 
     await handler("report", context);
     assert.equal(notices.at(-1)?.type, "info");
-    assert.match(
-      notices.at(-1)?.message ?? "",
-      /Human collaboration — full repository time/,
-    );
+    assert.ok(JSON.parse(notices.at(-1)?.message ?? "").human);
 
-    await handler("report json human raw", context);
+    await handler("report human raw", context);
     assert.equal(JSON.parse(notices.at(-1)?.message ?? "").mode, "raw");
 
     await handler("report all", context);
-    assert.match(
-      notices.at(-1)?.message ?? "",
-      /Use report json for an all-modes report/,
-    );
+    assert.ok(JSON.parse(notices.at(-1)?.message ?? "").agent);
 
 
     assert.equal(argumentCompletions?.("history --project"), null);
@@ -262,19 +291,27 @@ test("shows concise reports and generates automatic activity labels", async () =
     assert.doesNotMatch(notices.at(-1)?.message ?? "", /Unrelated Work/);
 
     await handler("report human raw --project wrap", context);
-    assert.match(notices.at(-1)?.message ?? "", /- wrap: 1m 0s/);
-    assert.doesNotMatch(notices.at(-1)?.message ?? "", /other/);
+    assert.equal(
+      JSON.parse(notices.at(-1)?.message ?? "").entries[0].durationMs,
+      60_000,
+    );
 
     await handler("report human split --project wrap", context);
-    assert.match(notices.at(-1)?.message ?? "", /- wrap: 30s/);
+    assert.equal(
+      JSON.parse(notices.at(-1)?.message ?? "").entries[0].durationMs,
+      30_000,
+    );
 
     await handler(
       "report human weighted '{\"wrap-repository\": 3}' --project wrap",
       context,
     );
-    assert.match(notices.at(-1)?.message ?? "", /- wrap: 45s/);
+    assert.equal(
+      JSON.parse(notices.at(-1)?.message ?? "").entries[0].durationMs,
+      45_000,
+    );
 
-    await handler("report json --project wrap", context);
+    await handler("report --project wrap", context);
     assert.deepEqual(
       JSON.parse(notices.at(-1)?.message ?? "").human.raw.entries.map(
         (entry: { project: string }) => entry.project,
@@ -286,7 +323,7 @@ test("shows concise reports and generates automatic activity labels", async () =
       "agent",
     ]);
 
-    await handler("report json entries --project wrap", context);
+    await handler("report entries --project wrap", context);
     const evidenceSnapshot = JSON.parse(notices.at(-1)?.message ?? "");
     assert.equal(evidenceSnapshot.format, "omp-project-time/evidence");
     assert.equal(evidenceSnapshot.version, 1);
@@ -336,7 +373,7 @@ test("shows concise reports and generates automatic activity labels", async () =
     ]);
 
     await handler(
-      `report json coverage --date ${coverageDate} --project wrap`,
+      `report coverage --date ${coverageDate} --project wrap`,
       context,
     );
     assert.deepEqual(JSON.parse(notices.at(-1)?.message ?? ""), {
@@ -357,7 +394,7 @@ test("shows concise reports and generates automatic activity labels", async () =
     });
 
     await handler(
-      `report json agent coverage --date ${coverageDate} --project wrap`,
+      `report agent coverage --date ${coverageDate} --project wrap`,
       context,
     );
     assert.match(

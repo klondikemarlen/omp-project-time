@@ -2,7 +2,6 @@ import type { ProjectTimeConfig } from "@/config/project-time-config.js";
 import type { ExtensionContext } from "@/extension/types.js";
 import type { ProjectTimeState } from "@/time-log/domain/state.js";
 import type { TimeLogEntry } from "@/time-log/domain/model.js";
-import type { Report } from "@/time-log/domain/report.js";
 
 export const STATUS_KEY = "project-time";
 
@@ -134,17 +133,6 @@ export function projectSummaryText(
   ].join("\n");
 }
 
-export function reportText(report: Report): string {
-  const entries = [...report.entries].sort(
-    (left, right) => right.durationMs - left.durationMs,
-  );
-
-  return [
-    `${sourceKindText(report.sourceKind)} — ${allocationText(report.mode)}`,
-    `OMP-active: ${durationText(report.ompActiveUnionMs)}`,
-    `Projects:${entries.length === 0 ? " none" : `\n${entries.map((entry) => `- ${entry.project}: ${durationText(entry.durationMs)}`).join("\n")}`}`,
-  ].join("\n");
-}
 
 function recentEntries(entries: readonly TimeLogEntry[]): string[] {
   return [...entries]
@@ -176,18 +164,6 @@ function activityText(activity: string | undefined): string {
   return activity ?? "unlabelled";
 }
 
-function sourceKindText(sourceKind: Report["sourceKind"]): string {
-  return sourceKind === "human_active"
-    ? "Human collaboration"
-    : "Agent execution";
-}
-
-function allocationText(mode: Report["mode"]): string {
-  if (mode === "raw") return "full repository time";
-  if (mode === "split") return "equal split";
-
-  return "weighted split";
-}
 
 function durationText(milliseconds: number): string {
   const totalSeconds = Math.floor(Math.max(0, milliseconds) / 1_000);
