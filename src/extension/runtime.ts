@@ -35,6 +35,7 @@ import {
   historyText,
   projectDashboardText,
   projectSummaryText,
+  reportText,
   summaryText,
   updateStatus,
 } from "@/extension/status-presenter.js";
@@ -58,6 +59,7 @@ type RuntimeState = {
 type ReportArgs = {
   sourceKind: SourceKind;
   mode: AllocationMode | "all";
+  json: boolean;
   weights?: Record<string, number>;
   coverage: boolean;
   coverageDate?: string;
@@ -92,14 +94,10 @@ const PROJECT_OPTION = {
   description: "View an exact local Project Time project",
 };
 
-const REPORT_ARGUMENTS = [
+const REPORT_FIRST_ARGUMENTS = [
   {
-    value: "entries",
-    description: "Return the raw evidence snapshot",
-  },
-  {
-    value: "coverage",
-    description: "Report human-active coverage for one date",
+    value: "json",
+    description: "Return a machine-readable report",
   },
   {
     value: "human",
@@ -121,13 +119,25 @@ const REPORT_ARGUMENTS = [
     value: "weighted",
     description: "Split concurrent intervals by JSON weights",
   },
+] as const;
+
+const REPORT_ALLOCATION_MODES = REPORT_FIRST_ARGUMENTS.slice(3);
+
+const JSON_REPORT_ARGUMENTS = [
+  {
+    value: "entries",
+    description: "Return the raw evidence snapshot",
+  },
+  {
+    value: "coverage",
+    description: "Report human-active coverage for one date",
+  },
+  ...REPORT_FIRST_ARGUMENTS.slice(1),
   {
     value: "all",
     description: "Return every allocation mode",
   },
 ] as const;
-
-const REPORT_ALLOCATION_MODES = REPORT_ARGUMENTS.slice(4, 7);
 
 function reportArgumentCompletions(
   prefix: string,
@@ -141,7 +151,12 @@ function reportArgumentCompletions(
   const currentArgument = prefix.endsWith(" ") ? "" : tokens.at(-1) ?? "";
   let choices: readonly { value: string; description: string }[] | null = null;
   if (completedArguments.length === 0) {
-    choices = REPORT_ARGUMENTS;
+    choices = REPORT_FIRST_ARGUMENTS;
+  } else if (
+    completedArguments.length === 1 &&
+    completedArguments[0] === "json"
+  ) {
+    choices = JSON_REPORT_ARGUMENTS;
   } else if (
     completedArguments.length === 1 &&
     (completedArguments[0] === "human" ||
@@ -149,8 +164,15 @@ function reportArgumentCompletions(
   ) {
     choices = REPORT_ALLOCATION_MODES;
   } else if (
-    completedArguments.length === 1 &&
-    completedArguments[0] === "coverage"
+    completedArguments.length === 2 &&
+    completedArguments[0] === "json" &&
+    (completedArguments[1] === "human" || completedArguments[1] === "agent")
+  ) {
+    choices = REPORT_ALLOCATION_MODES;
+  } else if (
+    completedArguments.length === 2 &&
+    completedArguments[0] === "json" &&
+    completedArguments[1] === "coverage"
   ) {
     choices = [
       {
@@ -526,7 +548,10 @@ export class ProjectTimeRuntime {
         reportArgs.weights,
         project,
       );
-      ctx.ui.notify(JSON.stringify(report, null, 2), "info");
+      ctx.ui.notify(
+        reportArgs.json ? JSON.stringify(report, null, 2) : reportText(report),
+        "info",
+      );
     } catch (error) {
       ctx.ui.notify(
         `Project Time report error: ${errorMessage(error)}`,
@@ -950,16 +975,20 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
   if (tokens[0] !== "report") throw new Error("Expected a report command.");
 
   const rest = tokens.slice(1);
+  const json = rest[0] === "json";
+  if (json) rest.shift();
 
   const entries = rest[0] === "entries";
   if (entries) {
     rest.shift();
+    if (!json) throw new Error("Use report json entries for raw evidence.");
     if (rest.length > 0) {
       throw new Error("Raw evidence snapshots do not accept report options.");
     }
     return {
       sourceKind: "human_active",
       mode: "all",
+      json,
       entries,
       coverage: false,
     };
@@ -983,7 +1012,7 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
   let coverageRange: CoverageRange | undefined;
   if (coverage) {
     if (rest[0] !== "--date" || rest[1] === undefined) {
-      throw new Error("Use --date YYYY-MM-DD with report coverage.");
+      throw new Error("Use --date YYYY-MM-DD with report json coverage.");
     }
 
     coverageDate = rest[1];
@@ -992,7 +1021,7 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
   }
 
   const modeToken = rest[0];
-  let mode: AllocationMode | "all" = sourceWasSpecified ? "raw" : "all";
+  let mode: AllocationMode | "all" = json ? "all" : "raw";
   if (
     modeToken === "raw" ||
     modeToken === "split" ||
@@ -1005,6 +1034,9 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
     throw new Error(`Unknown report mode: ${modeToken}`);
   }
 
+  if (coverage && !json) {
+    throw new Error("Use report json coverage for a coverage report.");
+  }
 
   if (coverage && sourceWasSpecified) {
     throw new Error("Coverage reports use human_active evidence.");
@@ -1014,6 +1046,9 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
     throw new Error("Coverage reports do not accept an allocation mode.");
   }
 
+  if (mode === "all" && !json) {
+    throw new Error("Use report json for an all-modes report.");
+  }
 
   if (mode === "all" && sourceWasSpecified) {
     throw new Error("All-modes reports cannot select a source.");
@@ -1058,6 +1093,7 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
   return {
     sourceKind,
     mode,
+    json,
     coverage,
     coverageDate,
     coverageRange,
