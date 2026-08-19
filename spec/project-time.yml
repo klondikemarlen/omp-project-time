@@ -11,23 +11,15 @@ requirements:
     rationale: Agent execution is useful parallel evidence but must remain distinguishable from human collaboration.
   - id: source_separation
     title: Separate automatic evidence sources
-    requirement: Keep human_active and agent_turn_elapsed entries and reports separate; never automatically add one source to another or label prompt windows as billable.
+    requirement: Keep human_active and agent_turn_elapsed entries separate; never automatically add one source to another or label prompt windows as billable.
     rationale: Separate observations must not become an unreviewable billing decision.
   - id: concurrent_projects
     title: Concurrent project evidence
-    requirement: Preserve full intervals for concurrent repositories. Reports must offer raw repository totals plus equal split and explicit weighted allocation modes.
-    rationale: Repository totals may legitimately exceed the OMP-active union; allocation is a deliberate reporting policy, not a mutation of evidence.
-  - id: omp_active_reference
-    title: OMP-active union reference
-    requirement: Report the union of source-kind intervals as ompActiveUnionMs and never present it as literal desk presence.
-    rationale: OMP can verify its own activity windows, not work outside OMP.
-  - id: human_active_coverage
-    title: Per-project human-active coverage
-    requirement: "`report json coverage --date YYYY-MM-DD` must emit local-day, per-project human-active raw total, interval union, concurrent overlap, span, and inactive gap totals and bounds. It clips intervals to the requested local calendar day and accepts the final exact `--project NAME` selector."
-    rationale: Downstream reconciliation needs transparent interval coverage without reimplementing the local ledger analysis or silently combining evidence sources.
+    requirement: Preserve full raw intervals for concurrent repositories in the evidence snapshot.
+    rationale: Concurrent repository activity is evidence, not an allocation decision.
   - id: versioned_raw_evidence
     title: Versioned raw evidence snapshot
-    requirement: "`report json entries` must emit the public omp-project-time/evidence v1 snapshot of raw automatic entries. The owner-only SQLite ledger must preserve every snapshot field and, on first access, transactionally import valid legacy automatic JSON ledger entries while leaving the original JSON file intact as a rollback backup. Invalid legacy JSON must remain untouched and unimported. Every snapshot entry retains its stable ID, source kind, project and repository identity, bounds, creation time, activity, optional narrative, optional work item, and explicit work-item provenance. A provenance change creates a new interval segment; ambiguous references remain unassigned rather than guessed."
+    requirement: "`entries` must emit the public omp-project-time/evidence v1 snapshot of raw automatic entries. The owner-only SQLite ledger must preserve every snapshot field and, on first access, transactionally import valid legacy automatic JSON ledger entries while leaving the original JSON file intact as a rollback backup. Invalid legacy JSON must remain untouched and unimported. Every snapshot entry retains its stable ID, source kind, project and repository identity, bounds, creation time, activity, optional narrative, optional work item, and explicit work-item provenance. A provenance change creates a new interval segment; ambiguous references remain unassigned rather than guessed."
     rationale: Downstream review tools need a stable, non-aggregated evidence contract without coupling to internal storage or silently assigning a task.
   - id: top_level_only
     title: Top-level sessions only
@@ -37,22 +29,14 @@ requirements:
     title: Local privacy boundary
     requirement: Persist only a sanitized project label, one-way repository hash, optional normalized lowercase remote host/path identity without a protocol or credential, source kind, session identity, timing, and a coarse activity label generated transiently from the current prompt. Do not persist working-directory paths, raw remote URLs, credentials, prompts, assignments, transcripts, tool output, artifacts, session names, session files, file paths, model metadata, or custom attribution.
     rationale: Time tracking must not create sensitive activity logging.
-  - id: local_data_reset
-    title: Incompatible local data reset
-    requirement: On the first startup after the major data-model change, remove incompatible legacy Project Time, developer-cost, and billable data while preserving any existing `time-log.json` for SQLite migration or recovery. Write a local schema marker and never delete an unimportable JSON ledger.
-    rationale: This single-owner plugin may discard incompatible history, but it must preserve a user ledger until migration has validated it.
   - id: settings_ui
     title: Clear plugin settings
     requirement: Expose only the scalar Active Window Minutes, Refresh Interval Seconds, and Status Label settings with Title Case labels and action-oriented descriptions.
     rationale: OMP's plugin settings UI supports native boolean, string, number, and enum values, not structured configuration documents.
-  - id: local_reports_only
-    title: Local reports only
-    requirement: Report commands provide concise local summaries by default; only explicit report json commands emit local JSON. They do not call external systems or define a provider payload.
-    rationale: Export and billing allocation remain the user's later, transparent decision.
-  - id: cross_project_views
-    title: Cross-project local views
-    requirement: Every Project Time view accepts one final `--project NAME` selector for an exact persisted project label. Selected dashboards and summaries explicitly read the local ledger rather than claiming remote live session state. Selected reports calculate raw, split, and weighted allocation from the full local ledger before returning the selected project's entries.
-    rationale: Users must be able to inspect local evidence for another project without changing directories, while preserving honest session-state and concurrent-allocation semantics.
+  - id: local_views
+    title: Minimal local views
+    requirement: The status line and bare command show current top-level session state. `entries` accepts one final exact `--project NAME` selector and returns only local evidence. A selected bare dashboard reads the local ledger rather than claiming remote live session state.
+    rationale: Keep live status distinct from persisted evidence while limiting the public query surface to one export.
 non_requirements:
   - id: no_automatic_desk_clock
     description: Project Time does not infer desk time from prompts, agent turns, refreshes, or idle terminal state.
@@ -60,6 +44,10 @@ non_requirements:
     description: Project Time does not calculate money, rates, client policy, invoices, or external time-entry payloads.
   - id: no_automatic_source_aggregation
     description: Project Time does not aggregate agent_turn_elapsed and human_active time.
+  - id: no_local_allocation_reports
+    description: Project Time does not calculate raw, split, or weighted project allocations; downstream tools may make an explicit allocation decision from raw evidence.
+  - id: no_local_coverage_diagnostics
+    description: Project Time does not calculate date coverage, inactive gaps, spans, or concurrent overlap diagnostics.
   - id: no_repository_attribution
     description: Project Time does not configure repository-to-project, category, or task mappings.
   - id: no_inline_status_until_omp_support
