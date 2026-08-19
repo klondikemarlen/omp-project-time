@@ -77,8 +77,9 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 /project-time report human split
 /project-time report agent raw
 /project-time report human weighted '{"<repository-id>": 2}'
-/project-time report entries --project wrap
-/project-time report coverage --date 2026-07-21 --project wrap
+/project-time report json
+/project-time report json entries --project wrap
+/project-time report json coverage --date 2026-07-21 --project wrap
 /project-time --project wrap
 /project-time summary --project wrap
 /project-time history --project wrap
@@ -89,7 +90,7 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 
 `--project NAME` may follow any read-only view to select the exact persisted Project Time project label from the local ledger, for example `/project-time report --project wrap`. Quote labels containing spaces, such as `/project-time history --project "Ice Fog Analytics"`. The selected dashboard and summary are explicitly ledger views because another project's live session state is unavailable. Targeted history also labels current activity as unavailable rather than attributing this session to the selected project. Reports preserve full-ledger concurrent allocation before returning only the selected project. Type `--project ` after a valid view to complete stored project labels.
 
-`report` is the machine-readable aggregate form and includes both automatic sources with all allocation modes. `report entries` is the public, versioned raw-evidence snapshot for downstream tools; it returns stored intervals, never allocation totals.
+`report json` is the explicit machine-readable aggregate form and includes both automatic sources with all allocation modes. `report json entries` is the public, versioned raw-evidence snapshot for downstream tools; it returns stored intervals, never allocation totals.
 
 - `raw`: one total per sanitized project label. Concurrent durations remain fully attributed.
 - `split`: divides every overlapping interval equally across active repositories.
@@ -97,7 +98,7 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 
 Every report contains `ompActiveUnionMs`, the union of its source-kind intervals. It is an OMP-active reference, not literal desk time. Sources are never combined.
 
-`report coverage --date YYYY-MM-DD` emits per-project `human_active` diagnostics for the local calendar day. Each project contains `rawTotalMs`, non-overlapping `unionTotalMs`, `concurrentOverlapMs`, its `span`, and `inactiveGaps` with total and interval bounds. Entries crossing local midnight are clipped to the requested date. Add the exact persisted `--project NAME` selector to return one project. Coverage excludes `agent_turn_elapsed`.
+`report json coverage --date YYYY-MM-DD` emits per-project `human_active` diagnostics for the local calendar day. Each project contains `rawTotalMs`, non-overlapping `unionTotalMs`, `concurrentOverlapMs`, its `span`, and `inactiveGaps` with total and interval bounds. Entries crossing local midnight are clipped to the requested date. Add the exact persisted `--project NAME` selector to return one project. Coverage excludes `agent_turn_elapsed`.
 
 ## Local data
 
@@ -115,7 +116,7 @@ Entries may include `narrative: { text, source }` alongside `activity`, `startAt
 
 ### Evidence snapshot v1
 
-`/project-time report entries` publishes the `omp-project-time/evidence` v1 contract. Its read-only JSON object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
+`/project-time report json entries` publishes the `omp-project-time/evidence` v1 contract. Its read-only JSON object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
 
 Every entry preserves its stable `id`, source kind, sanitized project and repository identity, interval bounds, creation time, activity, and optional narrative and work item. `workItemAttribution` makes the work-item provenance explicit:
 
@@ -124,7 +125,7 @@ Every entry preserves its stable `id`, source kind, sanitized project and reposi
 - `unassigned`: no work item is known.
 - `ambiguous`: the prompt named multiple work items, so none was guessed.
 
-An attribution transition creates a new interval segment; Project Time never extends an existing interval across it. SQLite storage is internal: `report entries` remains the v1 evidence contract. Valid legacy automatic JSON ledgers without provenance fields are imported with their legacy attribution.
+An attribution transition creates a new interval segment; Project Time never extends an existing interval across it. SQLite storage is internal: `report json entries` remains the v1 evidence contract. Valid legacy automatic JSON ledgers without provenance fields are imported with their legacy attribution.
 
 Billing mapping and copyable review-only drafts belong to [Harvest Worklog](https://github.com/klondikemarlen/harvest-worklog). Project Time never maps evidence to billing targets, calculates billable time, or writes Harvest data.
 
