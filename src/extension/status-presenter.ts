@@ -2,7 +2,6 @@ import type { ProjectTimeConfig } from "@/config/project-time-config.js";
 import type { ExtensionContext } from "@/extension/types.js";
 import type { ProjectTimeState } from "@/time-log/domain/state.js";
 import type { TimeLogEntry } from "@/time-log/domain/model.js";
-import type { Report } from "@/time-log/domain/report.js";
 
 export const STATUS_KEY = "project-time";
 
@@ -38,7 +37,7 @@ export function dashboardText(
     `Project: ${project ?? "unavailable"} · Active: ${statusText(state, config)}`,
     `Session: ${sessionName ?? "unnamed"}`,
     `Activity: ${activityText(state.activity)}`,
-    "/project-time summary | history | report",
+    "/project-time entries",
   ].join("\n");
 }
 
@@ -53,116 +52,8 @@ export function projectDashboardText(
   return [
     `Project: ${project} · Ledger view`,
     `Last recorded: ${latest === undefined ? "none" : `${timestampText(latest.endAtMs)} — ${activityText(latest.activity)}`}`,
-    `/project-time summary --project ${project} | history --project ${project} | report --project ${project}`,
+    `/project-time entries --project ${project}`,
   ].join("\n");
-}
-
-export function historyText(
-  project: string | undefined,
-  state: ProjectTimeState | undefined,
-  config: ProjectTimeConfig | undefined,
-  humanEntries: readonly TimeLogEntry[],
-  agentEntries: readonly TimeLogEntry[],
-): string {
-  const humanMilliseconds = humanEntries.reduce(
-    (total, entry) => total + entry.endAtMs - entry.startAtMs,
-    0,
-  );
-  const agentMilliseconds = agentEntries.reduce(
-    (total, entry) => total + entry.endAtMs - entry.startAtMs,
-    0,
-  );
-  const recentHuman = recentEntries(humanEntries);
-  const recentAgent = recentEntries(agentEntries);
-  const currentActive =
-    state === undefined || config === undefined
-      ? "Current active: unavailable outside the active session"
-      : `Current active: ${statusText(state, config)}`;
-
-  return [
-    `Project: ${project ?? "unavailable"}`,
-    currentActive,
-    `Human active: ${humanEntries.length} intervals, ${durationText(humanMilliseconds)}`,
-    `Agent elapsed: ${agentEntries.length} intervals, ${durationText(agentMilliseconds)}`,
-    `Recent human active:${recentHuman.length === 0 ? " none" : `\n${recentHuman.join("\n")}`}`,
-    `Recent agent elapsed:${recentAgent.length === 0 ? " none" : `\n${recentAgent.join("\n")}`}`,
-  ].join("\n");
-}
-
-export function summaryText(
-  state: ProjectTimeState,
-  config: ProjectTimeConfig,
-  sessionName: string | undefined,
-  nowMs: number,
-): string {
-  const lastPromptAtMs = state.lastPromptAtMs;
-  let lastPrompt = "Last prompt: unavailable";
-
-  if (lastPromptAtMs !== undefined) {
-    const lastPromptAt = new Date(lastPromptAtMs);
-
-    if (!Number.isNaN(lastPromptAt.getTime())) {
-      lastPrompt = `Last prompt: ${durationText(nowMs - lastPromptAtMs)} ago (${lastPromptAt.toISOString()})`;
-    }
-  }
-
-  return [
-    `Session: ${sessionName ?? "unnamed"}`,
-    `Activity: ${activityText(state.activity)}`,
-    `Active time: ${durationText(state.activeMilliseconds)}`,
-    `Prompt count: ${state.promptCount}`,
-    lastPrompt,
-  ].join("\n");
-}
-
-export function projectSummaryText(
-  project: string,
-  entries: readonly TimeLogEntry[],
-): string {
-  const humanMilliseconds = entries
-    .filter((entry) => entry.sourceKind === "human_active")
-    .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0);
-  const agentMilliseconds = entries
-    .filter((entry) => entry.sourceKind === "agent_turn_elapsed")
-    .reduce((total, entry) => total + entry.endAtMs - entry.startAtMs, 0);
-
-  return [
-    `Project: ${project} · Ledger summary`,
-    `Human active: ${durationText(humanMilliseconds)}`,
-    `Agent elapsed: ${durationText(agentMilliseconds)}`,
-    `Recorded intervals: ${entries.length}`,
-  ].join("\n");
-}
-
-export function reportText(report: Report): string {
-  const entries = [...report.entries].sort(
-    (left, right) => right.durationMs - left.durationMs,
-  );
-
-  return [
-    `${sourceKindText(report.sourceKind)} — ${allocationText(report.mode)}`,
-    `OMP-active: ${durationText(report.ompActiveUnionMs)}`,
-    `Projects:${entries.length === 0 ? " none" : `\n${entries.map((entry) => `- ${entry.project}: ${durationText(entry.durationMs)}`).join("\n")}`}`,
-  ].join("\n");
-}
-
-function recentEntries(entries: readonly TimeLogEntry[]): string[] {
-  return [...entries]
-    .sort((left, right) => right.endAtMs - left.endAtMs)
-    .slice(0, 3)
-    .map((entry) => {
-      const workItem =
-        entry.workItem === undefined
-          ? ""
-          : ` — ${entry.workItem.repository === undefined ? "" : `${entry.workItem.repository} `}${entry.workItem.kind === "issue" ? "Issue" : "PR"} #${entry.workItem.number}`;
-      const summary = `- ${timestampText(entry.endAtMs)}: ${durationText(entry.endAtMs - entry.startAtMs)} — ${activityText(entry.activity)}${workItem}`;
-      return entry.narrative === undefined
-        ? summary
-        : `${summary}\n${entry.narrative.text
-            .split("\n")
-            .map((line) => `  ${line}`)
-            .join("\n")}`;
-    });
 }
 
 function timestampText(milliseconds: number): string {
@@ -174,19 +65,6 @@ function timestampText(milliseconds: number): string {
 
 function activityText(activity: string | undefined): string {
   return activity ?? "unlabelled";
-}
-
-function sourceKindText(sourceKind: Report["sourceKind"]): string {
-  return sourceKind === "human_active"
-    ? "Human collaboration"
-    : "Agent execution";
-}
-
-function allocationText(mode: Report["mode"]): string {
-  if (mode === "raw") return "full repository time";
-  if (mode === "split") return "equal split";
-
-  return "weighted split";
 }
 
 function durationText(milliseconds: number): string {
