@@ -978,7 +978,6 @@ function parseReportArgs(tokens: readonly string[]): ReportArgs {
   const json = rest[0] === "json";
   if (json) rest.shift();
 
-
   const entries = rest[0] === "entries";
   if (entries) {
     rest.shift();
