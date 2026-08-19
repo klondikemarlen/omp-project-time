@@ -251,7 +251,11 @@ test("exports raw evidence and generates automatic activity labels", async () =>
         createdAtMs: coverageStart + 120_000,
       },
     ]);
-
+    await handler("entries extra", context);
+    assert.match(
+      notices.at(-1)?.message ?? "",
+      /Unknown Project Time command. Use entries/,
+    );
 
     await handler("entries --project wrap --project other", context);
     assert.match(

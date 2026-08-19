@@ -238,9 +238,8 @@ export class ProjectTimeRuntime {
       return;
     }
 
-    const { command, project, tokens } = parsed;
-    const commandName = tokens[0];
-    if (command !== "" && commandName !== "entries") {
+    const { command, project } = parsed;
+    if (command !== "" && command !== "entries") {
       ctx.ui.notify(
         "Unknown Project Time command. Use entries.",
         "error",
