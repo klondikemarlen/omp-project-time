@@ -4,6 +4,9 @@
   "description": "Verifiable concurrent project-work logs for OMP.",
   "type": "module",
   "license": "MIT",
+  "bin": {
+    "project-time": "./dist/project-time-cli.js"
+  },
   "files": [
     "src",
     "dist",
