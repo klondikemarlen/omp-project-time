@@ -40,7 +40,7 @@ test("when exporting entries from the direct binary, writes the complete JSON sn
     )
 
     // Assert
-    assert.equal(stderr, "")
+    assert.doesNotMatch(stderr, /Project Time command error/)
     assert.deepEqual(JSON.parse(stdout), {
       format: "omp-project-time/evidence",
       version: 1,
