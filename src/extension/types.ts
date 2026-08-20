@@ -26,6 +26,7 @@ export type ThemeLike = {
 
 export type UiLike = {
   notify(message: string, type?: "info" | "warning" | "error"): void
+  editor?(title: string, prefill?: string): Promise<string | undefined>
   setStatus(key: string, text: string | undefined): void
   theme: ThemeLike
 }
@@ -38,6 +39,7 @@ type OmpModelRegistry = {
 
 export type ExtensionContext = {
   cwd: string
+  hasUI?: boolean
   ui: UiLike
   sessionManager: SessionManagerLike
   model?: OmpModel
@@ -112,4 +114,5 @@ export type ExtensionOptions = {
   loadConfig?: ConfigLoader
   prepareLocalData?: () => Promise<void>
   timeLogPath?: string
+  writeEvidence?: (snapshot: string) => void
 }

@@ -13,9 +13,12 @@ import type {
   ExtensionContext,
 } from "../src/extension/types.js";
 
-test("exports raw evidence and generates automatic activity labels", async () => {
+test("when exporting entries, opens complete evidence in the editor and writes full direct output", async () => {
+  // Arrange
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-runtime-"));
   const notices: Array<{ message: string; type?: string }> = [];
+  const directOutputs: string[] = [];
+  const evidenceViews: Array<{ title: string; content: string | undefined }> = [];
   const persistedActivities: unknown[] = [];
   const persistedNarratives: unknown[] = [];
   const persistedWorkItems: unknown[] = [];
@@ -67,6 +70,10 @@ test("exports raw evidence and generates automatic activity labels", async () =>
     ui: {
       notify(message, type) {
         notices.push({ message, type });
+      },
+      editor(title, prefill) {
+        evidenceViews.push({ title, content: prefill });
+        return Promise.resolve(undefined);
       },
       setStatus() {},
       theme: {
@@ -168,6 +175,9 @@ test("exports raw evidence and generates automatic activity labels", async () =>
         };
       },
       timeLogPath: path.join(directory, "time-log.json"),
+      writeEvidence(snapshot) {
+        directOutputs.push(snapshot);
+      },
     }).register();
     assert.deepEqual(completionValues, ["entries"]);
     assert.deepEqual(
@@ -188,7 +198,9 @@ test("exports raw evidence and generates automatic activity labels", async () =>
     assert.ok(handler);
     assert.ok(handlers.beforeAgentStart);
 
+    // Act
     await handler("", context);
+    // Assert
     assert.match(notices.at(-1)?.message ?? "", /Session: Project Time Audit/);
 
     assert.deepEqual(
@@ -204,7 +216,8 @@ test("exports raw evidence and generates automatic activity labels", async () =>
     assert.match(notices.at(-1)?.message ?? "", /Project: wrap · Ledger view/);
 
     await handler("entries --project wrap", context);
-    const evidenceSnapshot = JSON.parse(notices.at(-1)?.message ?? "");
+    assert.equal(evidenceViews.at(-1)?.title, "Project Time evidence");
+    const evidenceSnapshot = JSON.parse(evidenceViews.at(-1)?.content ?? "");
     assert.equal(evidenceSnapshot.format, "omp-project-time/evidence");
     assert.equal(evidenceSnapshot.version, 1);
     assert.deepEqual(evidenceSnapshot.entries, [
@@ -251,6 +264,11 @@ test("exports raw evidence and generates automatic activity labels", async () =>
         createdAtMs: coverageStart + 120_000,
       },
     ]);
+    assert.match(notices.at(-1)?.message ?? "", /Project: wrap · Ledger view/);
+    context.hasUI = false;
+    await handler("entries --project wrap", context);
+    assert.deepEqual(directOutputs, [evidenceViews.at(-1)?.content]);
+    context.hasUI = undefined;
     await handler("entries extra", context);
     assert.match(
       notices.at(-1)?.message ?? "",

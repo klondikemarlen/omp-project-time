@@ -1,7 +1,7 @@
 import { generateActivity } from "./extension/activity-label-generator.js";
-import projectTimeExtension from "./index.js";
+import { projectTimeExtension } from "./index.js";
 
-export default function ompProjectTimeExtension(pi, options = {}) {
+export function ompProjectTimeExtension(pi, options = {}) {
   projectTimeExtension(pi, {
     ...options,
     generateActivity:
@@ -10,3 +10,5 @@ export default function ompProjectTimeExtension(pi, options = {}) {
         generateActivity(prompt, ctx, activityContext)),
   });
 }
+
+export default ompProjectTimeExtension;

@@ -1,8 +1,8 @@
 import { generateActivity } from "@/extension/activity-label-generator.js"
-import projectTimeExtension from "@/index.js"
+import { projectTimeExtension } from "@/index.js"
 import type { ExtensionApi, ExtensionOptions } from "@/extension/types.js"
 
-export default function ompProjectTimeExtension(
+export function ompProjectTimeExtension(
   pi: ExtensionApi,
   options: ExtensionOptions = {},
 ): void {
@@ -14,3 +14,5 @@ export default function ompProjectTimeExtension(
         generateActivity(prompt, ctx, activityContext)),
   })
 }
+
+export default ompProjectTimeExtension

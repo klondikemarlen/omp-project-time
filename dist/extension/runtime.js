@@ -63,6 +63,8 @@ export class ProjectTimeRuntime {
 
   prepareLocalData;
 
+  writeEvidence;
+
   localDataPreparation;
 
   runtimeState = {};
@@ -145,6 +147,9 @@ export class ProjectTimeRuntime {
     );
     this.prepareLocalData =
       options.prepareLocalData ?? prepareProjectTimeDataRoot;
+    this.writeEvidence =
+      options.writeEvidence ??
+      ((snapshot) => process.stdout.write(`${snapshot}\n`));
   }
 
   register() {
@@ -247,21 +252,29 @@ export class ProjectTimeRuntime {
   async showEntries(ctx, project) {
     try {
       const entries = await this.timeLogRecorder.entries();
-      ctx.ui.notify(
-        JSON.stringify(
-          {
-            format: TIME_LOG_EVIDENCE_FORMAT,
-            version: TIME_LOG_EVIDENCE_VERSION,
-            entries:
-              project === undefined
-                ? entries
-                : entries.filter((entry) => entry.project === project),
-          },
-          null,
-          2,
-        ),
-        "info",
+      const snapshot = JSON.stringify(
+        {
+          format: TIME_LOG_EVIDENCE_FORMAT,
+          version: TIME_LOG_EVIDENCE_VERSION,
+          entries:
+            project === undefined
+              ? entries
+              : entries.filter((entry) => entry.project === project),
+        },
+        null,
+        2,
       );
+      if (ctx.hasUI === false) {
+        this.writeEvidence(snapshot);
+        return;
+      }
+      const editor = ctx.ui.editor;
+      if (editor === undefined) {
+        throw new Error(
+          "OMP does not support the Project Time evidence viewer.",
+        );
+      }
+      await editor("Project Time evidence", snapshot);
     } catch (error) {
       ctx.ui.notify(
         `Project Time entries error: ${errorMessage(error)}`,
