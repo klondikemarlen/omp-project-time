@@ -71,17 +71,20 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 
 ```text
 /project-time
-/project-time entries
-/project-time entries --project wrap
+/project-time entries [today|yesterday|YYYY-MM-DD|FROM..TO] [--project NAME]
+/project-time entries today --project wrap
+/project-time entries 2026-08-19..2026-08-20
 /project-time --project wrap
 project-time entries --project wrap
 ```
 
-`/project-time` shows the current project and active interval status. In interactive OMP, `entries` shows a read-only, bounded widget with the first and last local evidence entries rather than adding raw JSON to chat history.
+`/project-time` shows the current project and active interval status. In interactive OMP, `entries` shows a read-only, bounded widget with local-date filtered human and agent evidence totals plus first and last retained intervals, rather than adding raw JSON to chat history.
 
-The installed `project-time entries [--project NAME]` binary writes that same complete JSON snapshot to standard output.
+`entries` accepts `today`, `yesterday`, one local `YYYY-MM-DD` date, or an inclusive `FROM..TO` local date range before an optional exact `--project NAME`. OMP completes each date form.
 
-`--project NAME` selects an exact persisted Project Time project label. It may follow the live dashboard or `entries`, for example `/project-time entries --project wrap`. Quote labels containing spaces, such as `/project-time entries --project "Ice Fog Analytics"`. Type `--project ` after a valid OMP view to complete stored project labels.
+The installed `project-time entries [--project NAME]` binary writes the complete, unfiltered JSON snapshot to standard output.
+
+`--project NAME` selects an exact persisted Project Time project label. It may follow the live dashboard or `entries`, for example `/project-time entries today --project wrap`. Quote labels containing spaces, such as `/project-time entries today --project "Ice Fog Analytics"`. Type `--project ` after a valid OMP view to complete stored project labels.
 
 ## Local data
 
@@ -99,7 +102,7 @@ Entries may include `narrative: { text, source }` alongside `activity`, `startAt
 
 ### Evidence snapshot v1
 
-`/project-time entries` shows a bounded read-only preview; `project-time entries` writes the complete, untruncated `omp-project-time/evidence` v1 JSON snapshot to standard output. Its read-only object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
+`/project-time entries` shows a bounded read-only preview for the selected local dates; `project-time entries` writes the complete, untruncated `omp-project-time/evidence` v1 JSON snapshot to standard output. Its read-only object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
 
 Every entry preserves its stable `id`, source kind, sanitized project and repository identity, interval bounds, creation time, activity, and optional narrative and work item. `workItemAttribution` makes the work-item provenance explicit:
 
