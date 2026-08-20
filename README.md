@@ -76,7 +76,7 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 /project-time --project wrap
 ```
 
-`/project-time` shows the current project and active interval status. `entries` exports the versioned local evidence snapshot.
+`/project-time` shows the current project and active interval status. In interactive OMP, `entries` opens the complete versioned local evidence snapshot in OMP's scrollable editor rather than adding raw JSON to chat history. Noninteractive output writes the same complete JSON snapshot to standard output.
 
 `--project NAME` selects an exact persisted Project Time project label. It may follow the live dashboard or `entries`, for example `/project-time entries --project wrap`. Quote labels containing spaces, such as `/project-time entries --project "Ice Fog Analytics"`. Type `--project ` after a valid view to complete stored project labels.
 
@@ -96,7 +96,7 @@ Entries may include `narrative: { text, source }` alongside `activity`, `startAt
 
 ### Evidence snapshot v1
 
-`/project-time entries` publishes the `omp-project-time/evidence` v1 contract. Its read-only JSON object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
+`/project-time entries` presents the complete `omp-project-time/evidence` v1 JSON snapshot for inspection or copying; it is never truncated. Its read-only object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
 
 Every entry preserves its stable `id`, source kind, sanitized project and repository identity, interval bounds, creation time, activity, and optional narrative and work item. `workItemAttribution` makes the work-item provenance explicit:
 
