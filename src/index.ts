@@ -6,7 +6,7 @@ import type { ExtensionApi, ExtensionOptions } from "@/extension/types.js"
 export { loadProjectTimeConfig, loadProjectTimeConfigFromFiles }
 export type { ExtensionApi, ExtensionOptions }
 export type { ProjectTimeConfig } from "@/config/project-time-config.js"
-export default function projectTimeExtension(
+export function projectTimeExtension(
   pi: ExtensionApi,
   options: ExtensionOptions = {},
 ): void {
@@ -14,3 +14,5 @@ export default function projectTimeExtension(
 
   runtime.register()
 }
+
+export default projectTimeExtension

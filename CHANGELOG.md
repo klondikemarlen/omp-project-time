@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [9.1.0] - 2026-08-20
+
+### Added
+
+- Add the `project-time` binary for complete raw evidence JSON on standard output.
+
+### Fixed
+
+- Open complete raw evidence snapshots in OMP's scrollable editor so large exports do not inflate chat history.
+
 ## [9.0.0] - 2026-08-19
 
 ### Removed

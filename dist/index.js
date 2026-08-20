@@ -3,7 +3,9 @@ import { loadProjectTimeConfigFromFiles } from "./config/loader/load-project-tim
 import { ProjectTimeRuntime } from "./extension/runtime.js";
 
 export { loadProjectTimeConfig, loadProjectTimeConfigFromFiles };
-export default function projectTimeExtension(pi, options = {}) {
+export function projectTimeExtension(pi, options = {}) {
   const runtime = new ProjectTimeRuntime(pi, options);
   runtime.register();
 }
+
+export default projectTimeExtension;

@@ -15,10 +15,7 @@ import { AutomaticTimeLogRecorder } from "../time-log/recorder.js";
 import { parseGeneratedActivityLabel } from "../time-log/domain/activity.js";
 import { parseActivityNarrative } from "../time-log/domain/narrative.js";
 import { resolveWorkItemAssociation } from "../time-log/domain/work-item.js";
-import {
-  TIME_LOG_EVIDENCE_FORMAT,
-  TIME_LOG_EVIDENCE_VERSION,
-} from "../time-log/infrastructure/state-mapper.js";
+import { formatTimeLogEvidence } from "../time-log/infrastructure/state-mapper.js";
 import {
   clearStatus,
   dashboardText,
@@ -247,21 +244,14 @@ export class ProjectTimeRuntime {
   async showEntries(ctx, project) {
     try {
       const entries = await this.timeLogRecorder.entries();
-      ctx.ui.notify(
-        JSON.stringify(
-          {
-            format: TIME_LOG_EVIDENCE_FORMAT,
-            version: TIME_LOG_EVIDENCE_VERSION,
-            entries:
-              project === undefined
-                ? entries
-                : entries.filter((entry) => entry.project === project),
-          },
-          null,
-          2,
-        ),
-        "info",
-      );
+      const snapshot = formatTimeLogEvidence(entries, project);
+      const editor = ctx.ui.editor;
+      if (editor === undefined) {
+        throw new Error(
+          "OMP does not support the Project Time evidence viewer.",
+        );
+      }
+      await editor("Project Time evidence", snapshot);
     } catch (error) {
       ctx.ui.notify(
         `Project Time entries error: ${errorMessage(error)}`,

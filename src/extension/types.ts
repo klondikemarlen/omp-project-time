@@ -26,6 +26,7 @@ export type ThemeLike = {
 
 export type UiLike = {
   notify(message: string, type?: "info" | "warning" | "error"): void
+  editor?(title: string, prefill?: string): Promise<string | undefined>
   setStatus(key: string, text: string | undefined): void
   theme: ThemeLike
 }

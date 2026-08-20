@@ -1,9 +1,12 @@
 {
   "name": "omp-project-time",
-  "version": "9.0.0",
+  "version": "9.1.0",
   "description": "Verifiable concurrent project-work logs for OMP.",
   "type": "module",
   "license": "MIT",
+  "bin": {
+    "project-time": "./dist/project-time-cli.js"
+  },
   "files": [
     "src",
     "dist",
