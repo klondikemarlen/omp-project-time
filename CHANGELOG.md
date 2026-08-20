@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Open complete raw evidence snapshots in OMP's scrollable editor so large exports do not inflate chat history.
+- Open complete raw evidence snapshots in OMP's scrollable editor so large exports do not inflate chat history, while the `project-time` binary retains complete JSON output.
 
 ## [9.0.0] - 2026-08-19
 
