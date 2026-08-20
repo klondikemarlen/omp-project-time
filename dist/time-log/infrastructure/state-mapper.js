@@ -2,6 +2,21 @@ import { parseTimeLogEntry } from "../../time-log/domain/parse-entry.js";
 
 export const TIME_LOG_EVIDENCE_FORMAT = "omp-project-time/evidence";
 export const TIME_LOG_EVIDENCE_VERSION = 1;
+export function formatTimeLogEvidence(entries, project) {
+  return JSON.stringify(
+    {
+      format: TIME_LOG_EVIDENCE_FORMAT,
+      version: TIME_LOG_EVIDENCE_VERSION,
+      entries:
+        project === undefined
+          ? entries
+          : entries.filter((entry) => entry.project === project),
+    },
+    null,
+    2,
+  );
+}
+
 export function parseTimeLogState(value) {
   if (
     typeof value !== "object" ||

@@ -17,10 +17,7 @@ import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js";
 import { parseGeneratedActivityLabel } from "@/time-log/domain/activity.js";
 import { parseActivityNarrative } from "@/time-log/domain/narrative.js";
 import { resolveWorkItemAssociation } from "@/time-log/domain/work-item.js";
-import {
-  TIME_LOG_EVIDENCE_FORMAT,
-  TIME_LOG_EVIDENCE_VERSION,
-} from "@/time-log/infrastructure/state-mapper.js";
+import { formatTimeLogEvidence } from "@/time-log/infrastructure/state-mapper.js";
 import type { ProjectTimeState } from "@/time-log/domain/state.js";
 import {
   clearStatus,
@@ -77,7 +74,6 @@ export class ProjectTimeRuntime {
   private readonly timeLogRecorder: AutomaticTimeLogRecorder;
   private readonly usesDefaultDataRoot: boolean;
   private readonly prepareLocalData: () => Promise<void>;
-  private readonly writeEvidence: (snapshot: string) => void;
   private localDataPreparation: Promise<void> | undefined;
   private readonly runtimeState: RuntimeState = {};
 
@@ -162,8 +158,6 @@ export class ProjectTimeRuntime {
     );
     this.prepareLocalData =
       options.prepareLocalData ?? prepareProjectTimeDataRoot;
-    this.writeEvidence =
-      options.writeEvidence ?? ((snapshot) => process.stdout.write(`${snapshot}\n`));
   }
 
   register(): void {
@@ -288,21 +282,7 @@ export class ProjectTimeRuntime {
   ): Promise<void> {
     try {
       const entries = await this.timeLogRecorder.entries();
-      const snapshot = JSON.stringify(
-        {
-          format: TIME_LOG_EVIDENCE_FORMAT,
-          version: TIME_LOG_EVIDENCE_VERSION,
-          entries: project === undefined
-            ? entries
-            : entries.filter((entry) => entry.project === project),
-        },
-        null,
-        2,
-      );
-      if (ctx.hasUI === false) {
-        this.writeEvidence(snapshot);
-        return;
-      }
+      const snapshot = formatTimeLogEvidence(entries, project);
 
       const editor = ctx.ui.editor;
       if (editor === undefined) {

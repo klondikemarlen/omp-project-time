@@ -10,6 +10,24 @@ export type TimeLogState = {
   entries: TimeLogEntry[]
 }
 
+export function formatTimeLogEvidence(
+  entries: readonly TimeLogEntry[],
+  project: string | undefined,
+): string {
+  return JSON.stringify(
+    {
+      format: TIME_LOG_EVIDENCE_FORMAT,
+      version: TIME_LOG_EVIDENCE_VERSION,
+      entries:
+        project === undefined
+          ? entries
+          : entries.filter((entry) => entry.project === project),
+    },
+    null,
+    2,
+  )
+}
+
 export function parseTimeLogState(value: unknown): TimeLogState | undefined {
   if (
     typeof value !== "object" ||

@@ -13,11 +13,10 @@ import type {
   ExtensionContext,
 } from "../src/extension/types.js";
 
-test("when exporting entries, opens complete evidence in the editor and writes full direct output", async () => {
+test("when exporting entries, opens complete evidence in the editor", async () => {
   // Arrange
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-runtime-"));
   const notices: Array<{ message: string; type?: string }> = [];
-  const directOutputs: string[] = [];
   const evidenceViews: Array<{ title: string; content: string | undefined }> = [];
   const persistedActivities: unknown[] = [];
   const persistedNarratives: unknown[] = [];
@@ -175,9 +174,6 @@ test("when exporting entries, opens complete evidence in the editor and writes f
         };
       },
       timeLogPath: path.join(directory, "time-log.json"),
-      writeEvidence(snapshot) {
-        directOutputs.push(snapshot);
-      },
     }).register();
     assert.deepEqual(completionValues, ["entries"]);
     assert.deepEqual(
@@ -265,10 +261,6 @@ test("when exporting entries, opens complete evidence in the editor and writes f
       },
     ]);
     assert.match(notices.at(-1)?.message ?? "", /Project: wrap · Ledger view/);
-    context.hasUI = false;
-    await handler("entries --project wrap", context);
-    assert.deepEqual(directOutputs, [evidenceViews.at(-1)?.content]);
-    context.hasUI = undefined;
     await handler("entries extra", context);
     assert.match(
       notices.at(-1)?.message ?? "",

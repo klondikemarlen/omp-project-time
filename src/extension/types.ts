@@ -39,7 +39,6 @@ type OmpModelRegistry = {
 
 export type ExtensionContext = {
   cwd: string
-  hasUI?: boolean
   ui: UiLike
   sessionManager: SessionManagerLike
   model?: OmpModel
@@ -114,5 +113,4 @@ export type ExtensionOptions = {
   loadConfig?: ConfigLoader
   prepareLocalData?: () => Promise<void>
   timeLogPath?: string
-  writeEvidence?: (snapshot: string) => void
 }
