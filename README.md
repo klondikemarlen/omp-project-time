@@ -77,7 +77,7 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 project-time entries --project wrap
 ```
 
-`/project-time` shows the current project and active interval status. In interactive OMP, `entries` opens the complete versioned local evidence snapshot in OMP's scrollable editor rather than adding raw JSON to chat history.
+`/project-time` shows the current project and active interval status. In interactive OMP, `entries` shows a read-only, bounded widget with the first and last local evidence entries rather than adding raw JSON to chat history.
 
 The installed `project-time entries [--project NAME]` binary writes that same complete JSON snapshot to standard output.
 
@@ -99,7 +99,7 @@ Entries may include `narrative: { text, source }` alongside `activity`, `startAt
 
 ### Evidence snapshot v1
 
-`/project-time entries` presents the complete `omp-project-time/evidence` v1 JSON snapshot for inspection or copying; it is never truncated. `project-time entries` writes the same full JSON to standard output. Its read-only object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
+`/project-time entries` shows a bounded read-only preview; `project-time entries` writes the complete, untruncated `omp-project-time/evidence` v1 JSON snapshot to standard output. Its read-only object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
 
 Every entry preserves its stable `id`, source kind, sanitized project and repository identity, interval bounds, creation time, activity, and optional narrative and work item. `workItemAttribution` makes the work-item provenance explicit:
 
