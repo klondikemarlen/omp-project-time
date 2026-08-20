@@ -235,6 +235,10 @@ test("when exporting entries, opens a bounded read-only evidence view", async ()
     await handler("entries", context);
     const allPreview = evidenceViews.at(-1) ?? [];
     assert.ok(allPreview.includes("… 1 entries hidden"));
+    assert.ok(allPreview.some((line) => line.includes("wrap-human")));
+    assert.ok(allPreview.some((line) => line.includes("wrap-agent")));
+    assert.ok(allPreview.some((line) => line.includes("multiword-human")));
+    assert.ok(!allPreview.some((line) => line.includes("other-human")));
     assert.ok(allPreview.includes("Complete JSON: project-time entries"));
     await handler("entries extra", context);
     assert.match(
