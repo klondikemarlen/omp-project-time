@@ -13,11 +13,11 @@ import type {
   ExtensionContext,
 } from "../src/extension/types.js";
 
-test("when exporting entries, opens complete evidence in the editor", async () => {
+test("when exporting entries, opens a bounded read-only evidence view", async () => {
   // Arrange
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-runtime-"));
   const notices: Array<{ message: string; type?: string }> = [];
-  const evidenceViews: Array<{ title: string; content: string | undefined }> = [];
+  const evidenceViews: string[][] = [];
   const persistedActivities: unknown[] = [];
   const persistedNarratives: unknown[] = [];
   const persistedWorkItems: unknown[] = [];
@@ -70,9 +70,8 @@ test("when exporting entries, opens complete evidence in the editor", async () =
       notify(message, type) {
         notices.push({ message, type });
       },
-      editor(title, prefill) {
-        evidenceViews.push({ title, content: prefill });
-        return Promise.resolve(undefined);
+      setWidget(_key, content) {
+        if (content !== undefined) evidenceViews.push([...content]);
       },
       setStatus() {},
       theme: {
@@ -212,55 +211,31 @@ test("when exporting entries, opens complete evidence in the editor", async () =
     assert.match(notices.at(-1)?.message ?? "", /Project: wrap · Ledger view/);
 
     await handler("entries --project wrap", context);
-    assert.equal(evidenceViews.at(-1)?.title, "Project Time evidence");
-    const evidenceSnapshot = JSON.parse(evidenceViews.at(-1)?.content ?? "");
-    assert.equal(evidenceSnapshot.format, "omp-project-time/evidence");
-    assert.equal(evidenceSnapshot.version, 1);
-    assert.deepEqual(evidenceSnapshot.entries, [
-      {
-        id: "wrap-human",
-        sourceKind: "human_active",
-        project: "wrap",
-        repositoryId: "wrap-repository",
-        repositoryIdentity: "github.com/acme/wrap",
-        sessionId: "session-wrap",
-        activity: "Code Review",
-        narrative: {
-          text: "Review the evidence-export contract.",
-          source: "generated",
-        },
-        workItem: {
-          kind: "issue",
-          number: 117,
-          repository: "github.com/acme/wrap",
-          source: "user_provided",
-        },
-        workItemAttribution: "explicit_prompt",
-        startAtMs: coverageStart,
-        endAtMs: coverageStart + 60_000,
-        createdAtMs: coverageStart + 60_000,
-      },
-      {
-        id: "wrap-agent",
-        sourceKind: "agent_turn_elapsed",
-        project: "wrap",
-        repositoryId: "wrap-repository",
-        repositoryIdentity: "github.com/acme/wrap",
-        sessionId: "session-wrap",
-        activity: "Tests",
-        workItem: {
-          kind: "issue",
-          number: 117,
-          repository: "github.com/acme/wrap",
-          source: "user_provided",
-        },
-        workItemAttribution: "carried_forward",
-        startAtMs: coverageStart + 60_000,
-        endAtMs: coverageStart + 120_000,
-        createdAtMs: coverageStart + 120_000,
-      },
+    const wrapPreview = evidenceViews.at(-1) ?? [];
+    assert.deepEqual(wrapPreview.slice(0, 3), [
+      "Project Time evidence",
+      "Entries: 2 · wrap",
+      "",
     ]);
+    assert.ok(wrapPreview.some((line) => line.includes("wrap-human")));
+    assert.ok(wrapPreview.some((line) => line.includes("wrap-agent")));
+    assert.ok(!wrapPreview.some((line) => line.includes("other-human")));
+    assert.ok(
+      wrapPreview.includes(
+        "Complete JSON: project-time entries --project \"wrap\"",
+      ),
+    );
+    assert.ok(
+      !wrapPreview.some((line) =>
+        line.includes("Review the evidence-export contract"),
+      ),
+    );
     assert.match(notices.at(-1)?.message ?? "", /Project: wrap · Ledger view/);
+
+    await handler("entries", context);
+    const allPreview = evidenceViews.at(-1) ?? [];
+    assert.ok(allPreview.includes("… 1 entries hidden"));
+    assert.ok(allPreview.includes("Complete JSON: project-time entries"));
     await handler("entries extra", context);
     assert.match(
       notices.at(-1)?.message ?? "",

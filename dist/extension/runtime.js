@@ -15,7 +15,6 @@ import { AutomaticTimeLogRecorder } from "../time-log/recorder.js";
 import { parseGeneratedActivityLabel } from "../time-log/domain/activity.js";
 import { parseActivityNarrative } from "../time-log/domain/narrative.js";
 import { resolveWorkItemAssociation } from "../time-log/domain/work-item.js";
-import { formatTimeLogEvidence } from "../time-log/infrastructure/state-mapper.js";
 import {
   clearStatus,
   dashboardText,
@@ -37,6 +36,39 @@ const PROJECT_OPTION = {
   label: "--project",
   description: "View an exact local Project Time project",
 };
+const EVIDENCE_PREVIEW_ENTRY_LIMIT = 3;
+const PROJECT_TIME_EVIDENCE_WIDGET = "project-time-evidence";
+function evidencePreviewLines(entries, project) {
+  const selectedEntries =
+    project === undefined
+      ? entries
+      : entries.filter((entry) => entry.project === project);
+  const command =
+    project === undefined
+      ? "project-time entries"
+      : `project-time entries --project ${JSON.stringify(project)}`;
+  const visibleEntries =
+    selectedEntries.length <= EVIDENCE_PREVIEW_ENTRY_LIMIT
+      ? selectedEntries
+      : [...selectedEntries.slice(0, 2), ...selectedEntries.slice(-1)];
+  const hiddenEntries = selectedEntries.length - visibleEntries.length;
+  const entryLines = visibleEntries.map(
+    ({ activity, id, project: entryProject, sourceKind }) =>
+      `${sourceKind} · ${entryProject} · ${activity ?? "No activity"} · ${id}`,
+  );
+  return [
+    "Project Time evidence",
+    `Entries: ${selectedEntries.length}${project === undefined ? "" : ` · ${project}`}`,
+    "",
+    ...entryLines.slice(0, 2),
+    ...(hiddenEntries === 0 ? [] : [`… ${hiddenEntries} entries hidden`]),
+    ...entryLines.slice(2),
+    "",
+    `Complete JSON: ${command}`,
+    "/project-time clears this preview",
+  ];
+}
+
 function supportsProjectOption(tokens) {
   return (
     tokens.length === 0 || (tokens.length === 1 && tokens[0] === "entries")
@@ -197,6 +229,7 @@ export class ProjectTimeRuntime {
       );
       return;
     }
+    ctx.ui.setWidget?.(PROJECT_TIME_EVIDENCE_WIDGET, undefined);
     let parsed;
     try {
       parsed = parseProjectTimeCommand(args);
@@ -244,14 +277,12 @@ export class ProjectTimeRuntime {
   async showEntries(ctx, project) {
     try {
       const entries = await this.timeLogRecorder.entries();
-      const snapshot = formatTimeLogEvidence(entries, project);
-      const editor = ctx.ui.editor;
-      if (editor === undefined) {
-        throw new Error(
-          "OMP does not support the Project Time evidence viewer.",
-        );
+      const preview = evidencePreviewLines(entries, project);
+      if (ctx.ui.setWidget === undefined) {
+        ctx.ui.notify(preview.join("\n"), "info");
+        return;
       }
-      await editor("Project Time evidence", snapshot);
+      ctx.ui.setWidget(PROJECT_TIME_EVIDENCE_WIDGET, preview);
     } catch (error) {
       ctx.ui.notify(
         `Project Time entries error: ${errorMessage(error)}`,
