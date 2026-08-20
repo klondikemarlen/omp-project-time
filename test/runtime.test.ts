@@ -24,6 +24,7 @@ test("when exporting entries, opens a bounded read-only evidence view", async ()
   const persistedWorkItemAttributions: unknown[] = [];
   const generatedPrompts: string[] = [];
   const coverageStart = new Date(2026, 0, 1).getTime();
+  const now = new Date(2026, 0, 1, 12);
   const handlers: { beforeAgentStart?: BeforeAgentStartHandler } = {};
   let completionValues: string[] = [];
   let argumentCompletions:
@@ -93,6 +94,17 @@ test("when exporting entries, opens a bounded read-only evidence view", async ()
       path.join(directory, "time-log.json"),
       JSON.stringify({
         entries: [
+          {
+            id: "overnight-human",
+            sourceKind: "human_active",
+            project: "wrap",
+            repositoryId: "wrap-repository",
+            sessionId: "session-wrap",
+            activity: "Overnight Review",
+            startAtMs: coverageStart - 30 * 60_000,
+            endAtMs: coverageStart + 30 * 60_000,
+            createdAtMs: coverageStart + 30 * 60_000,
+          },
           {
             id: "wrap-human",
             sourceKind: "human_active",
@@ -173,6 +185,7 @@ test("when exporting entries, opens a bounded read-only evidence view", async ()
         };
       },
       timeLogPath: path.join(directory, "time-log.json"),
+      now: () => now,
     }).register();
     assert.deepEqual(completionValues, ["entries"]);
     assert.deepEqual(
@@ -185,7 +198,13 @@ test("when exporting entries, opens a bounded read-only evidence view", async ()
     );
     assert.deepEqual(
       argumentCompletions?.("entries ")?.map(({ value }) => value),
-      ["entries --project"],
+      [
+        "entries today",
+        "entries yesterday",
+        "entries 2026-01-01",
+        "entries 2025-12-31..2026-01-01",
+        "entries --project",
+      ],
     );
     assert.equal(argumentCompletions?.("garbage "), null);
     assert.equal(argumentCompletions?.("entries extra "), null);
@@ -199,51 +218,49 @@ test("when exporting entries, opens a bounded read-only evidence view", async ()
     assert.match(notices.at(-1)?.message ?? "", /Session: Project Time Audit/);
 
     assert.deepEqual(
-      argumentCompletions?.("entries --project w")?.map(({ value }) => value),
-      ["entries --project wrap"],
+      argumentCompletions?.("entries today --project w")?.map(({ value }) => value),
+      ["entries today --project wrap"],
     );
     assert.deepEqual(
       argumentCompletions?.("--project ")?.map(({ value }) => value),
       ['--project "Ice Fog Analytics"', "--project other", "--project wrap"],
     );
 
-    await handler("--project wrap", context);
-    assert.match(notices.at(-1)?.message ?? "", /Project: wrap · Ledger view/);
-
-    await handler("entries --project wrap", context);
-    const wrapPreview = evidenceViews.at(-1) ?? [];
-    assert.deepEqual(wrapPreview.slice(0, 3), [
+    await handler("entries today --project wrap", context);
+    const todayPreview = evidenceViews.at(-1) ?? [];
+    assert.deepEqual(todayPreview.slice(0, 3), [
       "Project Time evidence",
-      "Entries: 2 · wrap",
-      "",
+      "Period: 2026-01-01 · wrap",
+      "Entries: 3 · Human 31m · Agent 1m",
     ]);
-    assert.ok(wrapPreview.some((line) => line.includes("wrap-human")));
-    assert.ok(wrapPreview.some((line) => line.includes("wrap-agent")));
-    assert.ok(!wrapPreview.some((line) => line.includes("other-human")));
-    assert.ok(
-      wrapPreview.includes(
-        "Complete JSON: project-time entries --project \"wrap\"",
-      ),
-    );
-    assert.ok(
-      !wrapPreview.some((line) =>
-        line.includes("Review the evidence-export contract"),
-      ),
-    );
-    assert.match(notices.at(-1)?.message ?? "", /Project: wrap · Ledger view/);
+    assert.ok(todayPreview.some((line) => line.includes("00:00–00:30 · Human · wrap · Overnight Review")));
+    assert.ok(todayPreview.some((line) => line.includes("Code Review")));
+    assert.ok(todayPreview.some((line) => line.includes("Tests")));
+    assert.ok(!todayPreview.some((line) => line.includes("other")));
 
-    await handler("entries", context);
+    await handler("entries yesterday --project wrap", context);
+    const yesterdayPreview = evidenceViews.at(-1) ?? [];
+    assert.deepEqual(yesterdayPreview.slice(0, 3), [
+      "Project Time evidence",
+      "Period: 2025-12-31 · wrap",
+      "Entries: 1 · Human 30m · Agent 0m",
+    ]);
+    assert.ok(yesterdayPreview.some((line) => line.includes("23:30–00:00 · Human · wrap · Overnight Review")));
+
+    await handler("entries 2025-12-31..2026-01-01 --project wrap", context);
+    const rangePreview = evidenceViews.at(-1) ?? [];
+    assert.ok(rangePreview.includes("Entries: 3 · Human 1h 1m · Agent 1m"));
+
+    await handler("entries today", context);
     const allPreview = evidenceViews.at(-1) ?? [];
-    assert.ok(allPreview.includes("… 1 entries hidden"));
-    assert.ok(allPreview.some((line) => line.includes("wrap-human")));
-    assert.ok(allPreview.some((line) => line.includes("wrap-agent")));
-    assert.ok(allPreview.some((line) => line.includes("multiword-human")));
-    assert.ok(!allPreview.some((line) => line.includes("other-human")));
-    assert.ok(allPreview.includes("Complete JSON: project-time entries"));
+    assert.ok(allPreview.includes("… 2 entries hidden"));
+    assert.ok(allPreview.some((line) => line.includes("Overnight Review")));
+    assert.ok(allPreview.some((line) => line.includes("Planning")));
+    assert.ok(!allPreview.some((line) => line.includes("Unrelated Work")));
     await handler("entries extra", context);
     assert.match(
       notices.at(-1)?.message ?? "",
-      /Unknown Project Time command. Use entries/,
+      /Date must be today, yesterday, or YYYY-MM-DD/,
     );
 
     await handler("entries --project wrap --project other", context);

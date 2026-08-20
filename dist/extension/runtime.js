@@ -38,11 +38,107 @@ const PROJECT_OPTION = {
 };
 const EVIDENCE_PREVIEW_ENTRY_LIMIT = 3;
 const PROJECT_TIME_EVIDENCE_WIDGET = "project-time-evidence";
-function evidencePreviewLines(entries, project) {
-  const selectedEntries =
-    project === undefined
-      ? entries
-      : entries.filter((entry) => entry.project === project);
+const DATE_FILTER_PATTERN =
+  /^(today|yesterday|\d{4}-\d{2}-\d{2})(?:\.\.(today|yesterday|\d{4}-\d{2}-\d{2}))?$/i;
+function localDateText(date) {
+  return [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join("-");
+}
+
+function localTimeText(timestampMs) {
+  const date = new Date(timestampMs);
+  return [date.getHours(), date.getMinutes()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+function resolveEvidenceDate(value, now) {
+  const alias = value.toLowerCase();
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (alias === "today") return date;
+  if (alias === "yesterday") {
+    date.setDate(date.getDate() - 1);
+    return date;
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match === null) {
+    throw new Error("Date must be today, yesterday, or YYYY-MM-DD.");
+  }
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    throw new Error("Date must be a valid local YYYY-MM-DD date.");
+  }
+  return parsed;
+}
+
+function parseEvidenceDateRange(value, now) {
+  const [fromText, toText] = value.split("..");
+  const from = resolveEvidenceDate(fromText ?? "", now);
+  const to = resolveEvidenceDate(toText ?? fromText ?? "", now);
+  if (to < from) {
+    throw new Error("Date ranges must end on or after their start date.");
+  }
+  return {
+    display: `${localDateText(from)}${toText === undefined ? "" : `..${localDateText(to)}`}`,
+    startAtMs: from.getTime(),
+    endAtMs: new Date(
+      to.getFullYear(),
+      to.getMonth(),
+      to.getDate() + 1,
+    ).getTime(),
+  };
+}
+
+function evidenceDateCompletions(now) {
+  const today = localDateText(now);
+  const yesterday = localDateText(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1),
+  );
+  return [
+    { value: "today", label: "today", description: "Local calendar day" },
+    {
+      value: "yesterday",
+      label: "yesterday",
+      description: "Previous local calendar day",
+    },
+    {
+      value: today,
+      label: "YYYY-MM-DD",
+      description: "Today's local date; edit as needed",
+    },
+    {
+      value: `${yesterday}..${today}`,
+      label: "YYYY-MM-DD..YYYY-MM-DD",
+      description: "Inclusive local date range; edit both endpoints",
+    },
+  ];
+}
+
+function formatEvidenceDuration(milliseconds) {
+  const minutes = Math.floor(milliseconds / 60_000);
+  const hours = Math.floor(minutes / 60);
+  return hours === 0 ? `${minutes}m` : `${hours}h ${minutes % 60}m`;
+}
+
+function evidencePreviewLines(entries, project, dateRange) {
+  const selectedEntries = entries
+    .filter((entry) => project === undefined || entry.project === project)
+    .map((entry) => ({
+      entry,
+      startAtMs: Math.max(entry.startAtMs, dateRange?.startAtMs ?? -Infinity),
+      endAtMs: Math.min(entry.endAtMs, dateRange?.endAtMs ?? Infinity),
+    }))
+    .filter(({ startAtMs, endAtMs }) => startAtMs < endAtMs)
+    .sort((left, right) => left.startAtMs - right.startAtMs);
   const command =
     project === undefined
       ? "project-time entries"
@@ -52,26 +148,37 @@ function evidencePreviewLines(entries, project) {
       ? selectedEntries
       : [...selectedEntries.slice(0, 2), ...selectedEntries.slice(-1)];
   const hiddenEntries = selectedEntries.length - visibleEntries.length;
-  const entryLines = visibleEntries.map(
-    ({ activity, id, project: entryProject, sourceKind }) =>
-      `${sourceKind} · ${entryProject} · ${activity ?? "No activity"} · ${id}`,
+  const sourceDurations = selectedEntries.reduce(
+    (durations, { endAtMs, entry, startAtMs }) => {
+      durations[entry.sourceKind] += endAtMs - startAtMs;
+      return durations;
+    },
+    { human_active: 0, agent_turn_elapsed: 0 },
   );
+  const entryLines = visibleEntries.map(({ endAtMs, entry, startAtMs }) => {
+    const source = entry.sourceKind === "human_active" ? "Human" : "Agent";
+    return `${localTimeText(startAtMs)}–${localTimeText(endAtMs)} · ${source} · ${entry.project} · ${entry.activity ?? "Unlabelled"}`;
+  });
   return [
     "Project Time evidence",
-    `Entries: ${selectedEntries.length}${project === undefined ? "" : ` · ${project}`}`,
+    `Period: ${dateRange?.display ?? "all local dates"}${project === undefined ? "" : ` · ${project}`}`,
+    `Entries: ${selectedEntries.length} · Human ${formatEvidenceDuration(sourceDurations.human_active)} · Agent ${formatEvidenceDuration(sourceDurations.agent_turn_elapsed)}`,
     "",
     ...entryLines.slice(0, 2),
     ...(hiddenEntries === 0 ? [] : [`… ${hiddenEntries} entries hidden`]),
     ...entryLines.slice(2),
     "",
-    `Complete JSON: ${command}`,
+    `Complete JSON (all dates): ${command}`,
     "/project-time clears this preview",
   ];
 }
 
 function supportsProjectOption(tokens) {
   return (
-    tokens.length === 0 || (tokens.length === 1 && tokens[0] === "entries")
+    tokens.length === 0 ||
+    (tokens[0] === "entries" &&
+      (tokens.length === 1 ||
+        (tokens.length === 2 && DATE_FILTER_PATTERN.test(tokens[1] ?? ""))))
   );
 }
 
@@ -92,6 +199,8 @@ export class ProjectTimeRuntime {
 
   prepareLocalData;
 
+  now;
+
   localDataPreparation;
 
   runtimeState = {};
@@ -106,7 +215,7 @@ export class ProjectTimeRuntime {
 
   projectTimeArgumentCompletions(argumentPrefix) {
     const prefix = argumentPrefix.trimStart();
-    const tokens = prefix.trim().split(/\s+/);
+    const tokens = prefix.trim() === "" ? [] : prefix.trim().split(/\s+/);
     const projectOptionIndex = tokens.indexOf("--project");
     if (projectOptionIndex !== -1) {
       const baseTokens = tokens.slice(0, projectOptionIndex);
@@ -128,13 +237,30 @@ export class ProjectTimeRuntime {
           description: "Local Project Time project",
         }));
     }
+    if (tokens.length === 0) return [...PROJECT_TIME_COMMANDS];
     if (tokens.length === 1 && !prefix.endsWith(" ")) {
-      const choices = tokens[0].startsWith("--")
+      const choices = tokens[0]?.startsWith("--")
         ? [PROJECT_OPTION]
         : PROJECT_TIME_COMMANDS;
       return choices.filter(({ value }) =>
-        value.startsWith(tokens[0].toLowerCase()),
+        value.startsWith(tokens[0]?.toLowerCase() ?? ""),
       );
+    }
+    if (
+      tokens[0] === "entries" &&
+      (tokens.length === 1 ||
+        (tokens.length === 2 &&
+          !prefix.endsWith(" ") &&
+          !tokens[1]?.startsWith("--")))
+    ) {
+      const partial = tokens.length === 1 ? "" : (tokens[1] ?? "");
+      const choices = evidenceDateCompletions(this.now())
+        .filter(({ value }) => value.startsWith(partial.toLowerCase()))
+        .map((choice) => ({ ...choice, value: `entries ${choice.value}` }));
+      if (tokens.length === 1) {
+        choices.push({ ...PROJECT_OPTION, value: "entries --project" });
+      }
+      return choices;
     }
     const currentIsFlagPrefix =
       !prefix.endsWith(" ") && tokens.at(-1)?.startsWith("--");
@@ -159,6 +285,7 @@ export class ProjectTimeRuntime {
     this.activityGenerationTimeoutMs =
       options.activityGenerationTimeoutMs ??
       DEFAULT_ACTIVITY_GENERATION_TIMEOUT_MS;
+    this.now = options.now ?? (() => new Date());
     this.usesDefaultDataRoot =
       options.prepareLocalData !== undefined ||
       options.timeLogPath === undefined;
@@ -232,7 +359,7 @@ export class ProjectTimeRuntime {
     ctx.ui.setWidget?.(PROJECT_TIME_EVIDENCE_WIDGET, undefined);
     let parsed;
     try {
-      parsed = parseProjectTimeCommand(args);
+      parsed = parseProjectTimeCommand(args, this.now());
     } catch (error) {
       ctx.ui.notify(
         `Project Time command error: ${errorMessage(error)}`,
@@ -240,13 +367,13 @@ export class ProjectTimeRuntime {
       );
       return;
     }
-    const { command, project } = parsed;
+    const { command, dateRange, project } = parsed;
     if (command !== "" && command !== "entries") {
       ctx.ui.notify("Unknown Project Time command. Use entries.", "error");
       return;
     }
     if (command === "entries") {
-      await this.showEntries(ctx, project);
+      await this.showEntries(ctx, project, dateRange);
       return;
     }
     if (project !== undefined) {
@@ -274,10 +401,10 @@ export class ProjectTimeRuntime {
     );
   }
 
-  async showEntries(ctx, project) {
+  async showEntries(ctx, project, dateRange) {
     try {
       const entries = await this.timeLogRecorder.entries();
-      const preview = evidencePreviewLines(entries, project);
+      const preview = evidencePreviewLines(entries, project, dateRange);
       if (ctx.ui.setWidget === undefined) {
         ctx.ui.notify(preview.join("\n"), "info");
         return;
@@ -525,24 +652,39 @@ export class ProjectTimeRuntime {
   }
 }
 
-function parseProjectTimeCommand(args) {
+function parseProjectTimeCommand(args, now) {
   const tokens = parseCommandTokens(args);
   const projectIndexes = tokens
     .map((token, index) => (token === "--project" ? index : -1))
     .filter((index) => index !== -1);
-  if (projectIndexes.length === 0) {
-    return { command: tokens.join(" "), tokens };
-  }
-  const projectIndex = projectIndexes[0];
-  if (projectIndexes.length !== 1 || projectIndex !== tokens.length - 2) {
+  if (projectIndexes.length > 1) {
     throw new Error("Use --project NAME once at the end of the command.");
   }
-  const project = tokens.at(-1);
-  if (project === undefined || project.trim() === "") {
-    throw new Error("Project names must not be blank.");
+  const projectIndex = projectIndexes[0];
+  if (
+    projectIndex !== undefined &&
+    (projectIndex !== tokens.length - 2 || tokens.at(-1)?.trim() === "")
+  ) {
+    throw new Error("Use --project NAME once at the end of the command.");
   }
-  const commandTokens = tokens.slice(0, -2);
-  return { command: commandTokens.join(" "), project, tokens: commandTokens };
+  const project = projectIndex === undefined ? undefined : tokens.at(-1);
+  const commandTokens =
+    projectIndex === undefined ? tokens : tokens.slice(0, -2);
+  if (commandTokens[0] !== "entries") {
+    return { command: commandTokens.join(" "), project, tokens: commandTokens };
+  }
+  if (commandTokens.length === 1) {
+    return { command: "entries", project, tokens: commandTokens };
+  }
+  if (commandTokens.length !== 2) {
+    return { command: commandTokens.join(" "), project, tokens: commandTokens };
+  }
+  return {
+    command: "entries",
+    dateRange: parseEvidenceDateRange(commandTokens[1] ?? "", now),
+    project,
+    tokens: commandTokens,
+  };
 }
 
 function parseCommandTokens(args) {

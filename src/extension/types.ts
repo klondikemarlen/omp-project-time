@@ -111,6 +111,7 @@ export type ExtensionOptions = {
   generateActivity?: ActivityGenerator
   activityGenerationTimeoutMs?: number
   loadConfig?: ConfigLoader
+  now?: () => Date
   prepareLocalData?: () => Promise<void>
   timeLogPath?: string
 }
