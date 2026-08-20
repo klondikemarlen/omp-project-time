@@ -81,6 +81,8 @@ project-time entries --project wrap
 
 The installed `project-time entries [--project NAME]` binary writes that same complete JSON snapshot to standard output.
 
+`--project NAME` selects an exact persisted Project Time project label. It may follow the live dashboard or `entries`, for example `/project-time entries --project wrap`. Quote labels containing spaces, such as `/project-time entries --project "Ice Fog Analytics"`. Type `--project ` after a valid OMP view to complete stored project labels.
+
 ## Local data
 
 The owner-only SQLite ledger is:
