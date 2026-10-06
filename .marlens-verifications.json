@@ -9,5 +9,13 @@
       }
     ],
     "fullTypecheck": ["./bin/verify-typescript-runtime", "typecheck"]
-  }
+  },
+  "suppressions": [
+    {
+      "id": "marlens-rules:test-alignment",
+      "path": "test/time-log.test.ts",
+      "reason": "Existing time-log tests predate the shared convention; the new storage tests are aligned without a full unrelated rewrite.",
+      "expiresOn": "2026-11-06"
+    }
+  ]
 }

@@ -53,19 +53,37 @@ async function withLedger(
   }
 }
 
-test("reports the complete managed evidence storage footprint", async () => {
-  await withLedger(async (ledger, databasePath, legacyJsonPath) => {
-    assert.equal(await ledger.storageBytes(), 0);
+test("when managed evidence files are absent, reports zero storage bytes", async () => {
+  await withLedger(async (ledger) => {
+    // Arrange
 
-    await writeFile(databasePath, "database");
-    await writeFile(`${databasePath}-wal`, "wal");
-    await writeFile(`${databasePath}-shm`, "shared-memory");
-    await writeFile(`${databasePath}-journal`, "journal");
-    await writeFile(legacyJsonPath, "legacy");
+    // Act
+    const storageBytes = await ledger.storageBytes();
 
-    assert.equal(await ledger.storageBytes(), 37);
+    // Assert
+    assert.equal(storageBytes, 0);
   });
 });
+
+test(
+  "when managed evidence files are present, reports their complete storage footprint",
+  async () => {
+    await withLedger(async (ledger, databasePath, legacyJsonPath) => {
+      // Arrange
+      await writeFile(databasePath, "database");
+      await writeFile(`${databasePath}-wal`, "wal");
+      await writeFile(`${databasePath}-shm`, "shared-memory");
+      await writeFile(`${databasePath}-journal`, "journal");
+      await writeFile(legacyJsonPath, "legacy");
+
+      // Act
+      const storageBytes = await ledger.storageBytes();
+
+      // Assert
+      assert.equal(storageBytes, 37);
+    });
+  },
+);
 
 function assertEntries(
   entries: readonly TimeLogEntry[],
