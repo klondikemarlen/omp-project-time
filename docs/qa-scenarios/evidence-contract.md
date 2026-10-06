@@ -9,6 +9,20 @@ These scenarios protect the public evidence contract. They are behavior checks, 
 - Automated evidence: [`test/project-time-cli.test.ts`](../../test/project-time-cli.test.ts)
 - Smoke command: `project-time entries --project NAME | jq '{ format, version, entryCount: (.entries | length) }'`
 
+## Statistics and Explicit Pruning
+
+**Given** raw evidence from multiple source kinds and projects, **when** `project-time stats [--project NAME]` runs, **then** it emits a versioned summary with overall and per-project entry counts, separate observed durations, and retained time bounds. The interactive `/project-time stats` view shows the selected scope without treating those durations as billable.
+
+**Given** entries ending before, at, and across a local-day boundary, **when** `project-time prune --before YYYY-MM-DD --dry-run` runs, **then** it reports only entries ending at or before that boundary and leaves the ledger's evidence intact. **When** the same command omits `--dry-run`, **then** it deletes those entries and retains crossing intervals.
+
+- Automated evidence: [`test/project-time-cli.test.ts`](../../test/project-time-cli.test.ts), [`test/runtime.test.ts`](../../test/runtime.test.ts)
+- Smoke commands:
+
+  ```bash
+  project-time stats | jq '{ format, version, entryCount, sources }'
+  project-time prune --before 2026-01-01 --dry-run
+  ```
+
 ## Interactive Read-Only Preview
 
 **Given** entries from more than one local project, source kind, and date, **when** `/project-time entries DATE --project NAME` runs, **then** the widget contains only the selected clipped intervals, reports human and agent duration separately, hides excess rows within its bound, and directs the user to the complete CLI JSON export.

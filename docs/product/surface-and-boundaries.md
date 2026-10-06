@@ -11,10 +11,13 @@ An OMP user can see the current local Project Time state and export complete raw
 | OMP status              | A keyed, dim hook-status line shows the active local interval and configured label. OMP owns placement and layout.                                                        |
 | `/project-time`         | Shows current top-level session state; `--project NAME` selects a persisted local project dashboard.                                                                      |
 | `/project-time entries` | Opens a bounded, read-only local-date preview. It supports `today`, `yesterday`, one `YYYY-MM-DD` date, or an inclusive date range followed by an exact `--project NAME`. |
+| `/project-time stats`   | Shows concise retained-entry counts, source-separated observed durations, and time bounds for all local data or one exact project.                                        |
 | `project-time entries`  | Writes the complete, unfiltered versioned JSON snapshot to standard output. Its only selector is `--project NAME`.                                                        |
+| `project-time stats`    | Writes a versioned statistics report with overall and per-project counts, source-separated observed durations, and time bounds.                                           |
+| `project-time prune`    | Explicitly deletes completed local entries before a local-day boundary; `--dry-run` reports its impact without deleting evidence.                                         |
 | Settings                | `Active Window Minutes`, `Refresh Interval Seconds`, and `Status Label` are the only supported plugin settings.                                                           |
 
-The interactive preview clips cross-midnight intervals to its selected local dates and shows human and agent totals separately. The direct binary intentionally exports the complete persisted snapshot instead of applying interactive date filtering.
+The interactive preview clips cross-midnight intervals to its selected local dates and shows human and agent totals separately. Statistics intentionally report the same sources separately. The direct binary intentionally exports the complete persisted snapshot instead of applying interactive date filtering.
 
 ## Product Boundaries
 
@@ -33,6 +36,10 @@ Project Time has no repository-to-client mapping, task mapping, rate, invoice, a
 ### Local data, not remote session state
 
 The selected dashboard and every export read the local ledger. They do not claim remote live state.
+
+### Intentional local retention
+
+Project Time retains evidence until a user explicitly runs `project-time prune --before YYYY-MM-DD`. Pruning deletes intervals that ended at or before local midnight at that date, keeps crossing intervals intact, and does not archive or undo deleted entries. `--dry-run` lets the user inspect matching, deleted, and retained counts first. Automatic retention is not provided.
 
 ## Sources
 
