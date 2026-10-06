@@ -28,6 +28,8 @@ Project Time records local OMP activity as reviewable evidence of project work. 
 
 Evidence remains in the local ledger until an explicit CLI prune. `project-time prune --before YYYY-MM-DD` deletes entries that ended at or before the specified local-day boundary; it preserves an interval that crosses that boundary rather than rewriting it. A dry run reports the impact without deleting evidence. Pruning does not allocate, aggregate, or relabel either source and has no archive or undo path.
 
+`stats` reports the exact combined byte count of managed local evidence files—the SQLite ledger, present journal/WAL/SHM sidecars, and retained legacy JSON backup. This global storage footprint is inspection evidence only; it is not attributed to a selected project and does not change retention.
+
 ## Privacy Boundary
 
 Persisted entries may contain sanitized project identity, repository identity, timing, source kind, session identity, coarse activity, optional narrative, and optional work-item provenance. They must not contain working-directory paths, raw remotes, credentials, prompts, transcripts, artifacts, file paths, model metadata, or custom billing attribution.
