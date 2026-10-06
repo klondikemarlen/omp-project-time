@@ -60,6 +60,7 @@ export function projectDashboardText(
 export function statisticsText(
   entries: readonly TimeLogEntry[],
   project: string | undefined,
+  localStorageBytes: number,
 ): string {
   const selectedEntries =
     project === undefined
@@ -96,6 +97,7 @@ export function statisticsText(
   return [
     `Project Time statistics · ${scope}`,
     entrySummary,
+    `Local storage: ${storageSizeText(localStorageBytes)} (${localStorageBytes} bytes)`,
     `Human evidence: ${humanSummary}`,
     `Agent evidence: ${agentSummary}`,
     `Range: ${range}`,
@@ -124,4 +126,17 @@ function durationText(milliseconds: number): string {
   if (minutes > 0) return `${minutes}m ${seconds}s`;
 
   return `${seconds}s`;
+}
+
+function storageSizeText(bytes: number): string {
+  if (bytes < 1_024) return `${bytes} B`;
+
+  const units = ["KB", "MB", "GB", "TB"];
+  const unitIndex = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1_024)) - 1,
+    units.length - 1,
+  );
+  const unitSize = 1_024 ** (unitIndex + 1);
+  const roundedSize = Math.round((bytes / unitSize) * 10) / 10;
+  return `${roundedSize} ${units[unitIndex]}`;
 }

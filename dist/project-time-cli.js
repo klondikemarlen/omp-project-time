@@ -95,8 +95,9 @@ export async function runProjectTimeCli(args) {
   }
   if (command.kind === "stats") {
     const entries = await recorder.entries();
+    const localStorageBytes = await recorder.storageBytes();
     process.stdout.write(
-      `${formatTimeLogStatistics(entries, command.project)}\n`,
+      `${formatTimeLogStatistics(entries, command.project, localStorageBytes)}\n`,
     );
     return;
   }

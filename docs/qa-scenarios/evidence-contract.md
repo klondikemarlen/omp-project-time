@@ -11,7 +11,7 @@ These scenarios protect the public evidence contract. They are behavior checks, 
 
 ## Statistics and Explicit Pruning
 
-**Given** raw evidence from multiple source kinds and projects, **when** `project-time stats [--project NAME]` runs, **then** it emits a versioned summary with overall and per-project entry counts, separate observed durations, and retained time bounds. The interactive `/project-time stats` view shows the selected scope without treating those durations as billable.
+**Given** raw evidence from multiple source kinds and projects, **when** `project-time stats [--project NAME]` runs, **then** it emits a versioned summary with overall and per-project entry counts, separate observed durations, retained time bounds, and exact global `localStorageBytes`. The count includes the SQLite ledger, present journal/WAL/SHM sidecars, and retained legacy JSON backup; `--project NAME` filters evidence but does not attribute storage. The interactive `/project-time stats` view shows the selected scope and a compact storage size without treating either durations or bytes as billable.
 
 **Given** entries ending before, at, and across a local-day boundary, **when** `project-time prune --before YYYY-MM-DD --dry-run` runs, **then** it reports only entries ending at or before that boundary and leaves the ledger's evidence intact. **When** the same command omits `--dry-run`, **then** it deletes those entries and retains crossing intervals.
 
@@ -19,7 +19,7 @@ These scenarios protect the public evidence contract. They are behavior checks, 
 - Smoke commands:
 
   ```bash
-  project-time stats | jq '{ format, version, entryCount, sources }'
+  project-time stats | jq '{ format, version, entryCount, sources, localStorageBytes }'
   project-time prune --before 2026-01-01 --dry-run
   ```
 

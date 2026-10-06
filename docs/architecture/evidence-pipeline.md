@@ -37,6 +37,8 @@ The default ledger is `~/.omp/project-time/time-log.sqlite`. The ledger serializ
 
 The public `entries` snapshot is intentionally stable across the internal JSON-to-SQLite migration. Consumers receive raw evidence fields rather than SQLite rows.
 
+`TimeLogLedger` owns the managed-file footprint: the SQLite database, present journal/WAL/SHM sidecars, and retained legacy JSON backup. Runtime and CLI statistics consume that global byte count without assigning physical storage to an individual project.
+
 ## Configuration Boundary
 
 Configuration loading validates untrusted plugin configuration before runtime use. The public configuration permits only three scalar settings. Retired repository-billing settings fail explicitly rather than silently changing behavior.

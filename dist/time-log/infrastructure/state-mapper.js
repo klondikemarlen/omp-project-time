@@ -17,12 +17,13 @@ export function formatTimeLogEvidence(entries, project) {
   );
 }
 
-export function formatTimeLogStatistics(entries, project) {
+export function formatTimeLogStatistics(entries, project, localStorageBytes) {
   return JSON.stringify(
     {
       format: TIME_LOG_STATISTICS_FORMAT,
       version: TIME_LOG_EVIDENCE_VERSION,
       ...summarizeTimeLogEntries(selectedEntries(entries, project)),
+      localStorageBytes,
     },
     null,
     2,

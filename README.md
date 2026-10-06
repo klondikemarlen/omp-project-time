@@ -83,11 +83,11 @@ project-time stats [--project NAME]
 project-time prune --before YYYY-MM-DD [--dry-run]
 ```
 
-`/project-time` shows the current project and active interval status. In interactive OMP, `entries` shows a read-only, bounded widget with local-date filtered human and agent evidence totals plus first and last retained intervals, rather than adding raw JSON to chat history. `stats` shows all local or one exact project's entry count, source-separated observed durations, and retained range.
+`/project-time` shows the current project and active interval status. In interactive OMP, `entries` shows a read-only, bounded widget with local-date filtered human and agent evidence totals plus first and last retained intervals, rather than adding raw JSON to chat history. `stats` shows all local or one exact project's entry count, source-separated observed durations, retained range, and the total managed local-storage footprint.
 
 `entries` accepts `today`, `yesterday`, one local `YYYY-MM-DD` date, or an inclusive `FROM..TO` local date range before an optional exact `--project NAME`. OMP completes each date form.
 
-The installed `project-time entries [--project NAME]` binary writes the complete, unfiltered JSON snapshot to standard output. `project-time stats [--project NAME]` writes a versioned `omp-project-time/statistics` v1 report with totals, source-separated observed durations, time bounds, and per-project summaries. Observed durations remain separate evidence and can overlap; they are never billable totals.
+The installed `project-time entries [--project NAME]` binary writes the complete, unfiltered JSON snapshot to standard output. `project-time stats [--project NAME]` writes a versioned `omp-project-time/statistics` v1 report with totals, source-separated observed durations, time bounds, per-project summaries, and exact `localStorageBytes`. That storage count covers the SQLite ledger, its present journal/WAL/SHM sidecars, and the retained legacy JSON backup. It is always the complete local store, including when `--project NAME` selects evidence; bytes are not attributable to one project. Observed durations remain separate evidence and can overlap; they are never billable totals.
 
 `project-time prune --before YYYY-MM-DD [--dry-run]` removes entries that ended at or before the beginning of the specified local date. Intervals crossing that boundary remain intact. `--dry-run` reports the matching, deleted, and retained counts without deleting evidence; omit it only after reviewing the result. Pruning is irreversible and has no archive or undo command.
 
@@ -104,6 +104,8 @@ The owner-only SQLite ledger is:
 On its first access, version 8.2 validates and transactionally imports a valid `~/.omp/project-time/time-log.json` ledger. The original JSON remains untouched as a rollback backup. Invalid JSON is left untouched and is never partially imported. Restart OMP after upgrading so older plugin processes do not append to the backup.
 
 SQLite stores each automatic evidence entry separately, so recording no longer rewrites the complete ledger. A cross-window lock keeps record-and-update operations safe.
+
+`stats` counts the SQLite ledger, its optional `-journal`, `-wal`, and `-shm` sidecars, and the retained legacy JSON backup when each is present. The interactive view renders a compact KB, MB, GB, or TB value and the exact byte count. It is inspection-only: it neither deletes data nor changes retention.
 
 Entries may include `narrative: { text, source }` alongside `activity`, `startAtMs`, and `endAtMs`. `source` is either `generated` or `user_provided`; omitted `narrative` means no description was captured. Project Time deliberately preserves each detailed interval narrative without aggregation or summarization so downstream worklog tools can deduplicate and summarize with the original interval and duration available for review.
 
