@@ -11,6 +11,8 @@ OMP exposes model and tool activity but does not retain a provider-neutral log o
 
 Canonical requirements live in [`spec/project-time.yml`](spec/project-time.yml).
 
+Maintainer reference material is in the [Project Time knowledge base](docs/README.md).
+
 ## Behavior
 
 - Only top-level sessions are tracked. Subagents and artifacts do not produce entries.
