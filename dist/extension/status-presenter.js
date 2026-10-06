@@ -1,3 +1,5 @@
+import { summarizeTimeLogEntries } from "../time-log/domain/statistics.js";
+
 export const STATUS_KEY = "project-time";
 export function updateStatus(ctx, state, config) {
   ctx.ui.setStatus(
@@ -31,6 +33,48 @@ export function projectDashboardText(project, entries) {
     `Project: ${project} · Ledger view`,
     `Last recorded: ${latest === undefined ? "none" : `${timestampText(latest.endAtMs)} — ${activityText(latest.activity)}`}`,
     `/project-time entries --project ${project}`,
+  ].join("\n");
+}
+
+export function statisticsText(entries, project) {
+  const selectedEntries =
+    project === undefined
+      ? entries
+      : entries.filter((entry) => entry.project === project);
+  const statistics = summarizeTimeLogEntries(selectedEntries);
+  const scope = project === undefined ? "all local projects" : project;
+  const entrySummary = [
+    `Entries: ${statistics.entryCount}`,
+    `Projects: ${statistics.projects.length}`,
+  ].join(" · ");
+  const jsonCommand =
+    project === undefined
+      ? "project-time stats"
+      : `project-time stats --project ${JSON.stringify(project)}`;
+  const humanEvidence = statistics.sources.humanActive;
+  const agentEvidence = statistics.sources.agentTurnElapsed;
+  const humanSummary = [
+    durationText(humanEvidence.observedMilliseconds),
+    `${humanEvidence.entryCount} entries`,
+  ].join(" · ");
+  const agentSummary = [
+    durationText(agentEvidence.observedMilliseconds),
+    `${agentEvidence.entryCount} entries`,
+  ].join(" · ");
+  const range =
+    statistics.firstStartAtMs === null
+      ? "no evidence"
+      : [
+          timestampText(statistics.firstStartAtMs),
+          timestampText(statistics.lastEndAtMs ?? statistics.firstStartAtMs),
+        ].join("–");
+  return [
+    `Project Time statistics · ${scope}`,
+    entrySummary,
+    `Human evidence: ${humanSummary}`,
+    `Agent evidence: ${agentSummary}`,
+    `Range: ${range}`,
+    `Complete JSON: ${jsonCommand}`,
   ].join("\n");
 }
 
