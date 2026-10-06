@@ -244,6 +244,10 @@ test("when viewing entries and statistics, shows bounded evidence and source-sep
       notices.at(-1)?.message ?? "",
       /Agent evidence: 1m 0s · 1 entries/,
     );
+    assert.match(
+      notices.at(-1)?.message ?? "",
+      /Local storage: \d+(?:\.\d+)? (?:B|KB|MB|GB|TB) \(\d+ bytes\)/,
+    );
 
     await handler("entries today --project wrap", context);
     const todayPreview = evidenceViews.at(-1) ?? [];

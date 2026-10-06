@@ -165,6 +165,10 @@ export class AutomaticTimeLogRecorder {
     return this.ledger.entries();
   }
 
+  async storageBytes(): Promise<number> {
+    return this.ledger.storageBytes();
+  }
+
   async pruneEntriesEndingAtOrBefore(cutoffAtMs: number, dryRun: boolean) {
     return this.ledger.pruneEntriesEndingAtOrBefore(cutoffAtMs, dryRun);
   }

@@ -489,7 +489,8 @@ export class ProjectTimeRuntime {
   ): Promise<void> {
     try {
       const entries = await this.timeLogRecorder.entries();
-      ctx.ui.notify(statisticsText(entries, project), "info");
+      const localStorageBytes = await this.timeLogRecorder.storageBytes();
+      ctx.ui.notify(statisticsText(entries, project, localStorageBytes), "info");
     } catch (error) {
       ctx.ui.notify(
         `Project Time statistics error: ${errorMessage(error)}`,

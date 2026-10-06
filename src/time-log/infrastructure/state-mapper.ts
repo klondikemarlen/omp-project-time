@@ -32,12 +32,14 @@ export function formatTimeLogEvidence(
 export function formatTimeLogStatistics(
   entries: readonly TimeLogEntry[],
   project: string | undefined,
+  localStorageBytes: number,
 ): string {
   return JSON.stringify(
     {
       format: TIME_LOG_STATISTICS_FORMAT,
       version: TIME_LOG_EVIDENCE_VERSION,
       ...summarizeTimeLogEntries(selectedEntries(entries, project)),
+      localStorageBytes,
     },
     null,
     2,

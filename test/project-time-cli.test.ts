@@ -1,6 +1,13 @@
 import assert from "node:assert/strict"
 import { execFile as execFileCallback } from "node:child_process"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -14,6 +21,35 @@ async function runCli(home: string, ...args: string[]) {
     ["--import", "tsx", "src/project-time-cli.ts", ...args],
     { cwd: process.cwd(), env: { ...process.env, HOME: home } },
   )
+}
+
+async function managedStorageBytes(home: string): Promise<number> {
+  const dataRoot = path.join(home, ".omp", "project-time")
+  const storagePaths = [
+    path.join(dataRoot, "time-log.sqlite-journal"),
+    path.join(dataRoot, "time-log.sqlite"),
+    path.join(dataRoot, "time-log.sqlite-wal"),
+    path.join(dataRoot, "time-log.sqlite-shm"),
+    path.join(dataRoot, "time-log.json"),
+  ]
+  let total = 0
+
+  for (const storagePath of storagePaths) {
+    try {
+      total += (await stat(storagePath)).size
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        continue
+      }
+      throw error
+    }
+  }
+
+  return total
 }
 
 test("when exporting entries from the direct binary, writes the complete JSON snapshot", async () => {
@@ -103,7 +139,9 @@ test("when inspecting an exact project, then direct-binary statistics keep sourc
     const { stdout } = await runCli(home, "stats", "--project", "wrap")
 
     // Assert
-    assert.deepEqual(JSON.parse(stdout), {
+    const { localStorageBytes, ...statistics } = JSON.parse(stdout)
+    assert.equal(localStorageBytes, await managedStorageBytes(home))
+    assert.deepEqual(statistics, {
       format: "omp-project-time/statistics",
       version: 1,
       entryCount: 2,

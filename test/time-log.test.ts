@@ -53,6 +53,20 @@ async function withLedger(
   }
 }
 
+test("reports the complete managed evidence storage footprint", async () => {
+  await withLedger(async (ledger, databasePath, legacyJsonPath) => {
+    assert.equal(await ledger.storageBytes(), 0);
+
+    await writeFile(databasePath, "database");
+    await writeFile(`${databasePath}-wal`, "wal");
+    await writeFile(`${databasePath}-shm`, "shared-memory");
+    await writeFile(`${databasePath}-journal`, "journal");
+    await writeFile(legacyJsonPath, "legacy");
+
+    assert.equal(await ledger.storageBytes(), 37);
+  });
+});
+
 function assertEntries(
   entries: readonly TimeLogEntry[],
   expected: readonly ExpectedEntry[],

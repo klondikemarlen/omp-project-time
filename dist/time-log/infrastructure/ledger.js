@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, statSync } from "node:fs";
 import { chmod, mkdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -86,6 +86,10 @@ export class TimeLogLedger {
           .map((row) => this.parseDatabaseEntry(row.entry_json)),
       ),
     );
+  }
+
+  async storageBytes() {
+    return this.withLock(async () => this.storageBytesWithoutLock());
   }
 
   async pruneEntriesEndingAtOrBefore(cutoffAtMs, dryRun) {
@@ -317,6 +321,26 @@ export class TimeLogLedger {
       // Normalize parsing failures to the public persistence error.
     }
     throw new Error("Time log database entry is invalid.");
+  }
+
+  storageBytesWithoutLock() {
+    const storagePaths = [
+      this.databasePath,
+      `${this.databasePath}-journal`,
+      `${this.databasePath}-wal`,
+      `${this.databasePath}-shm`,
+      this.legacyJsonPath,
+    ];
+    return [...new Set(storagePaths)].reduce((total, storagePath) => {
+      if (storagePath === undefined) return total;
+      try {
+        const file = statSync(storagePath);
+        return file.isFile() ? total + file.size : total;
+      } catch (error) {
+        if (isMissingFile(error)) return total;
+        throw error;
+      }
+    }, 0);
   }
 
   readLegacyEntriesSync() {
