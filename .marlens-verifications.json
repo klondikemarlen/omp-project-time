@@ -1,0 +1,13 @@
+{
+  "typescriptRuntimeEntrypoints": {
+    "tsconfig": "tsconfig.json",
+    "timeoutMs": 30000,
+    "commands": [
+      {
+        "name": "Project Time runtime tests",
+        "command": ["./bin/verify-typescript-runtime", "test"]
+      }
+    ],
+    "fullTypecheck": ["./bin/verify-typescript-runtime", "typecheck"]
+  }
+}
