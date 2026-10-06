@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  test)
+    exec node --import tsx --test --test-reporter=dot test/*.test.ts
+    ;;
+  typecheck)
+    exec npx tsc --noEmit -p tsconfig.json
+    ;;
+  *)
+    printf '%s\n' 'Usage: bin/verify-typescript-runtime {test|typecheck}' >&2
+    exit 2
+    ;;
+esac
