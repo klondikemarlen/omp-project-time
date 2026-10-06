@@ -122,6 +122,10 @@ export class AutomaticTimeLogRecorder {
     return this.ledger.entries();
   }
 
+  async pruneEntriesEndingAtOrBefore(cutoffAtMs, dryRun) {
+    return this.ledger.pruneEntriesEndingAtOrBefore(cutoffAtMs, dryRun);
+  }
+
   projectNames() {
     return this.ledger.projectNames();
   }

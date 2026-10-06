@@ -3,23 +3,131 @@ import { realpathSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
 import { defaultProjectTimeDataRoot, prepareProjectTimeDataRoot } from "@/extension/local-data-root.js"
-import { formatTimeLogEvidence } from "@/time-log/infrastructure/state-mapper.js"
+import {
+  formatTimeLogEvidence,
+  formatTimeLogPruneResult,
+  formatTimeLogStatistics,
+} from "@/time-log/infrastructure/state-mapper.js"
 import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js"
 
-function projectArgument(args: readonly string[]): string | undefined {
-  if (args.length === 1 && args[0] === "entries") return undefined
-  if (args.length === 3 && args[0] === "entries" && args[1] === "--project") {
-    if (args[2].trim() !== "") return args[2]
+type ProjectTimeCliCommand =
+  | { kind: "entries"; project: string | undefined }
+  | { kind: "stats"; project: string | undefined }
+  | { kind: "prune"; before: string; cutoffAtMs: number; dryRun: boolean }
+
+function parseProjectTimeCliCommand(
+  args: readonly string[],
+): ProjectTimeCliCommand {
+  const [command, ...options] = args
+
+  if (command === "entries" || command === "stats") {
+    if (options.length === 0) return { kind: command, project: undefined }
+    if (
+      options.length === 2 &&
+      options[0] === "--project" &&
+      options[1]?.trim() !== ""
+    ) {
+      return { kind: command, project: options[1] }
+    }
   }
-  throw new Error("Usage: project-time entries [--project NAME]")
+
+  if (command === "prune") return parsePruneCommand(options)
+
+  throw new Error(
+    "Usage: project-time entries [--project NAME]\n" +
+      "       project-time stats [--project NAME]\n" +
+      "       project-time prune --before YYYY-MM-DD [--dry-run]",
+  )
 }
 
-export async function runProjectTimeCli(args: readonly string[]): Promise<void> {
-  const project = projectArgument(args)
+function parsePruneCommand(options: readonly string[]): ProjectTimeCliCommand {
+  let before: string | undefined
+  let dryRun = false
+
+  for (let index = 0; index < options.length; index += 1) {
+    const option = options[index]
+    if (option === "--dry-run" && !dryRun) {
+      dryRun = true
+      continue
+    }
+    if (option === "--before" && before === undefined) {
+      const date = options[index + 1]
+      if (date === undefined) break
+      before = date
+      index += 1
+      continue
+    }
+    throw new Error(
+      "Usage: project-time prune --before YYYY-MM-DD [--dry-run]",
+    )
+  }
+
+  if (before === undefined) {
+    throw new Error(
+      "Usage: project-time prune --before YYYY-MM-DD [--dry-run]",
+    )
+  }
+
+  const cutoffAtMs = localDateStartAtMs(before)
+  return { kind: "prune", before, cutoffAtMs, dryRun }
+}
+
+function localDateStartAtMs(value: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (match === null) {
+    throw new Error("Prune date must use local YYYY-MM-DD format.")
+  }
+
+  const [, yearText, monthText, dayText] = match
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  const date = new Date(year, month - 1, day)
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    throw new Error("Prune date must be a valid local YYYY-MM-DD date.")
+  }
+  return date.getTime()
+}
+
+export async function runProjectTimeCli(
+  args: readonly string[],
+): Promise<void> {
+  const command = parseProjectTimeCliCommand(args)
   const dataRoot = defaultProjectTimeDataRoot()
   await prepareProjectTimeDataRoot(dataRoot)
-  const entries = await new AutomaticTimeLogRecorder().entries()
-  process.stdout.write(`${formatTimeLogEvidence(entries, project)}\n`)
+  const recorder = new AutomaticTimeLogRecorder()
+
+  if (command.kind === "entries") {
+    const entries = await recorder.entries()
+    process.stdout.write(
+      `${formatTimeLogEvidence(entries, command.project)}\n`,
+    )
+    return
+  }
+
+  if (command.kind === "stats") {
+    const entries = await recorder.entries()
+    process.stdout.write(
+      `${formatTimeLogStatistics(entries, command.project)}\n`,
+    )
+    return
+  }
+
+  const result = await recorder.pruneEntriesEndingAtOrBefore(
+    command.cutoffAtMs,
+    command.dryRun,
+  )
+  process.stdout.write(
+    `${formatTimeLogPruneResult({
+      before: command.before,
+      dryRun: command.dryRun,
+      ...result,
+    })}\n`,
+  )
 }
 
 if (

@@ -35,8 +35,12 @@ requirements:
     rationale: OMP's plugin settings UI supports native boolean, string, number, and enum values, not structured configuration documents.
   - id: local_views
     title: Minimal local views
-    requirement: The status line and bare command show current top-level session state. `entries` accepts one final exact `--project NAME` selector and returns only local evidence. A selected bare dashboard reads the local ledger rather than claiming remote live session state.
-    rationale: Keep live status distinct from persisted evidence while limiting the public query surface to one export.
+    requirement: The status line and bare command show current top-level session state. `entries` accepts local date filters and one final exact `--project NAME` selector for local raw evidence. `stats` accepts one final exact `--project NAME` selector and shows source-separated retained-evidence counts, observed durations, and time bounds without aggregation. A selected bare dashboard reads the local ledger rather than claiming remote live session state.
+    rationale: Keep live status distinct from persisted evidence while making local ledger volume inspectable.
+  - id: explicit_retention
+    title: Explicit local evidence retention
+    requirement: The direct `prune --before YYYY-MM-DD [--dry-run]` command must report matching, deleted, and retained entries. It deletes only entries that ended at or before the local-day boundary, preserves intervals crossing that boundary, and never runs automatically.
+    rationale: Users need intentional prototype-data cleanup without silently removing or rewriting evidence.
 non_requirements:
   - id: no_automatic_desk_clock
     description: Project Time does not infer desk time from prompts, agent turns, refreshes, or idle terminal state.

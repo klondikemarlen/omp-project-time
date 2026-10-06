@@ -13,7 +13,7 @@ import type {
   ExtensionContext,
 } from "../src/extension/types.js";
 
-test("when exporting entries, opens a bounded read-only evidence view", async () => {
+test("when viewing entries and statistics, shows bounded evidence and source-separated totals", async () => {
   // Arrange
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-runtime-"));
   const notices: Array<{ message: string; type?: string }> = [];
@@ -187,10 +187,14 @@ test("when exporting entries, opens a bounded read-only evidence view", async ()
       timeLogPath: path.join(directory, "time-log.json"),
       now: () => now,
     }).register();
-    assert.deepEqual(completionValues, ["entries"]);
+    assert.deepEqual(completionValues, ["entries", "stats"]);
     assert.deepEqual(
       argumentCompletions?.("entries")?.map(({ value }) => value),
       ["entries"],
+    );
+    assert.deepEqual(
+      argumentCompletions?.("stats ")?.map(({ value }) => value),
+      ["stats --project"],
     );
     assert.deepEqual(
       argumentCompletions?.("--p")?.map(({ value }) => value),
@@ -224,6 +228,21 @@ test("when exporting entries, opens a bounded read-only evidence view", async ()
     assert.deepEqual(
       argumentCompletions?.("--project ")?.map(({ value }) => value),
       ['--project "Ice Fog Analytics"', "--project other", "--project wrap"],
+    );
+
+    await handler("stats --project wrap", context);
+    assert.match(
+      notices.at(-1)?.message ?? "",
+      /Project Time statistics · wrap/,
+    );
+    assert.match(notices.at(-1)?.message ?? "", /Entries: 3 · Projects: 1/);
+    assert.match(
+      notices.at(-1)?.message ?? "",
+      /Human evidence: 1h 1m 0s · 2 entries/,
+    );
+    assert.match(
+      notices.at(-1)?.message ?? "",
+      /Agent evidence: 1m 0s · 1 entries/,
     );
 
     await handler("entries today --project wrap", context);
@@ -332,7 +351,7 @@ test("when exporting entries, opens a bounded read-only evidence view", async ()
     await handler("start", context);
     assert.match(
       notices.at(-1)?.message ?? "",
-      /Unknown Project Time command. Use entries/,
+      /Unknown Project Time command. Use entries or stats/,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

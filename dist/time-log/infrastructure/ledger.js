@@ -88,6 +88,50 @@ export class TimeLogLedger {
     );
   }
 
+  async pruneEntriesEndingAtOrBefore(cutoffAtMs, dryRun) {
+    if (!Number.isFinite(cutoffAtMs)) {
+      throw new Error("Time log prune cutoff must be a finite timestamp.");
+    }
+    return this.withLock(async () => {
+      if (dryRun) {
+        const entries = this.readEntriesWithoutMigration();
+        const matchingEntries = entries.filter(
+          (entry) => entry.endAtMs <= cutoffAtMs,
+        );
+        return {
+          matchingEntryCount: matchingEntries.length,
+          deletedEntryCount: 0,
+          retainedEntryCount: entries.length,
+        };
+      }
+      return this.withDatabase((database) => {
+        const entries = statement(
+          database,
+          "SELECT entry_json FROM entries ORDER BY rowid",
+        )
+          .all()
+          .map((row) => this.parseDatabaseEntry(row.entry_json));
+        const matchingEntries = entries.filter(
+          (entry) => entry.endAtMs <= cutoffAtMs,
+        );
+        if (matchingEntries.length > 0) {
+          this.transaction(database, () => {
+            for (const entry of matchingEntries) {
+              statement(database, "DELETE FROM entries WHERE id = ?").run(
+                entry.id,
+              );
+            }
+          });
+        }
+        return {
+          matchingEntryCount: matchingEntries.length,
+          deletedEntryCount: matchingEntries.length,
+          retainedEntryCount: entries.length - matchingEntries.length,
+        };
+      });
+    });
+  }
+
   projectNames() {
     try {
       if (!existsSync(this.databasePath) && this.legacyJsonPath !== undefined) {
@@ -297,5 +341,28 @@ export class TimeLogLedger {
       ids.add(entry.id);
     }
     return state.entries;
+  }
+
+  readEntriesWithoutMigration() {
+    if (!existsSync(this.databasePath)) {
+      if (
+        this.legacyJsonPath === undefined ||
+        !existsSync(this.legacyJsonPath)
+      ) {
+        return [];
+      }
+      return this.readLegacyEntriesSync();
+    }
+    const database = openSqliteDatabase(this.databasePath);
+    try {
+      return statement(
+        database,
+        "SELECT entry_json FROM entries ORDER BY rowid",
+      )
+        .all()
+        .map((row) => this.parseDatabaseEntry(row.entry_json));
+    } finally {
+      database.close();
+    }
   }
 }

@@ -74,19 +74,24 @@ OMP symlinks local installs and watches them for changes. Restart OMP or run `/r
 ```text
 /project-time
 /project-time entries [today|yesterday|YYYY-MM-DD|FROM..TO] [--project NAME]
+/project-time stats [--project NAME]
 /project-time entries today --project wrap
 /project-time entries 2026-08-19..2026-08-20
 /project-time --project wrap
-project-time entries --project wrap
+project-time entries [--project NAME]
+project-time stats [--project NAME]
+project-time prune --before YYYY-MM-DD [--dry-run]
 ```
 
-`/project-time` shows the current project and active interval status. In interactive OMP, `entries` shows a read-only, bounded widget with local-date filtered human and agent evidence totals plus first and last retained intervals, rather than adding raw JSON to chat history.
+`/project-time` shows the current project and active interval status. In interactive OMP, `entries` shows a read-only, bounded widget with local-date filtered human and agent evidence totals plus first and last retained intervals, rather than adding raw JSON to chat history. `stats` shows all local or one exact project's entry count, source-separated observed durations, and retained range.
 
 `entries` accepts `today`, `yesterday`, one local `YYYY-MM-DD` date, or an inclusive `FROM..TO` local date range before an optional exact `--project NAME`. OMP completes each date form.
 
-The installed `project-time entries [--project NAME]` binary writes the complete, unfiltered JSON snapshot to standard output.
+The installed `project-time entries [--project NAME]` binary writes the complete, unfiltered JSON snapshot to standard output. `project-time stats [--project NAME]` writes a versioned `omp-project-time/statistics` v1 report with totals, source-separated observed durations, time bounds, and per-project summaries. Observed durations remain separate evidence and can overlap; they are never billable totals.
 
-`--project NAME` selects an exact persisted Project Time project label. It may follow the live dashboard or `entries`, for example `/project-time entries today --project wrap`. Quote labels containing spaces, such as `/project-time entries today --project "Ice Fog Analytics"`. Type `--project ` after a valid OMP view to complete stored project labels.
+`project-time prune --before YYYY-MM-DD [--dry-run]` removes entries that ended at or before the beginning of the specified local date. Intervals crossing that boundary remain intact. `--dry-run` reports the matching, deleted, and retained counts without deleting evidence; omit it only after reviewing the result. Pruning is irreversible and has no archive or undo command.
+
+`--project NAME` selects an exact persisted Project Time project label. It may follow the live dashboard, `entries`, or `stats`, for example `/project-time entries today --project wrap`. Quote labels containing spaces, such as `/project-time entries today --project "Ice Fog Analytics"`. Type `--project ` after a valid OMP view to complete stored project labels.
 
 ## Local data
 

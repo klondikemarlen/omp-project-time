@@ -23,6 +23,7 @@ import {
   clearStatus,
   dashboardText,
   projectDashboardText,
+  statisticsText,
   updateStatus,
 } from "@/extension/status-presenter.js";
 import type {
@@ -42,12 +43,16 @@ type RuntimeState = {
   refreshTimer?: RefreshTimer;
 };
 
-
 const PROJECT_TIME_COMMANDS = [
   {
     value: "entries",
     label: "entries",
     description: "Export versioned raw Project Time evidence",
+  },
+  {
+    value: "stats",
+    label: "stats",
+    description: "Inspect local Project Time evidence volume",
   },
 ] as const;
 
@@ -213,6 +218,7 @@ function evidencePreviewLines(
 function supportsProjectOption(tokens: readonly string[]): boolean {
   return (
     tokens.length === 0 ||
+    (tokens[0] === "stats" && tokens.length === 1) ||
     (tokens[0] === "entries" &&
       (tokens.length === 1 ||
         (tokens.length === 2 && DATE_FILTER_PATTERN.test(tokens[1] ?? ""))))
@@ -411,9 +417,9 @@ export class ProjectTimeRuntime {
     }
 
     const { command, dateRange, project } = parsed;
-    if (command !== "" && command !== "entries") {
+    if (command !== "" && command !== "entries" && command !== "stats") {
       ctx.ui.notify(
-        "Unknown Project Time command. Use entries.",
+        "Unknown Project Time command. Use entries or stats.",
         "error",
       );
       return;
@@ -421,6 +427,11 @@ export class ProjectTimeRuntime {
 
     if (command === "entries") {
       await this.showEntries(ctx, project, dateRange);
+      return;
+    }
+
+    if (command === "stats") {
+      await this.showStatistics(ctx, project);
       return;
     }
 
@@ -472,6 +483,20 @@ export class ProjectTimeRuntime {
     }
   }
 
+  private async showStatistics(
+    ctx: ExtensionContext,
+    project: string | undefined,
+  ): Promise<void> {
+    try {
+      const entries = await this.timeLogRecorder.entries();
+      ctx.ui.notify(statisticsText(entries, project), "info");
+    } catch (error) {
+      ctx.ui.notify(
+        `Project Time statistics error: ${errorMessage(error)}`,
+        "error",
+      );
+    }
+  }
 
   private async showProjectView(
     ctx: ExtensionContext,
@@ -771,6 +796,9 @@ function parseProjectTimeCommand(
   const project = projectIndex === undefined ? undefined : tokens.at(-1);
   const commandTokens =
     projectIndex === undefined ? tokens : tokens.slice(0, -2);
+  if (commandTokens[0] === "stats" && commandTokens.length === 1) {
+    return { command: "stats", project, tokens: commandTokens };
+  }
   if (commandTokens[0] !== "entries") {
     return { command: commandTokens.join(" "), project, tokens: commandTokens };
   }
