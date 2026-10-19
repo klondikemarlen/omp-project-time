@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [9.4.1] - 2026-10-19
+
+### Fixed
+
+- Make project autocomplete and prune dry runs reflect pending legacy evidence after a failed import, without importing or changing evidence files during preview.
+- Reject malformed or conflicting pending imports during prune dry runs instead of reporting an empty safe result; never reimport a completed migration's retained backup.
+
+### Changed
+
+- Document migration recovery states, the Node/Bun runtime boundary, and the evidence needed to justify replacing TypeScript.
+- Correct the agent-guidance project name and add focused persistence-verification guidance.
+
 ## [9.4.0] - 2026-10-06
 
 ### Added

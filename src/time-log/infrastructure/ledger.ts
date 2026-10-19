@@ -193,14 +193,22 @@ export class TimeLogLedger {
 
   projectNames(): string[] {
     try {
-      if (!existsSync(this.databasePath) && this.legacyJsonPath !== undefined) {
+      if (!existsSync(this.databasePath)) {
+        if (this.legacyJsonPath === undefined) return [];
+
         const entries = this.readLegacyEntriesSync();
         return [...new Set(entries.map((entry) => entry.project))].sort();
       }
 
-      const database = this.openDatabase();
+      const database = openSqliteDatabase(this.databasePath);
       try {
-        this.initializeDatabase(database);
+        const pendingEntries = this.readPendingLegacyEntries(database);
+        if (pendingEntries !== undefined) {
+          return [
+            ...new Set(pendingEntries.map((entry) => entry.project)),
+          ].sort();
+        }
+
         return statement(database, "SELECT DISTINCT project FROM entries")
           .all()
           .map((row) => row.project)
@@ -320,15 +328,7 @@ export class TimeLogLedger {
 
     const entries = this.parseLegacyEntries(content);
     this.transaction(database, () => {
-      const existing = statement(
-        database,
-        "SELECT COUNT(*) AS count FROM entries",
-      ).get();
-      if (existing?.count !== 0) {
-        throw new Error(
-          "Time log database is already initialized and cannot import legacy state.",
-        );
-      }
+      this.assertLegacyImportAllowed(database);
 
       for (const entry of entries) this.writeEntry(database, entry);
       statement(
@@ -336,6 +336,18 @@ export class TimeLogLedger {
         "INSERT INTO metadata (key, value) VALUES (?, ?)",
       ).run(LEGACY_JSON_MIGRATION, "1");
     });
+  }
+
+  private assertLegacyImportAllowed(database: SqliteDatabase): void {
+    const existing = statement(
+      database,
+      "SELECT COUNT(*) AS count FROM entries",
+    ).get();
+    if (existing?.count !== 0) {
+      throw new Error(
+        "Time log database is already initialized and cannot import legacy state.",
+      );
+    }
   }
 
   private transaction(database: SqliteDatabase, operation: () => void): void {
@@ -439,6 +451,28 @@ export class TimeLogLedger {
     return state.entries;
   }
 
+  private readPendingLegacyEntries(
+    database: SqliteDatabase,
+  ): TimeLogEntry[] | undefined {
+    if (
+      this.legacyJsonPath === undefined ||
+      this.metadataValue(database, LEGACY_JSON_MIGRATION) !== undefined
+    ) {
+      return undefined;
+    }
+
+    let entries: TimeLogEntry[];
+    try {
+      entries = this.readLegacyEntriesSync();
+    } catch (error) {
+      if (isMissingFile(error)) return undefined;
+      throw error;
+    }
+
+    this.assertLegacyImportAllowed(database);
+    return entries;
+  }
+
   private readEntriesWithoutMigration(): TimeLogEntry[] {
     if (!existsSync(this.databasePath)) {
       if (
@@ -452,6 +486,9 @@ export class TimeLogLedger {
 
     const database = openSqliteDatabase(this.databasePath);
     try {
+      const pendingEntries = this.readPendingLegacyEntries(database);
+      if (pendingEntries !== undefined) return pendingEntries;
+
       return statement(
         database,
         "SELECT entry_json FROM entries ORDER BY rowid",
@@ -462,5 +499,4 @@ export class TimeLogLedger {
       database.close();
     }
   }
-
 }
