@@ -1,4 +1,4 @@
-# omp-developer-attention-status Agent Guidance
+# omp-project-time Agent Guidance
 
 ## Code Style
 
@@ -15,6 +15,11 @@
 - Keep public entrypoints and event handlers thin. Separate domain models/use cases from infrastructure adapters such as files, locks, Git, and OMP.
 - Prefer one meaningful domain module over a folder of trivial wrappers. Split files only at stable domain or adapter boundaries.
 - Optimize for a maintainer reading one domain folder: names should reveal the business concept, and no file should require knowledge of unrelated infrastructure to understand its purpose.
+
+## Persistence Changes
+
+- Treat migration completion metadata, not SQLite file existence, as the import authority. Preserve parity between pending-import previews and actual operations; see [migration state and recovery](/docs/architecture/evidence-pipeline.md#migration-state-and-recovery).
+- Run the [migration-preview regressions and host checks](/docs/qa-scenarios/evidence-contract.md#recovery-previews-before-import) when changing ledger reads or import behavior. Keep destructive smoke checks isolated from the user's evidence.
 
 ## Release Closeout
 

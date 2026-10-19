@@ -8,6 +8,7 @@ Project Time records local, verifiable OMP work evidence. This knowledge base gi
 - [Product surface and boundaries](product/surface-and-boundaries.md) — commands, settings, local views, and downstream billing boundary.
 - [Evidence architecture](architecture/evidence-pipeline.md) — runtime, domain, storage, and export ownership.
 - [Billing boundary decision](decisions/keep-billing-downstream.md) — why Project Time preserves evidence rather than allocating or submitting time.
+- [Runtime language decision](/docs/decisions/retain-typescript-runtime.md) — why TypeScript remains the host-facing implementation and what evidence would justify a rewrite.
 - [Evidence QA scenarios](qa-scenarios/evidence-contract.md) — repeatable checks that protect the public evidence contract.
 
 ## Authority

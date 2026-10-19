@@ -44,6 +44,16 @@ These scenarios protect the public evidence contract. They are behavior checks, 
 - Automated evidence: [`test/time-log.test.ts`](../../test/time-log.test.ts)
 - Focused command: `node --import tsx --test --test-name-pattern='migrates automatic evidence|does not partially import invalid legacy JSON' test/*.test.ts`
 
+### Recovery Previews Before Import
+
+**Given** an import failure that left an empty SQLite schema, **when** the legacy JSON is repaired, **then** project autocomplete includes its projects and prune dry-run counts its completed entries while retaining crossing intervals. Neither preview changes the SQLite or legacy JSON bytes. Invalid pending input or a conflict with already recorded SQLite entries must make dry-run fail rather than report zero matches.
+
+**Given** a completed import followed by pruning, **when** either preview runs again, **then** it uses the remaining SQLite evidence and never resurrects the retained backup.
+
+- Automated evidence: [/test/ledger-migration-views.test.ts](/test/ledger-migration-views.test.ts)
+- Focused command: `node --import tsx --test test/ledger-migration-views.test.ts`
+- CLI smoke: use a throwaway `HOME`, create malformed `time-log.json`, run the built `project-time entries` and observe the error, repair the JSON, then compare `project-time prune --before DATE --dry-run` with the real prune. Only the real command may delete matching entries. Never run destructive QA against the user's evidence.
+
 ## Retired Billing Configuration
 
 **Given** a plugin config containing retired repository-billing settings, **when** configuration loads, **then** it fails explicitly rather than silently accepting stale attribution policy.
@@ -54,3 +64,5 @@ These scenarios protect the public evidence contract. They are behavior checks, 
 ## Baseline Automation
 
 Run `npm test` for repository-wide regression coverage. The package's test script runs TypeScript tests through Node and `tsx`; it is the documented automated check for this repository.
+
+For persistence or runtime changes, also run `npm run build`, import `dist/index.js` in Node, and run `npm pack --dry-run`. Exercise the SQLite path in Bun separately: Node's test suite only covers `node:sqlite`. After installing the released GitHub artifact, verify its package version, launch a fresh OMP process, check `/project-time` command autocomplete and behavior, then close that process. If the package binary is not on the shell's `PATH`, invoke its `dist/project-time-cli.js` with Node directly rather than treating that as an extension-load failure.

@@ -31,6 +31,10 @@ flowchart LR
 
 Dependencies flow from OMP adapters toward domain rules and persistence. The domain does not call OMP, Git, SQLite, or a billing provider.
 
+## Runtime and Language Boundary
+
+OMP loads the compiled ESM extension in Bun. Development tests and the standalone CLI run in Node; the ledger selects the host's built-in SQLite API behind the same statement interface. Source `@/` aliases are rewritten to relative `.js` imports during the build. The [language decision](/docs/decisions/retain-typescript-runtime.md) explains why these shared contracts remain TypeScript rather than introducing a native or subprocess core.
+
 ## Persistence and Migration
 
 The default ledger is `~/.omp/project-time/time-log.sqlite`. The ledger serializes cross-window operations with a file lock, creates the parent directory owner-only, and applies owner-only database permissions. On first access it transactionally imports a valid legacy `time-log.json` file, retaining the original file as a rollback backup. Invalid legacy JSON remains untouched and is not partially imported.
@@ -39,9 +43,26 @@ The public `entries` snapshot is intentionally stable across the internal JSON-t
 
 `TimeLogLedger` owns the managed-file footprint: the SQLite database, present journal/WAL/SHM sidecars, and retained legacy JSON backup. Runtime and CLI statistics consume that global byte count without assigning physical storage to an individual project.
 
+### Migration State and Recovery
+
+The `legacy_json_migration` metadata marker, not the existence of the SQLite file, determines whether the backup has been imported. A failed import can leave a valid empty SQLite schema with no completion marker.
+
+| State | Effective evidence for autocomplete and prune preview | Next importing operation |
+| --- | --- | --- |
+| No SQLite database | Valid legacy automatic entries, or no entries if the legacy file is absent | Initialize SQLite and transactionally import any valid legacy file |
+| SQLite exists, migration unmarked, legacy file present | Validate and preview the pending legacy entries; reject a conflict with existing SQLite entries | Import the same entries and set the marker in one transaction |
+| SQLite exists, migration unmarked, legacy file absent | Existing SQLite entries | Continue without importing; do not claim a completed import |
+| Migration marked complete | SQLite entries only, even if a backup remains or all imported entries were pruned | Never reimport the retained backup |
+
+Autocomplete and dry-run pruning do not initialize a database, import entries, or rewrite either evidence file. Autocomplete returns no suggestions if the pending input is invalid; prune preview reports the same malformed-input or existing-data conflict as import instead of claiming an empty safe result. A dry run is a snapshot, not a reservation: new evidence recorded before actual pruning can change the counts.
+
+After a failed import, preserve both files and correct the malformed legacy input before retrying. Do not delete SQLite to force recovery: it may already contain evidence. If SQLite already has entries and a legacy import remains pending, automatic merging is intentionally rejected; preserve both sources for explicit operator review. Once migration succeeds, restart older OMP processes so they do not append new evidence to the retained JSON backup.
+
 ## Configuration Boundary
 
 Configuration loading validates untrusted plugin configuration before runtime use. The public configuration permits only three scalar settings. Retired repository-billing settings fail explicitly rather than silently changing behavior.
+
+Interactive configuration loads global plugin settings plus working-directory overrides and controls recording and display. The standalone CLI does not load those settings; it inspects or explicitly prunes the home-rooted local ledger. Changing the working directory does not select a different evidence store. An exact `--project NAME` filters persisted evidence, not configuration or storage ownership.
 
 ## Sources
 
@@ -50,3 +71,4 @@ Configuration loading validates untrusted plugin configuration before runtime us
 - Ledger: [`src/time-log/infrastructure/ledger.ts`](../../src/time-log/infrastructure/ledger.ts)
 - Config parsing: [`src/config/`](../../src/config/)
 - Persistence and config tests: [`test/time-log.test.ts`](../../test/time-log.test.ts), [`test/config.test.ts`](../../test/config.test.ts)
+- Migration-preview regressions: [/test/ledger-migration-views.test.ts](/test/ledger-migration-views.test.ts)
