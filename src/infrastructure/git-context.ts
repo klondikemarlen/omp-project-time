@@ -190,12 +190,14 @@ async function activeBranch(
   try {
     const result = await run(
       "git",
-      ["-C", cwd, "symbolic-ref", "--quiet", "--short", "HEAD"],
+      ["-C", cwd, "symbolic-ref", "--quiet", "HEAD"],
       cwd,
       gitTimeoutMs,
     );
-    const name = result.stdout.trim();
-    return name === "" ? undefined : { kind: "branch", name };
+    const reference = result.stdout.trim();
+    if (!reference.startsWith("refs/heads/")) return undefined;
+
+    return { kind: "branch", name: reference.slice("refs/heads/".length) };
   } catch (error) {
     // symbolic-ref exits 1 specifically for a non-symbolic (detached) HEAD.
     if (

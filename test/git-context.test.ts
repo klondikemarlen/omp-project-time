@@ -354,3 +354,21 @@ test("when PR metadata becomes available after cache expiry, later observations 
     });
   });
 });
+
+test("when a tag shadows the active branch name, records the branch rather than Git's disambiguated shorthand", async () => {
+  // Arrange
+  await withRepository(async (root) => {
+    await runGit(root, "switch", "--quiet", "-c", "release");
+    await runGit(root, "tag", "release");
+
+    // Act
+    const resolution = await new GitContextResolver().resolve(root);
+
+    // Assert
+    assert.deepEqual(resolution.gitContext?.head, {
+      kind: "branch",
+      name: "release",
+      source: "active_branch",
+    });
+  });
+});

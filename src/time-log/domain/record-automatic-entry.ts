@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+
 import { parseGitContext } from "@/time-log/domain/git-context.js";
 import { parseActivityLabel } from "@/time-log/domain/activity.js";
 import { parseActivityNarrative } from "@/time-log/domain/narrative.js";

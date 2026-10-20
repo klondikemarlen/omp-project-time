@@ -26,7 +26,7 @@ export function parseTimeLogEntry(value: unknown): TimeLogEntry | undefined {
   const createdAtMs = candidate.createdAtMs;
   const activity = parseActivityLabel(candidate.activity);
   const narrative = parseActivityNarrative(candidate.narrative);
-  const gitContext = parseGitContext(candidate.gitContext)
+  const gitContext = parseGitContext(candidate.gitContext);
   const workItem = parseWorkItem(candidate.workItem);
   const parsedWorkItemAttribution = parseWorkItemAttribution(
     candidate.workItemAttribution,

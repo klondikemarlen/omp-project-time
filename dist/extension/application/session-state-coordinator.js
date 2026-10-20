@@ -106,6 +106,7 @@ export class SessionStateCoordinator {
   persist(sessionId, state) {
     this.states.set(sessionId, state);
     this.appendEntry(
+      sessionId,
       PROJECT_TIME_STATE_ENTRY,
       serializeProjectTimeState(state),
     );

@@ -4,6 +4,7 @@ import type {
   WorkItem,
   WorkItemAttribution,
 } from "@/time-log/domain/work-item.js";
+
 export type SourceKind = "human_active" | "agent_turn_elapsed";
 
 export type Repository = {

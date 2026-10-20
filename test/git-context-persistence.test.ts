@@ -18,7 +18,7 @@ import { formatTimeLogEvidence } from "../src/time-log/infrastructure/state-mapp
 const context = {
   head: {
     kind: "branch" as const,
-    name: "feature/PROJ-123",
+    name: "feature/MY_PROJECT-123",
     source: "active_branch" as const,
   },
   worktree: { id: "a".repeat(64), source: "local_git" as const },
@@ -157,7 +157,7 @@ test("when pending legacy JSON is imported into SQLite, context and Jira fields 
     sourceKind: "human_active",
     project: "project",
     repositoryId: "repo",
-    workItem: { kind: "jira", key: "PROJ-123", source: "active_branch" },
+    workItem: { kind: "jira", key: "MY_PROJECT-123", source: "active_branch" },
     workItemAttribution: "active_branch",
     gitContext: context,
     startAtMs: 10,

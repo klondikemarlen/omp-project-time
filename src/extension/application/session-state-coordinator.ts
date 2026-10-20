@@ -36,7 +36,7 @@ export class SessionStateCoordinator {
 
   constructor(
     private readonly timeLogRecorder: AutomaticTimeLogRecorder,
-    private readonly appendEntry: (customType: string, data?: unknown) => void,
+    private readonly appendEntry: (sessionId: string, customType: string, data?: unknown) => void,
   ) {}
 
   stateFor(
@@ -124,7 +124,7 @@ export class SessionStateCoordinator {
 
   private persist(sessionId: string, state: ProjectTimeState): void {
     this.states.set(sessionId, state)
-    this.appendEntry(PROJECT_TIME_STATE_ENTRY, serializeProjectTimeState(state))
+    this.appendEntry(sessionId, PROJECT_TIME_STATE_ENTRY, serializeProjectTimeState(state))
   }
 
   private recordTimeLogSettlement(

@@ -1,7 +1,7 @@
 const workItemPattern =
   /\b(?:(issue)\s*#\s*|(pull\s*request|pr)\s*#\s*)(\d+)\b|github\.com\/([^/\s]+\/[^/\s]+)\/(issues|pull)\/(\d+)\b/giu;
 const jiraPattern =
-  /(?<![A-Za-z0-9])([A-Z][A-Z0-9]+-[1-9]\d*)(?![A-Za-z0-9])/gu;
+  /(?<![A-Za-z0-9_])([A-Z][A-Z0-9_]+-[1-9]\d*)(?![A-Za-z0-9])/gu;
 function workItemMatches(prompt) {
   return [...prompt.matchAll(workItemPattern)].map((match) => ({
     kind:
@@ -49,9 +49,7 @@ function uniqueJiraKeys(value) {
 export function resolveBranchWorkItem(branch) {
   const keys = uniqueJiraKeys(branch);
   if (keys.length !== 1) {
-    return {
-      workItemAttribution: keys.length === 0 ? "unassigned" : "ambiguous",
-    };
+    return { workItemAttribution: "unassigned" };
   }
   return {
     workItem: { kind: "jira", key: keys[0], source: "active_branch" },
@@ -61,7 +59,7 @@ export function resolveBranchWorkItem(branch) {
 
 export function resolveWorkItemAssociation(prompt, currentWorkItem) {
   const workItems = uniqueWorkItems(prompt);
-  const jiraKeys = uniqueJiraKeys(prompt);
+  const jiraKeys = uniqueJiraKeys(prompt.replace(workItemPattern, " "));
   if (workItems.length + jiraKeys.length === 0) {
     return currentWorkItem === undefined
       ? { workItemAttribution: "unassigned" }
@@ -92,7 +90,7 @@ export function parseWorkItem(value) {
   if (candidate.kind === "jira") {
     if (
       typeof candidate.key !== "string" ||
-      !/^[A-Z][A-Z0-9]+-[1-9]\d*$/u.test(candidate.key)
+      !/^[A-Z][A-Z0-9_]+-[1-9]\d*$/u.test(candidate.key)
     )
       return undefined;
     if (

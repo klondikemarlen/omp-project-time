@@ -219,6 +219,11 @@ export class ProjectTimeRuntime {
 
   runtimeState = {};
 
+  // Git lookups can outlive a later hook; apply observations in callback order.
+  observations = Promise.resolve();
+
+  selectedSessionId;
+
   // Run ownership is independent of the expiring human-active status.
   runningAgentSession;
 
@@ -316,7 +321,10 @@ export class ProjectTimeRuntime {
     );
     this.sessionStateCoordinator = new SessionStateCoordinator(
       this.timeLogRecorder,
-      (customType, data) => this.pi.appendEntry(customType, data),
+      (sessionId, customType, data) => {
+        if (sessionId === this.selectedSessionId)
+          this.pi.appendEntry(customType, data);
+      },
     );
     this.prepareLocalData =
       options.prepareLocalData ?? prepareProjectTimeDataRoot;
@@ -329,54 +337,98 @@ export class ProjectTimeRuntime {
       getArgumentCompletions: (prefix) =>
         this.projectTimeArgumentCompletions(prefix),
       handler: async (args, ctx) => {
+        const nowMs = Date.now();
+        if (isTopLevelSession(ctx.sessionManager)) {
+          this.selectedSessionId = ctx.sessionManager.getSessionId();
+        }
         if (!(await this.localDataReady(ctx))) return;
-        await this.showCurrentStatus(args, ctx);
+        await this.observeInOrder(() =>
+          this.showCurrentStatus(args, ctx, nowMs),
+        );
       },
     });
     this.pi.on("session_start", async (_event, ctx) => {
+      const nowMs = Date.now();
+      if (!isTopLevelSession(ctx.sessionManager)) return;
+      this.selectedSessionId = ctx.sessionManager.getSessionId();
       if (!(await this.localDataReady(ctx))) return;
-      await this.activateSession(ctx);
+      await this.observeInOrder(() => this.activateSession(ctx, nowMs));
     });
     this.pi.on("session_switch", async (_event, ctx) => {
+      const nowMs = Date.now();
+      if (!isTopLevelSession(ctx.sessionManager)) return;
+      this.selectedSessionId = ctx.sessionManager.getSessionId();
       if (!(await this.localDataReady(ctx))) return;
-      const previous = this.runningAgentSession;
-      if (previous !== undefined) {
-        await this.finishAgentRun(previous.context, previous.sessionId);
-        await this.sessionStateCoordinator.flush(
-          previous.sessionId,
-          (message) =>
-            previous.context.ui.notify(
-              `Project Time log error: ${message}`,
-              "error",
-            ),
-        );
-      }
-      await this.activateSession(ctx);
+      await this.observeInOrder(async () => {
+        const previous = this.runningAgentSession;
+        if (previous !== undefined) {
+          await this.finishAgentRun(
+            previous.context,
+            previous.sessionId,
+            nowMs,
+          );
+          await this.sessionStateCoordinator.flush(
+            previous.sessionId,
+            (message) =>
+              previous.context.ui.notify(
+                `Project Time log error: ${message}`,
+                "error",
+              ),
+          );
+        }
+        await this.activateSession(ctx, nowMs);
+      });
     });
     this.pi.on("before_agent_start", async (event, ctx) => {
+      const nowMs = Date.now();
+      if (!isTopLevelSession(ctx.sessionManager)) return;
+      this.selectedSessionId = ctx.sessionManager.getSessionId();
       if (!(await this.localDataReady(ctx))) return;
-      await this.recordPrompt(event.prompt, ctx);
+      await this.observeInOrder(() =>
+        this.recordPrompt(event.prompt, ctx, nowMs),
+      );
     });
     this.pi.on("agent_start", async (_event, ctx) => {
+      const nowMs = Date.now();
+      const sessionId = ctx.sessionManager.getSessionId();
       if (!(await this.localDataReady(ctx))) return;
       if (!isTopLevelSession(ctx.sessionManager)) return;
-      const sessionId = ctx.sessionManager.getSessionId();
-      this.runningAgentSession = { context: ctx, sessionId };
-      this.timeLogRecorder.recordAgentStart(sessionId, Date.now());
+      await this.observeInOrder(async () => {
+        this.runningAgentSession = { context: ctx, sessionId };
+        this.timeLogRecorder.recordAgentStart(sessionId, nowMs);
+      });
     });
     this.pi.on("turn_end", async (_event, ctx) => {
+      const nowMs = Date.now();
+      const sessionId = ctx.sessionManager.getSessionId();
       if (!(await this.localDataReady(ctx))) return;
-      await this.settleCurrentTurn(ctx);
+      await this.observeInOrder(() =>
+        this.settleCurrentTurn(ctx, sessionId, nowMs),
+      );
     });
     this.pi.on("agent_end", async (event, ctx) => {
+      const nowMs = Date.now();
+      const sessionId = ctx.sessionManager.getSessionId();
       if (event.willContinue === true) return;
       if (!(await this.localDataReady(ctx))) return;
-      await this.finishAgentRun(ctx);
+      await this.observeInOrder(() =>
+        this.finishAgentRun(ctx, sessionId, nowMs),
+      );
     });
     this.pi.on("session_shutdown", async (_event, ctx) => {
+      const nowMs = Date.now();
+      const sessionId = ctx.sessionManager.getSessionId();
       if (!(await this.localDataReady(ctx))) return;
-      await this.shutdownSession(ctx);
+      await this.observeInOrder(() =>
+        this.shutdownSession(ctx, nowMs, sessionId),
+      );
     });
+  }
+
+  observeInOrder(observe) {
+    const next = this.observations.then(observe, observe);
+    this.observations = next;
+    return next;
   }
 
   async localDataReady(ctx) {
@@ -391,7 +443,7 @@ export class ProjectTimeRuntime {
     }
   }
 
-  async showCurrentStatus(args, ctx) {
+  async showCurrentStatus(args, ctx, nowMs) {
     if (!isTopLevelSession(ctx.sessionManager)) {
       ctx.ui.notify(
         "Project Time is only tracked for top-level sessions.",
@@ -434,7 +486,6 @@ export class ProjectTimeRuntime {
     if (config === undefined) return;
     const sessionId = ctx.sessionManager.getSessionId();
     const sessionName = ctx.sessionManager.getSessionName?.();
-    const nowMs = Date.now();
     const settledState = await this.settleWithGitContext({
       config,
       cwd: ctx.cwd,
@@ -499,7 +550,7 @@ export class ProjectTimeRuntime {
     }
   }
 
-  async activateSession(ctx) {
+  async activateSession(ctx, nowMs) {
     if (!isTopLevelSession(ctx.sessionManager)) return;
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
@@ -511,7 +562,7 @@ export class ProjectTimeRuntime {
       config,
       cwd: ctx.cwd,
       entries: ctx.sessionManager.getEntries(),
-      nowMs: Date.now(),
+      nowMs,
       sessionId,
       notifyTimeLogError: (message) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
@@ -524,7 +575,7 @@ export class ProjectTimeRuntime {
     updateStatus(ctx, settledState, config);
   }
 
-  async recordPrompt(prompt, ctx) {
+  async recordPrompt(prompt, ctx, promptAtMs) {
     if (!isTopLevelSession(ctx.sessionManager)) return;
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
@@ -542,7 +593,6 @@ export class ProjectTimeRuntime {
       );
     }
     this.runningAgentSession = undefined;
-    const promptAtMs = Date.now();
     const update = {
       config,
       cwd: ctx.cwd,
@@ -563,7 +613,9 @@ export class ProjectTimeRuntime {
       gitContextKey(currentState.gitContext) === gitContextKey(git.gitContext);
     const explicitOrCarried = resolveWorkItemAssociation(
       prompt,
-      sameGitContext ? currentState.workItem : undefined,
+      sameGitContext && currentState.workItem?.source === "user_provided"
+        ? currentState.workItem
+        : undefined,
     );
     const { workItem, workItemAttribution } =
       explicitOrCarried.workItemAttribution === "unassigned"
@@ -655,14 +707,17 @@ export class ProjectTimeRuntime {
     );
   }
 
-  async settleCurrentTurn(ctx, sessionId = ctx.sessionManager.getSessionId()) {
+  async settleCurrentTurn(
+    ctx,
+    sessionId = ctx.sessionManager.getSessionId(),
+    nowMs = Date.now(),
+  ) {
     if (!isTopLevelSession(ctx.sessionManager)) return;
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
       this.clearActiveStatus(ctx);
       return;
     }
-    const nowMs = Date.now();
     const settledState = await this.settleWithGitContext({
       config,
       cwd: ctx.cwd,
@@ -676,24 +731,24 @@ export class ProjectTimeRuntime {
     updateStatus(ctx, settledState, config);
   }
 
-  async finishAgentRun(ctx, sessionId = ctx.sessionManager.getSessionId()) {
+  async finishAgentRun(
+    ctx,
+    sessionId = ctx.sessionManager.getSessionId(),
+    endAtMs = Date.now(),
+  ) {
     if (!isTopLevelSession(ctx.sessionManager)) return;
     if (this.runningAgentSession?.sessionId === sessionId) {
-      this.timeLogRecorder.recordAgentTurnEnd(
-        sessionId,
-        Date.now(),
-        (message) =>
-          ctx.ui.notify(`Project Time log error: ${message}`, "error"),
+      this.timeLogRecorder.recordAgentTurnEnd(sessionId, endAtMs, (message) =>
+        ctx.ui.notify(`Project Time log error: ${message}`, "error"),
       );
       this.runningAgentSession = undefined;
     }
-    await this.settleCurrentTurn(ctx, sessionId);
+    await this.settleCurrentTurn(ctx, sessionId, endAtMs);
   }
 
-  async shutdownSession(ctx) {
-    const sessionId = ctx.sessionManager.getSessionId();
+  async shutdownSession(ctx, nowMs, sessionId) {
     if (isTopLevelSession(ctx.sessionManager)) {
-      await this.finishAgentRun(ctx);
+      await this.finishAgentRun(ctx, sessionId, nowMs);
     }
     await this.sessionStateCoordinator.flush(sessionId, (message) =>
       ctx.ui.notify(`Project Time log error: ${message}`, "error"),
@@ -702,7 +757,7 @@ export class ProjectTimeRuntime {
     this.clearActiveStatus(ctx);
   }
 
-  async refreshActiveStatus() {
+  async refreshActiveStatus(nowMs) {
     const activeContext =
       this.runtimeState.activeContext ?? this.runningAgentSession?.context;
     const activeSessionId =
@@ -719,7 +774,7 @@ export class ProjectTimeRuntime {
       config,
       cwd: activeContext.cwd,
       entries: activeContext.sessionManager.getEntries(),
-      nowMs: Date.now(),
+      nowMs,
       sessionId: activeSessionId,
       notifyTimeLogError: (message) =>
         activeContext.ui.notify(`Project Time log error: ${message}`, "error"),
@@ -733,8 +788,11 @@ export class ProjectTimeRuntime {
     clearTimeout(this.runtimeState.refreshTimer);
     const timer = setTimeout(async () => {
       this.runtimeState.refreshTimer = undefined;
+      const nowMs = Date.now();
       try {
-        const nextWaitMs = await this.refreshActiveStatus();
+        const nextWaitMs = await this.observeInOrder(() =>
+          this.refreshActiveStatus(nowMs),
+        );
         this.scheduleNextRefresh(nextWaitMs);
       } catch (error) {
         this.reportUnexpectedRefreshError(error);

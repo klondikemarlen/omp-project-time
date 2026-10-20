@@ -63,14 +63,14 @@ test("when a prompt contains a repository-qualified GitHub issue, repository ide
 
 test("when a prompt references a Jira key, user-provided attribution is returned", () => {
   // Arrange
-  const prompt = "Implement PROJ-123 in this change."
+  const prompt = "Implement MY_PROJECT-123 in this change."
 
   // Act
   const association = resolveWorkItemAssociation(prompt)
 
   // Assert
   assert.deepEqual(association, {
-    workItem: { kind: "jira", key: "PROJ-123", source: "user_provided" },
+    workItem: { kind: "jira", key: "MY_PROJECT-123", source: "user_provided" },
     workItemAttribution: "explicit_prompt",
   })
 })
@@ -122,7 +122,7 @@ test("when a Jira key appears in a branch, active-branch provenance is returned"
   })
 })
 
-test("when a branch contains multiple Jira keys, association is ambiguous", () => {
+test("when a branch contains multiple Jira keys, no work item is guessed", () => {
   // Arrange
   const branch = "PROJ-123-OTHER-45"
 
@@ -130,7 +130,7 @@ test("when a branch contains multiple Jira keys, association is ambiguous", () =
   const association = resolveBranchWorkItem(branch)
 
   // Assert
-  assert.deepEqual(association, { workItemAttribution: "ambiguous" })
+  assert.deepEqual(association, { workItemAttribution: "unassigned" })
 })
 
 test("when a branch has no Jira key, association is unassigned", () => {
@@ -153,4 +153,23 @@ test("when a GitHub reference includes an oversized number, association remains 
 
   // Assert
   assert.deepEqual(association, { workItemAttribution: "unassigned" })
+})
+
+test("when a GitHub URL contains a Jira-shaped repository name, retains its explicit GitHub reference", () => {
+  // Arrange
+  const prompt = "Review https://github.com/acme/APP-42/pull/73"
+
+  // Act
+  const association = resolveWorkItemAssociation(prompt)
+
+  // Assert
+  assert.deepEqual(association, {
+    workItem: {
+      kind: "pull_request",
+      number: 73,
+      repository: "github.com/acme/app-42",
+      source: "user_provided",
+    },
+    workItemAttribution: "explicit_prompt",
+  })
 })
