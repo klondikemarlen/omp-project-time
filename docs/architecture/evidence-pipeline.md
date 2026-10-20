@@ -46,6 +46,8 @@ An observed `session_shutdown` or completed `session_switch` closes and flushes 
 
 The runtime samples Git context at prompts, settlements, and refreshes, including while AI work continues beyond the human-active window. Observations are applied in callback order so a slow GitHub response cannot overwrite a newer transition or invert interval bounds. Branch, worktree, and work-item changes settle the old human segment and split an open AI interval before installing the new context. Queued writes capture repository and context facts from their initiating observation instead of reading later mutable session fields; session-state history is appended only to its currently selected host session.
 
+OMP reuses a mutable session manager across switches, including while old lifecycle callbacks are still being delivered. Agent callbacks therefore use the session ID captured by the recorded run, not the manager's later selection. History writes check the manager's live selected ID at append time, and terminal observations drain queued ledger writes without discarding the human-window snapshot.
+
 `GitContextResolver` hashes the canonical worktree administrative directory and stores only the digest. Local worktrees share the repository's common-directory identity while retaining separate worktree identities. Optional GitHub lookup validates both the head branch and origin repository, caches successes and failures for one minute, and never converts an unavailable lookup into guessed PR metadata. The domain owns Jira extraction, provenance, and validation. SQLite's JSON entry storage needs no schema migration for these additive v1 fields.
 
 ## Persistence and Migration
