@@ -43,6 +43,7 @@ export class SessionStateCoordinator {
       state.narrative,
       state.workItem,
       state.workItemAttribution,
+      state.gitContext,
     );
     this.persist(update.sessionId, state);
     return state;
@@ -64,6 +65,7 @@ export class SessionStateCoordinator {
     narrative,
     workItem,
     workItemAttribution,
+    gitContext,
   ) {
     const stateBeforeSettlement = {
       ...this.stateFor(update.sessionId, update.entries),
@@ -80,6 +82,7 @@ export class SessionStateCoordinator {
       workItem,
       workItemAttribution,
       update.nowMs,
+      gitContext,
     );
     this.timeLogRecorder.recordActivityChange(
       update.sessionId,
@@ -89,6 +92,7 @@ export class SessionStateCoordinator {
       update.notifyTimeLogError,
       workItem,
       workItemAttribution,
+      gitContext,
     );
     this.persist(update.sessionId, state);
     return state;

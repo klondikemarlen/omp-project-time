@@ -1,3 +1,6 @@
+import { gitContextKey } from "../../time-log/domain/git-context.js";
+import { workItemKey } from "../../time-log/domain/work-item.js";
+
 export function createAutomaticTimeLogEntry(options) {
   const stateBeforeSettlement = options.stateBeforeSettlement;
   if (
@@ -37,8 +40,11 @@ export function createAutomaticTimeLogEntry(options) {
       ? {}
       : { narrative: options.narrative }),
     ...(options.workItem === undefined ? {} : { workItem: options.workItem }),
+    ...(options.gitContext === undefined
+      ? {}
+      : { gitContext: options.gitContext }),
     workItemAttribution,
-    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}:${workItemAttribution}:${options.workItem?.kind ?? ""}:${options.workItem?.number ?? ""}:${options.workItem?.repository ?? ""}`,
+    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}:${workItemAttribution}:${options.workItem?.kind ?? ""}:${options.workItem?.kind === "jira" ? options.workItem.key : (options.workItem?.number ?? "")}:${options.workItem?.kind === "jira" ? "" : (options.workItem?.repository ?? "")}${options.gitContext === undefined ? "" : `:${workItemKey(options.workItem)}:${gitContextKey(options.gitContext)}`}`,
     startAtMs: entryStartAtMs,
     endAtMs: settledUntilMs,
   };

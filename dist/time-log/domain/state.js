@@ -1,3 +1,4 @@
+import { parseGitContext } from "../../time-log/domain/git-context.js";
 import { MS_PER_MINUTE } from "../../utils/time-constants.js";
 import { parseActivityLabel } from "../../time-log/domain/activity.js";
 import { parseActivityNarrative } from "../../time-log/domain/narrative.js";
@@ -30,7 +31,10 @@ export function parseProjectTimeState(value) {
   const workItemAttribution = parseWorkItemAttribution(
     candidate.workItemAttribution,
   );
+  const gitContext = parseGitContext(candidate.gitContext);
   if (candidate.narrative !== undefined && narrative === undefined)
+    return undefined;
+  if (candidate.gitContext !== undefined && gitContext === undefined)
     return undefined;
   if (candidate.workItem !== undefined && workItem === undefined)
     return undefined;
@@ -50,6 +54,7 @@ export function parseProjectTimeState(value) {
     ...(activityStartedAtMs === undefined ? {} : { activityStartedAtMs }),
     ...(narrative === undefined ? {} : { narrative }),
     ...(workItem === undefined ? {} : { workItem }),
+    ...(gitContext === undefined ? {} : { gitContext }),
     ...(workItemAttribution === undefined ? {} : { workItemAttribution }),
   };
 }
@@ -87,6 +92,7 @@ export function setProjectTimeActivity(
   workItem,
   workItemAttribution,
   nowMs,
+  gitContext,
 ) {
   const nextState = { ...state };
   if (activity === undefined) delete nextState.activity;
@@ -97,6 +103,8 @@ export function setProjectTimeActivity(
   else nextState.workItem = workItem;
   if (workItemAttribution === undefined) delete nextState.workItemAttribution;
   else nextState.workItemAttribution = workItemAttribution;
+  if (gitContext === undefined) delete nextState.gitContext;
+  else nextState.gitContext = gitContext;
   if (
     nextState.activeStartAtMs !== undefined &&
     nextState.activeUntilMs !== undefined
