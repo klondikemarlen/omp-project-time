@@ -41,6 +41,7 @@ import type {
   ExtensionApi,
   ExtensionContext,
   ExtensionOptions,
+  SessionEntryLike,
 } from "@/extension/types.js";
 
 type RefreshTimer = NodeJS.Timeout;
@@ -49,6 +50,14 @@ type RuntimeState = {
   activeContext?: ExtensionContext;
   activeSessionId?: string;
   refreshTimer?: RefreshTimer;
+};
+
+type PromptObservation = {
+  prompt: string;
+  context: ExtensionContext;
+  sessionId: string;
+  entries: readonly SessionEntryLike[];
+  atMs: number;
 };
 
 const PROJECT_TIME_COMMANDS = [
@@ -204,8 +213,7 @@ function evidencePreviewLines(
     { human_active: 0, agent_turn_elapsed: 0 },
   );
   const entryLines = visibleEntries.map(({ endAtMs, entry, startAtMs }) => {
-    const source =
-      entry.sourceKind === "human_active" ? "Human" : "Agent";
+    const source = entry.sourceKind === "human_active" ? "Human" : "Agent";
     return `${localTimeText(startAtMs)}–${localTimeText(endAtMs)} · ${source} · ${entry.project} · ${entry.activity ?? "Unlabelled"}`;
   });
 
@@ -305,7 +313,7 @@ export class ProjectTimeRuntime {
           !prefix.endsWith(" ") &&
           !tokens[1]?.startsWith("--")))
     ) {
-      const partial = tokens.length === 1 ? "" : tokens[1] ?? "";
+      const partial = tokens.length === 1 ? "" : (tokens[1] ?? "");
       const choices = evidenceDateCompletions(this.now())
         .filter(({ value }) => value.startsWith(partial.toLowerCase()))
         .map((choice) => ({ ...choice, value: `entries ${choice.value}` }));
@@ -340,7 +348,8 @@ export class ProjectTimeRuntime {
       options.activityGenerationTimeoutMs ??
       DEFAULT_ACTIVITY_GENERATION_TIMEOUT_MS;
     this.now = options.now ?? (() => new Date());
-    this.gitContextResolver = options.gitContextResolver ?? new GitContextResolver();
+    this.gitContextResolver =
+      options.gitContextResolver ?? new GitContextResolver();
     this.usesDefaultDataRoot =
       options.prepareLocalData !== undefined ||
       options.timeLogPath === undefined;
@@ -375,7 +384,9 @@ export class ProjectTimeRuntime {
           this.selectedSessionManager = ctx.sessionManager;
         }
         if (!(await this.localDataReady(ctx))) return;
-        await this.observeInOrder(() => this.showCurrentStatus(args, ctx, nowMs));
+        await this.observeInOrder(() =>
+          this.showCurrentStatus(args, ctx, nowMs),
+        );
       },
     });
 
@@ -395,9 +406,18 @@ export class ProjectTimeRuntime {
       await this.observeInOrder(async () => {
         const previous = this.runningAgentSession;
         if (previous !== undefined) {
-          await this.finishAgentRun(previous.context, previous.sessionId, nowMs);
-          await this.sessionStateCoordinator.flush(previous.sessionId, (message) =>
-            previous.context.ui.notify(`Project Time log error: ${message}`, "error"),
+          await this.finishAgentRun(
+            previous.context,
+            previous.sessionId,
+            nowMs,
+          );
+          await this.sessionStateCoordinator.flush(
+            previous.sessionId,
+            (message) =>
+              previous.context.ui.notify(
+                `Project Time log error: ${message}`,
+                "error",
+              ),
           );
         }
         await this.activateSession(ctx, nowMs);
@@ -407,42 +427,53 @@ export class ProjectTimeRuntime {
     this.pi.on("before_agent_start", async (event, ctx) => {
       const nowMs = Date.now();
       if (!isTopLevelSession(ctx.sessionManager)) return;
+      const observation: PromptObservation = {
+        prompt: event.prompt,
+        context: ctx,
+        sessionId: ctx.sessionManager.getSessionId(),
+        entries: ctx.sessionManager.getEntries(),
+        atMs: nowMs,
+      };
       this.selectedSessionManager = ctx.sessionManager;
       if (!(await this.localDataReady(ctx))) return;
-      await this.observeInOrder(() => this.recordPrompt(event.prompt, ctx, nowMs));
+      await this.observeInOrder(() => this.recordPrompt(observation));
     });
 
     this.pi.on("agent_start", async (_event, ctx) => {
       const nowMs = Date.now();
-      const sessionId = ctx.sessionManager.getSessionId();
-      if (!(await this.localDataReady(ctx))) return;
       if (!isTopLevelSession(ctx.sessionManager)) return;
+      const sessionId = ctx.sessionManager.getSessionId();
+      const current = this.runningAgentSession;
+      const run =
+        current !== undefined && current.sessionId === sessionId
+          ? current
+          : { context: ctx, sessionId };
+      this.runningAgentSession = run;
+      if (!(await this.localDataReady(ctx))) return;
 
       await this.observeInOrder(async () => {
-        this.runningAgentSession = { context: ctx, sessionId };
+        if (this.runningAgentSession !== run) return;
         this.timeLogRecorder.recordAgentStart(sessionId, nowMs);
       });
     });
 
     this.pi.on("turn_end", async (_event, ctx) => {
       const nowMs = Date.now();
-      if (!(await this.localDataReady(ctx))) return;
+      const run = this.runningAgentSession;
+      if (run === undefined || !(await this.localDataReady(ctx))) return;
       await this.observeInOrder(async () => {
-        const run = this.runningAgentSession;
-        if (run === undefined) return;
-
+        if (this.runningAgentSession !== run) return;
         await this.settleCurrentTurn(run.context, run.sessionId, nowMs);
       });
     });
 
     this.pi.on("agent_end", async (event, ctx) => {
       const nowMs = Date.now();
-      if (event.willContinue === true || ctx.isIdle?.() === false) return;
-      if (!(await this.localDataReady(ctx))) return;
+      if (event.willContinue === true) return;
+      const run = this.runningAgentSession;
+      if (run === undefined || !(await this.localDataReady(ctx))) return;
       await this.observeInOrder(async () => {
-        const run = this.runningAgentSession;
-        if (run === undefined) return;
-
+        if (this.runningAgentSession !== run) return;
         await this.finishAgentRun(run.context, run.sessionId, nowMs);
       });
     });
@@ -453,7 +484,11 @@ export class ProjectTimeRuntime {
       if (!(await this.localDataReady(ctx))) return;
       await this.observeInOrder(() => {
         const run = this.runningAgentSession;
-        return this.shutdownSession(run?.context ?? ctx, nowMs, run?.sessionId ?? sessionId);
+        return this.shutdownSession(
+          run?.context ?? ctx,
+          nowMs,
+          run?.sessionId ?? sessionId,
+        );
       });
     });
   }
@@ -575,7 +610,10 @@ export class ProjectTimeRuntime {
     try {
       const entries = await this.timeLogRecorder.entries();
       const localStorageBytes = await this.timeLogRecorder.storageBytes();
-      ctx.ui.notify(statisticsText(entries, project, localStorageBytes), "info");
+      ctx.ui.notify(
+        statisticsText(entries, project, localStorageBytes),
+        "info",
+      );
     } catch (error) {
       ctx.ui.notify(
         `Project Time statistics error: ${errorMessage(error)}`,
@@ -590,7 +628,9 @@ export class ProjectTimeRuntime {
   ): Promise<void> {
     try {
       const entries = await this.timeLogRecorder.entries();
-      const projectEntries = entries.filter((entry) => entry.project === project);
+      const projectEntries = entries.filter(
+        (entry) => entry.project === project,
+      );
       ctx.ui.notify(projectDashboardText(project, projectEntries), "info");
     } catch (error) {
       ctx.ui.notify(
@@ -600,7 +640,10 @@ export class ProjectTimeRuntime {
     }
   }
 
-  private async activateSession(ctx: ExtensionContext, nowMs: number): Promise<void> {
+  private async activateSession(
+    ctx: ExtensionContext,
+    nowMs: number,
+  ): Promise<void> {
     if (!isTopLevelSession(ctx.sessionManager)) return;
 
     const config = await this.loadConfigForStatus(ctx);
@@ -628,40 +671,49 @@ export class ProjectTimeRuntime {
     updateStatus(ctx, settledState, config);
   }
 
-  private async recordPrompt(
-    prompt: string,
-    ctx: ExtensionContext,
-    promptAtMs: number,
-  ): Promise<void> {
-    if (!isTopLevelSession(ctx.sessionManager)) return;
+  private async recordPrompt(observation: PromptObservation): Promise<void> {
+    const {
+      prompt,
+      context: ctx,
+      sessionId,
+      entries,
+      atMs: promptAtMs,
+    } = observation;
+    if (sessionId !== ctx.sessionManager.getSessionId()) return;
 
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
       this.clearActiveStatus(ctx);
       return;
     }
+    if (sessionId !== ctx.sessionManager.getSessionId()) return;
 
     const previous = this.runningAgentSession;
     if (previous !== undefined) {
       // A new prompt is not evidence of when an unobserved previous run ended.
       await this.timeLogRecorder.flush(previous.sessionId, (message) =>
-        previous.context.ui.notify(`Project Time log error: ${message}`, "error"),
+        previous.context.ui.notify(
+          `Project Time log error: ${message}`,
+          "error",
+        ),
       );
     }
-    this.runningAgentSession = undefined;
+    if (this.runningAgentSession === previous)
+      this.runningAgentSession = undefined;
 
     const update = {
       config,
       cwd: ctx.cwd,
-      entries: ctx.sessionManager.getEntries(),
+      entries,
       nowMs: promptAtMs,
-      sessionId: ctx.sessionManager.getSessionId(),
+      sessionId,
       notifyTimeLogError: (message: string) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     };
     const generatedActivity = await this.resolveGeneratedActivity(prompt, ctx);
     const repository = await this.timeLogRecorder.repositoryFor(ctx.cwd);
     const git = await this.gitContextResolver.resolve(ctx.cwd, repository);
+    if (sessionId !== ctx.sessionManager.getSessionId()) return;
     const currentState = this.sessionStateCoordinator.stateFor(
       update.sessionId,
       update.entries,
@@ -704,10 +756,15 @@ export class ProjectTimeRuntime {
     updateStatus(ctx, nextState, config);
   }
 
-  private async settleWithGitContext(update: SessionUpdate): Promise<ProjectTimeState> {
+  private async settleWithGitContext(
+    update: SessionUpdate,
+  ): Promise<ProjectTimeState> {
     const repository = await this.timeLogRecorder.repositoryFor(update.cwd);
     const git = await this.gitContextResolver.resolve(update.cwd, repository);
-    const current = this.sessionStateCoordinator.stateFor(update.sessionId, update.entries);
+    const current = this.sessionStateCoordinator.stateFor(
+      update.sessionId,
+      update.entries,
+    );
     const contextChanged =
       gitContextKey(current.gitContext) !== gitContextKey(git.gitContext);
     const refreshAssociation =
@@ -717,7 +774,7 @@ export class ProjectTimeRuntime {
       current.workItem?.source === "linked_pull_request";
     const workItem = refreshAssociation ? git.workItem : current.workItem;
     const attribution = refreshAssociation
-      ? git.workItemAttribution ?? "unassigned"
+      ? (git.workItemAttribution ?? "unassigned")
       : current.workItemAttribution;
 
     if (
@@ -817,7 +874,6 @@ export class ProjectTimeRuntime {
     nowMs: number,
     sessionId: string,
   ): Promise<void> {
-
     if (isTopLevelSession(ctx.sessionManager)) {
       await this.finishAgentRun(ctx, sessionId, nowMs);
     }
@@ -870,7 +926,9 @@ export class ProjectTimeRuntime {
       this.runtimeState.refreshTimer = undefined;
       const nowMs = Date.now();
       try {
-        const nextWaitMs = await this.observeInOrder(() => this.refreshActiveStatus(nowMs));
+        const nextWaitMs = await this.observeInOrder(() =>
+          this.refreshActiveStatus(nowMs),
+        );
         this.scheduleNextRefresh(nextWaitMs);
       } catch (error) {
         this.reportUnexpectedRefreshError(error);
@@ -936,10 +994,7 @@ type ProjectTimeCommand = {
   tokens: string[];
 };
 
-function parseProjectTimeCommand(
-  args: string,
-  now: Date,
-): ProjectTimeCommand {
+function parseProjectTimeCommand(args: string, now: Date): ProjectTimeCommand {
   const tokens = parseCommandTokens(args);
   const projectIndexes = tokens
     .map((token, index) => (token === "--project" ? index : -1))

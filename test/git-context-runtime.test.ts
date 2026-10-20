@@ -51,7 +51,9 @@ async function createFixture(
       handlers.set(name, handler);
     },
   };
-  const ctx: ExtensionContext = {
+  const ctx: ExtensionContext & { isIdle: () => boolean } = {
+    // OMP emits terminal notifications before its in-flight prompt unwinds.
+    isIdle: () => false,
     cwd: directory,
     sessionManager: {
       getSessionId: () => currentSessionId,
@@ -561,4 +563,78 @@ test("when old turn callbacks arrive after manager replacement, AI intervals ret
       { sessionId: "next-session", startAtMs: 1_020_000, endAtMs: 1_030_000 },
     ],
   );
+});
+
+test("when terminal events arrive before the host becomes idle, later prompts retain the observed run bounds", async (t) => {
+  // Arrange
+  const fixture = await createFixture(t);
+  await fixture.emit("before_agent_start");
+  await fixture.emit("agent_start");
+
+  // Act
+  fixture.at(1_010_000);
+  await fixture.emit("agent_end");
+  fixture.at(1_020_000);
+  await fixture.emit("before_agent_start");
+  await fixture.emit("agent_start");
+  fixture.at(1_030_000);
+  await fixture.emit("agent_end");
+  fixture.at(1_050_000);
+  await fixture.emit("session_shutdown");
+
+  // Assert
+  const entries = await fixture.ledger.entries();
+  assert.deepEqual(
+    entries
+      .filter((entry) => entry.sourceKind === "agent_turn_elapsed")
+      .map(({ startAtMs, endAtMs }) => ({ startAtMs, endAtMs })),
+    [
+      { startAtMs: 1_000_000, endAtMs: 1_010_000 },
+      { startAtMs: 1_020_000, endAtMs: 1_030_000 },
+    ],
+  );
+});
+
+test("when cancellation replaces the session while a prompt is queued, the fresh session does not inherit that prompt", async (t) => {
+  // Arrange
+  const signals = new EventEmitter();
+  const resolver = new GitContextResolver();
+  let blockNextObservation = false;
+  const fixture = await createFixture(t, {
+    async resolve(cwd, repository) {
+      const resolution = await resolver.resolve(cwd, repository);
+      if (blockNextObservation) {
+        blockNextObservation = false;
+        signals.emit("blocked");
+        await once(signals, "release");
+      }
+      return resolution;
+    },
+  });
+  await fixture.emit("before_agent_start");
+  await fixture.emit("agent_start");
+  fixture.at(1_010_000);
+  blockNextObservation = true;
+  const blocked = once(signals, "blocked");
+  const pendingTurn = fixture.emit("turn_end");
+  await blocked;
+
+  // Act
+  const pendingPrompt = fixture.emit(
+    "before_agent_start",
+    "Review issue #134.",
+  );
+  fixture.selectSession("next-session");
+  const switched = fixture.emit("session_switch");
+  signals.emit("release");
+  await Promise.all([pendingTurn, pendingPrompt, switched]);
+  await fixture.emit("session_shutdown");
+
+  // Assert
+  const state = loadPersistedProjectTimeState(
+    fixture.sessionEntries.get("next-session") ?? [],
+  );
+  assert.equal(state.promptCount, 0);
+  assert.equal(state.activeStartAtMs, undefined);
+  assert.equal(state.workItem, undefined);
 });

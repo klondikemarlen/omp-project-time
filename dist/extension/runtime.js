@@ -383,38 +383,49 @@ export class ProjectTimeRuntime {
     this.pi.on("before_agent_start", async (event, ctx) => {
       const nowMs = Date.now();
       if (!isTopLevelSession(ctx.sessionManager)) return;
+      const observation = {
+        prompt: event.prompt,
+        context: ctx,
+        sessionId: ctx.sessionManager.getSessionId(),
+        entries: ctx.sessionManager.getEntries(),
+        atMs: nowMs,
+      };
       this.selectedSessionManager = ctx.sessionManager;
       if (!(await this.localDataReady(ctx))) return;
-      await this.observeInOrder(() =>
-        this.recordPrompt(event.prompt, ctx, nowMs),
-      );
+      await this.observeInOrder(() => this.recordPrompt(observation));
     });
     this.pi.on("agent_start", async (_event, ctx) => {
       const nowMs = Date.now();
-      const sessionId = ctx.sessionManager.getSessionId();
-      if (!(await this.localDataReady(ctx))) return;
       if (!isTopLevelSession(ctx.sessionManager)) return;
+      const sessionId = ctx.sessionManager.getSessionId();
+      const current = this.runningAgentSession;
+      const run =
+        current !== undefined && current.sessionId === sessionId
+          ? current
+          : { context: ctx, sessionId };
+      this.runningAgentSession = run;
+      if (!(await this.localDataReady(ctx))) return;
       await this.observeInOrder(async () => {
-        this.runningAgentSession = { context: ctx, sessionId };
+        if (this.runningAgentSession !== run) return;
         this.timeLogRecorder.recordAgentStart(sessionId, nowMs);
       });
     });
     this.pi.on("turn_end", async (_event, ctx) => {
       const nowMs = Date.now();
-      if (!(await this.localDataReady(ctx))) return;
+      const run = this.runningAgentSession;
+      if (run === undefined || !(await this.localDataReady(ctx))) return;
       await this.observeInOrder(async () => {
-        const run = this.runningAgentSession;
-        if (run === undefined) return;
+        if (this.runningAgentSession !== run) return;
         await this.settleCurrentTurn(run.context, run.sessionId, nowMs);
       });
     });
     this.pi.on("agent_end", async (event, ctx) => {
       const nowMs = Date.now();
-      if (event.willContinue === true || ctx.isIdle?.() === false) return;
-      if (!(await this.localDataReady(ctx))) return;
+      if (event.willContinue === true) return;
+      const run = this.runningAgentSession;
+      if (run === undefined || !(await this.localDataReady(ctx))) return;
       await this.observeInOrder(async () => {
-        const run = this.runningAgentSession;
-        if (run === undefined) return;
+        if (this.runningAgentSession !== run) return;
         await this.finishAgentRun(run.context, run.sessionId, nowMs);
       });
     });
@@ -583,13 +594,21 @@ export class ProjectTimeRuntime {
     updateStatus(ctx, settledState, config);
   }
 
-  async recordPrompt(prompt, ctx, promptAtMs) {
-    if (!isTopLevelSession(ctx.sessionManager)) return;
+  async recordPrompt(observation) {
+    const {
+      prompt,
+      context: ctx,
+      sessionId,
+      entries,
+      atMs: promptAtMs,
+    } = observation;
+    if (sessionId !== ctx.sessionManager.getSessionId()) return;
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
       this.clearActiveStatus(ctx);
       return;
     }
+    if (sessionId !== ctx.sessionManager.getSessionId()) return;
     const previous = this.runningAgentSession;
     if (previous !== undefined) {
       // A new prompt is not evidence of when an unobserved previous run ended.
@@ -600,19 +619,21 @@ export class ProjectTimeRuntime {
         ),
       );
     }
-    this.runningAgentSession = undefined;
+    if (this.runningAgentSession === previous)
+      this.runningAgentSession = undefined;
     const update = {
       config,
       cwd: ctx.cwd,
-      entries: ctx.sessionManager.getEntries(),
+      entries,
       nowMs: promptAtMs,
-      sessionId: ctx.sessionManager.getSessionId(),
+      sessionId,
       notifyTimeLogError: (message) =>
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     };
     const generatedActivity = await this.resolveGeneratedActivity(prompt, ctx);
     const repository = await this.timeLogRecorder.repositoryFor(ctx.cwd);
     const git = await this.gitContextResolver.resolve(ctx.cwd, repository);
+    if (sessionId !== ctx.sessionManager.getSessionId()) return;
     const currentState = this.sessionStateCoordinator.stateFor(
       update.sessionId,
       update.entries,

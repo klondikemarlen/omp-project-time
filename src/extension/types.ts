@@ -42,7 +42,6 @@ export type ExtensionContext = {
   cwd: string
   ui: UiLike
   sessionManager: SessionManagerLike
-  isIdle?: () => boolean
   model?: OmpModel
   models?: {
     current(): OmpModel | undefined
