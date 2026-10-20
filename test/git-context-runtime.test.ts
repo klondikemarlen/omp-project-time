@@ -15,6 +15,7 @@ import type {
 } from "../src/extension/types.js";
 import { GitContextResolver } from "../src/infrastructure/git-context.js";
 import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js";
+import { loadPersistedProjectTimeState } from "../src/extension/session-state.js";
 
 async function createFixture(
   t: TestContext,
@@ -34,9 +35,18 @@ async function createFixture(
     string,
     (event: never, ctx: ExtensionContext) => Promise<void>
   >();
+  let currentSessionId = "context-session";
+  const sessionEntries = new Map<
+    string,
+    Array<{ type: string; customType: string; data?: unknown }>
+  >([[currentSessionId, []]]);
   const api: ExtensionApi = {
     registerCommand() {},
-    appendEntry() {},
+    appendEntry(customType, data) {
+      sessionEntries
+        .get(currentSessionId)
+        ?.push({ type: "custom", customType, data });
+    },
     on(name, handler) {
       handlers.set(name, handler);
     },
@@ -44,9 +54,9 @@ async function createFixture(
   const ctx: ExtensionContext = {
     cwd: directory,
     sessionManager: {
-      getSessionId: () => "context-session",
+      getSessionId: () => currentSessionId,
       getHeader: () => null,
-      getEntries: () => [],
+      getEntries: () => sessionEntries.get(currentSessionId) ?? [],
     },
     ui: {
       notify(message, type) {
@@ -68,6 +78,11 @@ async function createFixture(
   t.mock.method(Date, "now", () => nowMs);
   return {
     directory,
+    sessionEntries,
+    selectSession(sessionId: string) {
+      currentSessionId = sessionId;
+      sessionEntries.set(sessionId, []);
+    },
     ledger: new TimeLogLedger(databasePath),
     at(atMs: number) {
       nowMs = atMs;
@@ -480,5 +495,70 @@ test("when a prompt names multiple work items, a linked PR cannot override that 
       workItemAttribution,
     })),
     [{ workItem: undefined, workItemAttribution: "ambiguous" }],
+  );
+});
+
+test("when the host switches its mutable manager before old callbacks finish, the new session starts without old activity", async (t) => {
+  // Arrange
+  const fixture = await createFixture(t);
+  await fixture.emit("session_start");
+  await fixture.emit("before_agent_start", "Review issue #134.");
+  await fixture.emit("agent_start");
+  fixture.at(1_010_000);
+  fixture.selectSession("next-session");
+
+  // Act
+  await fixture.emit("turn_end");
+  await fixture.emit("agent_end");
+  await fixture.emit("session_switch");
+  await fixture.emit("session_shutdown");
+
+  // Assert
+  const state = loadPersistedProjectTimeState(
+    fixture.sessionEntries.get("next-session") ?? [],
+  );
+  assert.equal(state.promptCount, 0);
+  assert.equal(state.activeStartAtMs, undefined);
+  assert.equal(state.workItem, undefined);
+});
+
+test("when old turn callbacks arrive after manager replacement, AI intervals retain their original session owner", async (t) => {
+  // Arrange
+  const fixture = await createFixture(t);
+  await fixture.emit("before_agent_start");
+  await fixture.emit("agent_start");
+  fixture.at(1_010_000);
+  fixture.selectSession("next-session");
+
+  // Act
+  await fixture.emit("turn_end");
+  await fixture.emit("agent_end");
+  await fixture.emit("session_switch");
+  fixture.at(1_020_000);
+  await fixture.emit("before_agent_start");
+  await fixture.emit("agent_start");
+  fixture.at(1_030_000);
+  await fixture.emit("agent_end");
+  await fixture.emit("session_shutdown");
+
+  // Assert
+  const entries = await fixture.ledger.entries();
+  const agentEntries = entries.filter(
+    (entry) => entry.sourceKind === "agent_turn_elapsed",
+  );
+  assert.deepEqual(
+    agentEntries.map(({ sessionId, startAtMs, endAtMs }) => ({
+      sessionId,
+      startAtMs,
+      endAtMs,
+    })),
+    [
+      {
+        sessionId: "context-session",
+        startAtMs: 1_000_000,
+        endAtMs: 1_010_000,
+      },
+      { sessionId: "next-session", startAtMs: 1_020_000, endAtMs: 1_030_000 },
+    ],
   );
 });

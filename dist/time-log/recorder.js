@@ -107,17 +107,20 @@ export class AutomaticTimeLogRecorder {
     activity.gitContext = gitContext;
   }
 
-  async flush(sessionId, notifyError) {
+  async drain(sessionId, notifyError) {
     const activity = this.sessionActivities.get(sessionId);
-    if (activity !== undefined) {
-      await activity.flush(
-        (entry) => this.ledger.recordAutomatic(entry),
-        () => {
-          this.lastErrorMessage = undefined;
-        },
-        (error) => this.reportError(error, notifyError),
-      );
-    }
+    if (activity === undefined) return;
+    await activity.flush(
+      (entry) => this.ledger.recordAutomatic(entry),
+      () => {
+        this.lastErrorMessage = undefined;
+      },
+      (error) => this.reportError(error, notifyError),
+    );
+  }
+
+  async flush(sessionId, notifyError) {
+    await this.drain(sessionId, notifyError);
     this.sessionActivities.delete(sessionId);
   }
 

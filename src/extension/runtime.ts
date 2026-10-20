@@ -248,7 +248,7 @@ export class ProjectTimeRuntime {
   private readonly runtimeState: RuntimeState = {};
   // Git lookups can outlive a later hook; apply observations in callback order.
   private observations: Promise<unknown> = Promise.resolve();
-  private selectedSessionId?: string;
+  private selectedSessionManager?: ExtensionContext["sessionManager"];
   // Run ownership is independent of the expiring human-active status.
   private runningAgentSession?: {
     context: ExtensionContext;
@@ -353,7 +353,9 @@ export class ProjectTimeRuntime {
     this.sessionStateCoordinator = new SessionStateCoordinator(
       this.timeLogRecorder,
       (sessionId, customType, data) => {
-        if (sessionId === this.selectedSessionId) this.pi.appendEntry(customType, data);
+        if (sessionId === this.selectedSessionManager?.getSessionId()) {
+          this.pi.appendEntry(customType, data);
+        }
       },
     );
     this.prepareLocalData =
@@ -370,7 +372,7 @@ export class ProjectTimeRuntime {
       handler: async (args, ctx) => {
         const nowMs = Date.now();
         if (isTopLevelSession(ctx.sessionManager)) {
-          this.selectedSessionId = ctx.sessionManager.getSessionId();
+          this.selectedSessionManager = ctx.sessionManager;
         }
         if (!(await this.localDataReady(ctx))) return;
         await this.observeInOrder(() => this.showCurrentStatus(args, ctx, nowMs));
@@ -380,7 +382,7 @@ export class ProjectTimeRuntime {
     this.pi.on("session_start", async (_event, ctx) => {
       const nowMs = Date.now();
       if (!isTopLevelSession(ctx.sessionManager)) return;
-      this.selectedSessionId = ctx.sessionManager.getSessionId();
+      this.selectedSessionManager = ctx.sessionManager;
       if (!(await this.localDataReady(ctx))) return;
       await this.observeInOrder(() => this.activateSession(ctx, nowMs));
     });
@@ -388,7 +390,7 @@ export class ProjectTimeRuntime {
     this.pi.on("session_switch", async (_event, ctx) => {
       const nowMs = Date.now();
       if (!isTopLevelSession(ctx.sessionManager)) return;
-      this.selectedSessionId = ctx.sessionManager.getSessionId();
+      this.selectedSessionManager = ctx.sessionManager;
       if (!(await this.localDataReady(ctx))) return;
       await this.observeInOrder(async () => {
         const previous = this.runningAgentSession;
@@ -405,7 +407,7 @@ export class ProjectTimeRuntime {
     this.pi.on("before_agent_start", async (event, ctx) => {
       const nowMs = Date.now();
       if (!isTopLevelSession(ctx.sessionManager)) return;
-      this.selectedSessionId = ctx.sessionManager.getSessionId();
+      this.selectedSessionManager = ctx.sessionManager;
       if (!(await this.localDataReady(ctx))) return;
       await this.observeInOrder(() => this.recordPrompt(event.prompt, ctx, nowMs));
     });
@@ -424,28 +426,35 @@ export class ProjectTimeRuntime {
 
     this.pi.on("turn_end", async (_event, ctx) => {
       const nowMs = Date.now();
-      const sessionId = ctx.sessionManager.getSessionId();
       if (!(await this.localDataReady(ctx))) return;
-      await this.observeInOrder(() =>
-        this.settleCurrentTurn(ctx, sessionId, nowMs),
-      );
+      await this.observeInOrder(async () => {
+        const run = this.runningAgentSession;
+        if (run === undefined) return;
+
+        await this.settleCurrentTurn(run.context, run.sessionId, nowMs);
+      });
     });
 
     this.pi.on("agent_end", async (event, ctx) => {
       const nowMs = Date.now();
-      const sessionId = ctx.sessionManager.getSessionId();
-      if (event.willContinue === true) return;
+      if (event.willContinue === true || ctx.isIdle?.() === false) return;
       if (!(await this.localDataReady(ctx))) return;
-      await this.observeInOrder(() =>
-        this.finishAgentRun(ctx, sessionId, nowMs),
-      );
+      await this.observeInOrder(async () => {
+        const run = this.runningAgentSession;
+        if (run === undefined) return;
+
+        await this.finishAgentRun(run.context, run.sessionId, nowMs);
+      });
     });
 
     this.pi.on("session_shutdown", async (_event, ctx) => {
       const nowMs = Date.now();
       const sessionId = ctx.sessionManager.getSessionId();
       if (!(await this.localDataReady(ctx))) return;
-      await this.observeInOrder(() => this.shutdownSession(ctx, nowMs, sessionId));
+      await this.observeInOrder(() => {
+        const run = this.runningAgentSession;
+        return this.shutdownSession(run?.context ?? ctx, nowMs, run?.sessionId ?? sessionId);
+      });
     });
   }
 
@@ -798,6 +807,9 @@ export class ProjectTimeRuntime {
       this.runningAgentSession = undefined;
     }
     await this.settleCurrentTurn(ctx, sessionId, endAtMs);
+    await this.timeLogRecorder.drain(sessionId, (message) =>
+      ctx.ui.notify(`Project Time log error: ${message}`, "error"),
+    );
   }
 
   private async shutdownSession(
