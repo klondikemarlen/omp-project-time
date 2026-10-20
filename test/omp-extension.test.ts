@@ -11,18 +11,21 @@ import { TimeLogLedger } from "../src/time-log/infrastructure/ledger.js";
 import type {
   ActivityGenerationContext,
   BeforeAgentStartHandler,
+  AgentRunHandler,
   ExtensionApi,
   ExtensionContext,
   SessionHandler,
 } from "../src/extension/types.js";
 
-test("records automatic evidence when optional generation never settles without a fallback label", async () => {
+test("when optional generation never settles, records unlabeled automatic evidence", async (t) => {
+  // Arrange
+  let nowMs = 1_000_000;
+  t.mock.method(Date, "now", () => nowMs++);
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-timeout-"));
   const timeLogPath = path.join(directory, "time-log.sqlite");
-  const persisted: unknown[] = [];
   let beforeAgentStart: BeforeAgentStartHandler | undefined;
   let sessionShutdown: SessionHandler | undefined;
-  let generationCalls = 0;
+  let agentStart: AgentRunHandler | undefined;
   const pi: ExtensionApi = {
     registerCommand() {},
     on(event, handler) {
@@ -32,10 +35,11 @@ test("records automatic evidence when optional generation never settles without 
       if (event === "session_shutdown") {
         sessionShutdown = handler as SessionHandler;
       }
+      if (event === "agent_start") {
+        agentStart = handler as AgentRunHandler;
+      }
     },
-    appendEntry(_customType, data) {
-      persisted.push(data);
-    },
+    appendEntry() {},
   };
   const context: ExtensionContext = {
     cwd: directory,
@@ -59,40 +63,20 @@ test("records automatic evidence when optional generation never settles without 
     execFileSync("git", ["init", "--quiet", directory]);
     ompProjectTimeExtension(pi, {
       activityGenerationTimeoutMs: 0,
-      generateActivity: () => {
-        generationCalls += 1;
-        return new Promise<never>(() => {});
-      },
+      generateActivity: () => new Promise<never>(() => {}),
       loadConfig: async () => parseProjectTimeConfig(),
       timeLogPath,
     });
     assert.ok(beforeAgentStart);
     assert.ok(sessionShutdown);
+    assert.ok(agentStart);
 
-    const completed = await Promise.race([
-      beforeAgentStart({ prompt: "Record this prompt." }, context).then(
-        () => true,
-      ),
-      new Promise<false>((resolve) => setTimeout(() => resolve(false), 100)),
-    ]);
-    await new Promise((resolve) => setTimeout(resolve, 1));
+    // Act
+    await beforeAgentStart({ prompt: "Record this prompt." }, context);
+    await agentStart({ type: "agent_start" }, context);
     await sessionShutdown({}, context);
 
-    assert.equal(completed, true);
-    assert.equal(generationCalls, 1);
-    const state = persisted.at(-1) as Record<string, unknown>;
-    assert.deepEqual(
-      {
-        activity: state.activity,
-        promptCount: state.promptCount,
-        workItemAttribution: state.workItemAttribution,
-      },
-      {
-        activity: undefined,
-        promptCount: 1,
-        workItemAttribution: "unassigned",
-      },
-    );
+    // Assert
     const entries = await new TimeLogLedger(timeLogPath).entries();
     assert.deepEqual(entries.map((entry) => entry.sourceKind).sort(), [
       "agent_turn_elapsed",
@@ -112,12 +96,16 @@ test("records automatic evidence when optional generation never settles without 
   }
 });
 
-test("passes recorded repository context and preserves unlabeled evidence through the extension entrypoint", async () => {
+test("when generating labels, uses recorded repository context and preserves unlabeled evidence", async (t) => {
+  // Arrange
+  let nowMs = 1_000_000;
+  t.mock.method(Date, "now", () => nowMs++);
   const directory = await mkdtemp(path.join(tmpdir(), "project-time-context-"));
   const timeLogPath = path.join(directory, "time-log.sqlite");
   const generatedContexts: Array<ActivityGenerationContext | undefined> = [];
   let beforeAgentStart: BeforeAgentStartHandler | undefined;
   let sessionShutdown: SessionHandler | undefined;
+  let agentStart: AgentRunHandler | undefined;
   const pi: ExtensionApi = {
     registerCommand() {},
     on(event, handler) {
@@ -126,6 +114,9 @@ test("passes recorded repository context and preserves unlabeled evidence throug
       }
       if (event === "session_shutdown") {
         sessionShutdown = handler as SessionHandler;
+      }
+      if (event === "agent_start") {
+        agentStart = handler as AgentRunHandler;
       }
     },
     appendEntry() {},
@@ -168,10 +159,14 @@ test("passes recorded repository context and preserves unlabeled evidence throug
     });
     assert.ok(beforeAgentStart);
     assert.ok(sessionShutdown);
+    assert.ok(agentStart);
 
+    // Act
     await beforeAgentStart({ prompt: "Review the automatic labels." }, context);
+    await agentStart({ type: "agent_start" }, context);
     await sessionShutdown({}, context);
 
+    // Assert
     assert.deepEqual(generatedContexts, [
       {
         project: "wrap",

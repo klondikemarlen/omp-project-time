@@ -237,6 +237,11 @@ export class ProjectTimeRuntime {
   private readonly now: () => Date;
   private localDataPreparation: Promise<void> | undefined;
   private readonly runtimeState: RuntimeState = {};
+  // Run ownership is independent of the expiring human-active status.
+  private runningAgentSession?: {
+    context: ExtensionContext;
+    sessionId: string;
+  };
 
   private static refreshIntervalMs(config: ProjectTimeConfig): number {
     return config.refreshIntervalSeconds * MS_PER_SECOND;
@@ -360,6 +365,13 @@ export class ProjectTimeRuntime {
 
     this.pi.on("session_switch", async (_event, ctx) => {
       if (!(await this.localDataReady(ctx))) return;
+      const previous = this.runningAgentSession;
+      if (previous !== undefined) {
+        await this.finishAgentRun(previous.context, previous.sessionId);
+        await this.sessionStateCoordinator.flush(previous.sessionId, (message) =>
+          previous.context.ui.notify(`Project Time log error: ${message}`, "error"),
+        );
+      }
       await this.activateSession(ctx);
     });
 
@@ -368,9 +380,24 @@ export class ProjectTimeRuntime {
       await this.recordPrompt(event.prompt, ctx);
     });
 
+    this.pi.on("agent_start", async (_event, ctx) => {
+      if (!(await this.localDataReady(ctx))) return;
+      if (!isTopLevelSession(ctx.sessionManager)) return;
+
+      const sessionId = ctx.sessionManager.getSessionId();
+      this.runningAgentSession = { context: ctx, sessionId };
+      this.timeLogRecorder.recordAgentStart(sessionId, Date.now());
+    });
+
     this.pi.on("turn_end", async (_event, ctx) => {
       if (!(await this.localDataReady(ctx))) return;
       await this.settleCurrentTurn(ctx);
+    });
+
+    this.pi.on("agent_end", async (event, ctx) => {
+      if (event.willContinue === true) return;
+      if (!(await this.localDataReady(ctx))) return;
+      await this.finishAgentRun(ctx);
     });
 
     this.pi.on("session_shutdown", async (_event, ctx) => {
@@ -555,6 +582,15 @@ export class ProjectTimeRuntime {
       return;
     }
 
+    const previous = this.runningAgentSession;
+    if (previous !== undefined) {
+      // A new prompt is not evidence of when an unobserved previous run ended.
+      await this.timeLogRecorder.flush(previous.sessionId, (message) =>
+        previous.context.ui.notify(`Project Time log error: ${message}`, "error"),
+      );
+    }
+    this.runningAgentSession = undefined;
+
     const promptAtMs = Date.now();
     const update = {
       config,
@@ -626,10 +662,12 @@ export class ProjectTimeRuntime {
     );
   }
 
-  private async settleCurrentTurn(ctx: ExtensionContext): Promise<void> {
+  private async settleCurrentTurn(
+    ctx: ExtensionContext,
+    sessionId = ctx.sessionManager.getSessionId(),
+  ): Promise<void> {
     if (!isTopLevelSession(ctx.sessionManager)) return;
 
-    const sessionId = ctx.sessionManager.getSessionId();
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
       this.clearActiveStatus(ctx);
@@ -637,9 +675,6 @@ export class ProjectTimeRuntime {
     }
 
     const nowMs = Date.now();
-    this.timeLogRecorder.recordAgentTurnEnd(sessionId, nowMs, (message) =>
-      ctx.ui.notify(`Project Time log error: ${message}`, "error"),
-    );
     const settledState = await this.sessionStateCoordinator.settle({
       config,
       cwd: ctx.cwd,
@@ -653,11 +688,26 @@ export class ProjectTimeRuntime {
     updateStatus(ctx, settledState, config);
   }
 
+  private async finishAgentRun(
+    ctx: ExtensionContext,
+    sessionId = ctx.sessionManager.getSessionId(),
+  ): Promise<void> {
+    if (!isTopLevelSession(ctx.sessionManager)) return;
+
+    if (this.runningAgentSession?.sessionId === sessionId) {
+      this.timeLogRecorder.recordAgentTurnEnd(sessionId, Date.now(), (message) =>
+        ctx.ui.notify(`Project Time log error: ${message}`, "error"),
+      );
+      this.runningAgentSession = undefined;
+    }
+    await this.settleCurrentTurn(ctx, sessionId);
+  }
+
   private async shutdownSession(ctx: ExtensionContext): Promise<void> {
     const sessionId = ctx.sessionManager.getSessionId();
 
     if (isTopLevelSession(ctx.sessionManager)) {
-      await this.settleCurrentTurn(ctx);
+      await this.finishAgentRun(ctx);
     }
 
     await this.sessionStateCoordinator.flush(sessionId, (message) =>

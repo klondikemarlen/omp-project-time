@@ -55,24 +55,11 @@ export class AutomaticTimeLogRecorder {
     promptAtMs: number,
     activityLabel: string | undefined,
     narrative: ActivityNarrative | undefined,
-    notifyError: ErrorNotifier,
     workItem?: WorkItem,
     workItemAttribution?: WorkItemAttribution,
   ): void {
     const repository = this.repositoryFor(cwd);
     const activity = this.sessionActivityFor(sessionId);
-
-    if (activity.agentTurnStartAtMs !== undefined) {
-      this.closeAgentTurn(
-        activity,
-        {
-          endAtMs: promptAtMs,
-          sessionId,
-          startAtMs: activity.agentTurnStartAtMs,
-        },
-        notifyError,
-      );
-    }
 
     activity.setPromptStart(
       repository,
@@ -82,6 +69,14 @@ export class AutomaticTimeLogRecorder {
       workItem,
       workItemAttribution,
     );
+  }
+
+  recordAgentStart(sessionId: string, startAtMs: number): void {
+    const activity = this.sessionActivityFor(sessionId);
+    if (activity.agentTurnStartAtMs !== undefined) return;
+
+    activity.agentTurnStartAtMs = startAtMs;
+    activity.agentRepository = activity.repository;
   }
 
   recordSettlement(settlement: Settlement, notifyError: ErrorNotifier): void {
@@ -345,9 +340,7 @@ class SessionActivity {
     workItemAttribution: WorkItemAttribution | undefined,
   ): void {
     this.repository = repository;
-    this.agentRepository = repository;
     this.startedAtMs = startedAtMs;
-    this.agentTurnStartAtMs = startedAtMs;
     this.activity = activity;
     this.narrative = narrative;
     this.workItem = workItem;

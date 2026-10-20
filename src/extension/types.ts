@@ -72,6 +72,11 @@ export type TurnEndHandler = (
   ctx: ExtensionContext,
 ) => Promise<void>
 
+export type AgentRunHandler = (
+  event: { type: "agent_start" | "agent_end"; willContinue?: boolean },
+  ctx: ExtensionContext,
+) => Promise<void>
+
 export type ExtensionApi = {
   pi?: { settings?: Record<string, unknown> }
   registerCommand(
@@ -86,6 +91,8 @@ export type ExtensionApi = {
   on(event: "session_switch", handler: SessionHandler): void
   on(event: "before_agent_start", handler: BeforeAgentStartHandler): void
   on(event: "turn_end", handler: TurnEndHandler): void
+  on(event: "agent_start", handler: AgentRunHandler): void
+  on(event: "agent_end", handler: AgentRunHandler): void
   on(event: "session_shutdown", handler: SessionHandler): void
   appendEntry(customType: string, data?: unknown): void
 }
