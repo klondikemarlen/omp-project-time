@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Segment both clocks when observed Git/work-item context changes; do not carry prior tickets across unrelated branches or rewrite earlier context.
 - Keep local repository identity shared across worktrees without an origin, while preserving their distinct worktree identities.
 - Keep delayed callbacks attached to their recorded run owner when OMP replaces the selected session; never copy the old session's activity into fresh session history.
+- Preserve terminal AI intervals while the host unwinds a completed prompt; discard canceled queued prompts instead of assigning them to a replacement session.
 
 ## [9.4.2] - 2026-10-20
 
