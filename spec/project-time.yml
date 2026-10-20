@@ -7,7 +7,7 @@ requirements:
     rationale: Human-active evidence is useful collaboration context without claiming idle terminal, literal desk time, or paid duration.
   - id: agent_turn_evidence
     title: Separate agent-turn evidence
-    requirement: Record agent_turn_elapsed intervals from before_agent_start through turn_end for top-level OMP sessions, with the same identity and interval fields as human-active intervals.
+    requirement: Record agent_turn_elapsed intervals from the observed agent_start through terminal agent_end for top-level OMP sessions, retaining the interval across tool/model turns and agent_end notifications with willContinue true. An observed shutdown or completed session switch closes an unfinished run once at that boundary. Missing terminal observations remain unknown; never extrapolate or backfill historical AI time. Retain the same identity and interval fields as human-active intervals.
     rationale: Agent execution is useful parallel evidence but must remain distinguishable from human collaboration.
   - id: source_separation
     title: Separate automatic evidence sources
