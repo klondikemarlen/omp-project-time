@@ -21,13 +21,17 @@ requirements:
     title: Versioned raw evidence snapshot
     requirement: "`entries` must emit the public omp-project-time/evidence v1 snapshot of raw automatic entries. The owner-only SQLite ledger must preserve every snapshot field and, on first access, transactionally import valid legacy automatic JSON ledger entries while leaving the original JSON file intact as a rollback backup. Invalid legacy JSON must remain untouched and unimported. Every snapshot entry retains its stable ID, source kind, project and repository identity, bounds, creation time, activity, optional narrative, optional work item, and explicit work-item provenance. A provenance change creates a new interval segment; ambiguous references remain unassigned rather than guessed."
     rationale: Downstream review tools need a stable, non-aggregated evidence contract without coupling to internal storage or silently assigning a task.
+  - id: active_git_context
+    title: Structured Git and work-item context
+    requirement: "Automatic entries optionally retain gitContext with an attached branch name or explicit detached HEAD and an opaque worktree identity. Head provenance is active_branch; worktree provenance is local_git. Preserve explicit GitHub issue/PR references and Jira keys from prompts or branches; optional authenticated GitHub metadata may assign a unique matching open PR with linked_pull_request provenance. Explicit prompt references win; ambiguous references remain unassigned. Carry work items only within unchanged Git context. An observed branch, worktree, or work-item transition creates a new segment in both evidence streams without rewriting prior entries. Parse, persist, import, and export all optional metadata; legacy entries remain valid. GitHub lookup must be optional, bounded, and cached, never a required request for every prompt."
+    rationale: Downstream consumers need structured workstream identity without inspecting private paths or guessing from narratives.
   - id: top_level_only
     title: Top-level sessions only
     requirement: Subagent and artifact sessions must not create or display their own Project Time intervals.
     rationale: Their activity belongs to the top-level session and otherwise risks double counting.
   - id: local_privacy
     title: Local privacy boundary
-    requirement: Persist only a sanitized project label, one-way repository hash, optional normalized lowercase remote host/path identity without a protocol or credential, source kind, session identity, timing, and a coarse activity label generated transiently from the current prompt. Do not persist working-directory paths, raw remote URLs, credentials, prompts, assignments, transcripts, tool output, artifacts, session names, session files, file paths, model metadata, or custom attribution.
+    requirement: Persist only sanitized project/repository identity, source kind, session identity, timing, activity/narrative, optional structured work item with provenance, observed branch or detached state, and a one-way worktree hash with local Git provenance. Never store raw worktree or working-directory paths, raw remote URLs, credentials, prompts, assignments, transcripts, tool output, artifacts, session names/files, model metadata, or custom billing attribution.
     rationale: Time tracking must not create sensitive activity logging.
   - id: settings_ui
     title: Clear plugin settings
