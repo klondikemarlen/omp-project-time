@@ -10,7 +10,7 @@ Project Time records local OMP activity as reviewable evidence of project work. 
 | ------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Automatic evidence entry | A recorded interval for a top-level OMP session                              | Has a stable ID, source kind, project/repository identity, bounds, and creation time |
 | `human_active`           | Prompt-driven collaboration window                                           | Useful context; never an automatic billable-hours claim                              |
-| `agent_turn_elapsed`     | Elapsed time from the start to end of a top-level agent turn                 | Separate from human activity and never automatically added to it                     |
+| `agent_turn_elapsed`     | Observed elapsed time across a complete top-level agent run and its tool/model turns | Separate from human activity; unknown crash-missing bounds are never extrapolated |
 | Project                  | Sanitized local project label derived from the repository                    | Exact labels may be selected in local views and exports                              |
 | Repository identity      | One-way repository hash plus optional normalized `host/path` remote identity | No raw URL, credential, local path, or working directory is stored                   |
 | Activity and narrative   | Coarse activity label and optional detailed work description                 | Narrative is review evidence, not billing attribution                                |

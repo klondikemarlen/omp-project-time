@@ -35,6 +35,12 @@ Dependencies flow from OMP adapters toward domain rules and persistence. The dom
 
 OMP loads the compiled ESM extension in Bun. Development tests and the standalone CLI run in Node; the ledger selects the host's built-in SQLite API behind the same statement interface. Source `@/` aliases are rewritten to relative `.js` imports during the build. The [language decision](/docs/decisions/retain-typescript-runtime.md) explains why these shared contracts remain TypeScript rather than introducing a native or subprocess core.
 
+### Agent Run Boundaries
+
+The runtime starts AI evidence at OMP's `agent_start`. Per-turn `turn_end` events settle human-active evidence only. A terminal `agent_end` closes AI evidence; `willContinue: true` retains the open interval across the announced continuation. Run ownership is independent of the expiring human-active status.
+
+An observed `session_shutdown` or completed `session_switch` closes and flushes an unfinished run exactly once at that boundary; neither proves normal completion or meaningful productivity. A new prompt discards an older in-memory run whose terminal event was not observed rather than inventing its end. A crash loses unclosed AI evidence: reads, restarts, and upgrades never extrapolate it or repair the incomplete intervals recorded before 9.4.2.
+
 ## Persistence and Migration
 
 The default ledger is `~/.omp/project-time/time-log.sqlite`. The ledger serializes cross-window operations with a file lock, creates the parent directory owner-only, and applies owner-only database permissions. On first access it transactionally imports a valid legacy `time-log.json` file, retaining the original file as a rollback backup. Invalid legacy JSON remains untouched and is not partially imported.
