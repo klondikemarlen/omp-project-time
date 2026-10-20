@@ -41,7 +41,6 @@ export class SessionStateCoordinator {
       update.nowMs,
       state.activity,
       state.narrative,
-      update.notifyTimeLogError,
       state.workItem,
       state.workItemAttribution,
     );

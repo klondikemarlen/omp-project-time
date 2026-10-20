@@ -773,9 +773,9 @@ test("persists prompt narratives through the recorder", async () => {
       start,
       "Code Review",
       narrative,
-      () => {},
       workItem,
     );
+    recorder.recordAgentStart("session", start);
     const nextWorkItem = {
       kind: "issue" as const,
       number: 99,

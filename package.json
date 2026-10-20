@@ -1,6 +1,6 @@
 {
   "name": "omp-project-time",
-  "version": "9.4.1",
+  "version": "9.4.2",
   "description": "Verifiable concurrent project-work logs for OMP.",
   "type": "module",
   "license": "MIT",

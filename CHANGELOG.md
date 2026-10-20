@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [9.4.2] - 2026-10-20
+
+### Fixed
+
+- Preserve AI elapsed evidence across the complete top-level model/tool loop and announced continuations, instead of closing it at the first turn.
+- Close unfinished runs once at observed cancellation, shutdown, or session-switch boundaries independently of the human-active window; never extrapolate missing terminal observations or backfill historical evidence.
+
 ## [9.4.1] - 2026-10-19
 
 ### Fixed

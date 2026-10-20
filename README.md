@@ -7,7 +7,7 @@ OMP plugin that records verifiable, local project-work intervals.
 OMP exposes model and tool activity but does not retain a provider-neutral log of the work it observes. Project Time records two independent evidence streams:
 
 - `human_active`: prompt-driven collaboration intervals. It is useful context, never a billable-hours claim.
-- `agent_turn_elapsed`: elapsed time from an OMP agent turn starting until it ends. It is separate evidence and is never added to another source automatically.
+- `agent_turn_elapsed`: elapsed time for an observed top-level agent run, including its model/tool turns and announced continuations. It is separate evidence and is never added to another source automatically.
 
 Canonical requirements live in [`spec/project-time.yml`](spec/project-time.yml).
 
@@ -22,6 +22,7 @@ Maintainer reference material is in the [Project Time knowledge base](docs/READM
 - Narrative completion runs inside OMP's Bun host; Node remains the development and test runtime.
 - Concurrent repositories retain their full independent automatic intervals. Totals can exceed the OMP-active union; that is recorded evidence, not an error.
 - Prompt activity does not claim literal desk time or billable duration. Project Time has no manual timer and never writes external time-entry data.
+- AI intervals start at `agent_start` and close on terminal `agent_end`, not the first `turn_end`. Cancellation closes on its observed terminal event; shutdown or a completed session switch closes an unfinished interval at that boundary. Missing terminal observations are unknown, not extrapolated to export time. Versions before 9.4.2 can omit later turns; upgrading does not repair historical evidence or certify elapsed time as productive or billable.
 - The status is a dim, keyed OMP hook-status line such as `5m 12s (dev)`. OMP owns its placement and layout.
 
 The plugin writes only through `ctx.ui.setStatus(...)`. OMP renders each extension status in its own keyed line; placement is controlled by OMP's status layout and segment registry.
