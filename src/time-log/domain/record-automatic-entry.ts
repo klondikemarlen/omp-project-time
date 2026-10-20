@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+
+import { parseGitContext } from "@/time-log/domain/git-context.js";
 import { parseActivityLabel } from "@/time-log/domain/activity.js";
 import { parseActivityNarrative } from "@/time-log/domain/narrative.js";
 import {
@@ -66,6 +68,7 @@ function createTimeLogEntry(
   const { startAtMs, endAtMs, sourceKind, sessionId } = input;
   const activity = parseActivityLabel(input.activity);
   const narrative = parseActivityNarrative(input.narrative);
+  const gitContext = parseGitContext(input.gitContext);
   const workItem = parseWorkItem(input.workItem);
   const parsedWorkItemAttribution = parseWorkItemAttribution(
     input.workItemAttribution,
@@ -78,6 +81,9 @@ function createTimeLogEntry(
   }
   if (input.narrative !== undefined && narrative === undefined) {
     throw new Error("Time log narrative is invalid.");
+  }
+  if (input.gitContext !== undefined && gitContext === undefined) {
+    throw new Error("Time log Git context is invalid.");
   }
   if (input.workItem !== undefined && workItem === undefined) {
     throw new Error("Time log work item is invalid.");
@@ -128,6 +134,7 @@ function createTimeLogEntry(
     ...(sessionId === undefined ? {} : { sessionId }),
     ...(activity === undefined ? {} : { activity }),
     ...(narrative === undefined ? {} : { narrative }),
+    ...(gitContext === undefined ? {} : { gitContext }),
     ...(workItem === undefined ? {} : { workItem }),
     workItemAttribution,
     startAtMs,

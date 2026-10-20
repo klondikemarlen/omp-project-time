@@ -27,6 +27,7 @@ flowchart LR
 | `src/time-log/domain/`                                   | Entry shape, validation, source keys, attribution, and interval rules                                          | Scalar utilities only                                |
 | `src/time-log/infrastructure/ledger.ts`                  | Locking, SQLite initialization, owner-only permissions, JSON migration, and serialization                      | Domain parsing and Node/Bun SQLite adapter           |
 | `src/infrastructure/git-repository.ts`                   | Produces sanitized repository labels and normalized identity                                                   | Git subprocess boundary                              |
+| `src/infrastructure/git-context.ts`                      | Samples branch/worktree identity and optional authoritative GitHub PR metadata; bounds and caches lookup failures | Git and `gh` subprocess boundaries                    |
 | `src/project-time-cli.ts`                                | Reads the local ledger and writes the public evidence snapshot                                                 | Recorder and snapshot mapper                         |
 
 Dependencies flow from OMP adapters toward domain rules and persistence. The domain does not call OMP, Git, SQLite, or a billing provider.
@@ -39,7 +40,19 @@ OMP loads the compiled ESM extension in Bun. Development tests and the standalon
 
 The runtime starts AI evidence at OMP's `agent_start`. Per-turn `turn_end` events settle human-active evidence only. A terminal `agent_end` closes AI evidence; `willContinue: true` retains the open interval across the announced continuation. Run ownership is independent of the expiring human-active status.
 
+Terminal notifications are valid even while OMP is unwinding an in-flight prompt and `isIdle()` is still false. Run ownership and callback timestamps are captured before asynchronous observation work; a later run cannot adopt an already queued terminal callback.
+
 An observed `session_shutdown` or completed `session_switch` closes and flushes an unfinished run exactly once at that boundary; neither proves normal completion or meaningful productivity. A new prompt discards an older in-memory run whose terminal event was not observed rather than inventing its end. A crash loses unclosed AI evidence: reads, restarts, and upgrades never extrapolate it or repair the incomplete intervals recorded before 9.4.2.
+
+### Git Context Observation
+
+The runtime samples Git context at prompts, settlements, and refreshes, including while AI work continues beyond the human-active window. Observations are applied in callback order so a slow GitHub response cannot overwrite a newer transition or invert interval bounds. Branch, worktree, and work-item changes settle the old human segment and split an open AI interval before installing the new context. Queued writes capture repository and context facts from their initiating observation instead of reading later mutable session fields; session-state history is appended only to its currently selected host session.
+
+OMP reuses a mutable session manager across switches, including while old lifecycle callbacks are still being delivered. Agent callbacks therefore use the session ID captured by the recorded run, not the manager's later selection. History writes check the manager's live selected ID at append time, and terminal observations drain queued ledger writes without discarding the human-window snapshot.
+
+Prompt admission captures its session ID and history before queueing. If cancellation replaces that session before state application, the queued prompt is discarded rather than attributed to the new session.
+
+`GitContextResolver` hashes the canonical worktree administrative directory and stores only the digest. Local worktrees share the repository's common-directory identity while retaining separate worktree identities. Optional GitHub lookup validates both the head branch and origin repository, caches successes and failures for one minute, and never converts an unavailable lookup into guessed PR metadata. The domain owns Jira extraction, provenance, and validation. SQLite's JSON entry storage needs no schema migration for these additive v1 fields.
 
 ## Persistence and Migration
 

@@ -37,6 +37,15 @@ These scenarios protect the public evidence contract. They are behavior checks, 
 - Product authority: [`spec/project-time.yml`](../../spec/project-time.yml)
 - Domain and persistence evidence: [`test/time-log.test.ts`](../../test/time-log.test.ts)
 
+## Git and Work-Item Context
+
+**Given** a branch or worktree transition, **when** the runtime observes it, **then** both clocks retain separate segments with their original context and explicit provenance. Explicit prompt references override branch inference; unrelated branches never inherit a prior ticket. A detached HEAD remains explicit; unavailable Git/GitHub observations are never guessed.
+
+- Automated evidence: [/test/git-context-runtime.test.ts](/test/git-context-runtime.test.ts), [/test/git-context.test.ts](/test/git-context.test.ts), [/test/git-context-persistence.test.ts](/test/git-context-persistence.test.ts), [/test/work-item.test.ts](/test/work-item.test.ts)
+- Focused command: `node --import tsx --test test/git-context*.test.ts test/work-item.test.ts test/git-repository.test.ts`
+- Isolated host smoke: load the built extension with a throwaway ledger, prompt on one Jira branch, switch branches in a real tool turn, and inspect the exported segments. Separately observe detached HEAD and two synthetic worktrees. Exercise an actual authenticated `gh` lookup against the delivery PR; missing CLI/auth remains an unassigned PR, not a recording error.
+- Import/export check: retain both a context-bearing entry and an old entry without context in synthetic legacy JSON; first access must preserve both through SQLite and the public snapshot. Run the migration-preview regressions below whenever changing these parse/import paths.
+
 ## Safe Persistence Migration
 
 **Given** a valid legacy JSON ledger, **when** the SQLite ledger is first accessed, **then** supported automatic entries import transactionally and the JSON file remains unchanged. **Given** malformed legacy JSON, **then** import fails without a partial database write.

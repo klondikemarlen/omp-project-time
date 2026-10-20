@@ -1,4 +1,5 @@
 import type { ActivityNarrative } from "@/time-log/domain/narrative.js";
+import type { GitContext } from "@/time-log/domain/git-context.js";
 import type {
   WorkItem,
   WorkItemAttribution,
@@ -22,6 +23,7 @@ export type AutomaticTimeLogInput = {
   narrative?: ActivityNarrative;
   workItem?: WorkItem;
   workItemAttribution?: WorkItemAttribution;
+  gitContext?: GitContext;
   sourceKey: string;
   startAtMs: number;
   endAtMs: number;
@@ -38,6 +40,7 @@ export type TimeLogEntry = {
   narrative?: ActivityNarrative;
   workItem?: WorkItem;
   workItemAttribution?: WorkItemAttribution;
+  gitContext?: GitContext;
   startAtMs: number;
   endAtMs: number;
   createdAtMs: number;

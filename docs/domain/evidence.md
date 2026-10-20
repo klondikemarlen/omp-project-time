@@ -14,12 +14,13 @@ Project Time records local OMP activity as reviewable evidence of project work. 
 | Project                  | Sanitized local project label derived from the repository                    | Exact labels may be selected in local views and exports                              |
 | Repository identity      | One-way repository hash plus optional normalized `host/path` remote identity | No raw URL, credential, local path, or working directory is stored                   |
 | Activity and narrative   | Coarse activity label and optional detailed work description                 | Narrative is review evidence, not billing attribution                                |
-| Work item attribution    | Provenance of an optional issue or pull request                              | `explicit_prompt`, `carried_forward`, `unassigned`, and `ambiguous` prevent guessing |
+| Work item attribution    | Provenance of an optional GitHub issue/PR or Jira ticket                      | Explicit prompts win; carry-forward stays within the same Git context; branch and linked-PR inference retain provenance |
+| Git context              | Observed branch or detached HEAD plus opaque per-worktree identity           | Context changes segment both clocks; no worktree path or working directory is stored |
 
 ## Evidence Rules
 
 - Only top-level OMP sessions create entries. Subagents and artifacts belong to their parent session and must not create their own evidence.
-- A work-item attribution transition ends the prior interval segment rather than extending it across a changed context.
+- A work-item attribution, branch, or worktree transition ends the prior interval segment at observation time rather than extending it across changed context.
 - Concurrent repositories retain their full independent intervals. Their totals may exceed elapsed wall-clock time; that is evidence, not an error or an allocation decision.
 - The public snapshot is `omp-project-time/evidence` version 1 and contains raw entries. SQLite is an internal storage detail.
 - Malformed persisted input is rejected rather than treated as absent.
@@ -32,7 +33,7 @@ Evidence remains in the local ledger until an explicit CLI prune. `project-time 
 
 ## Privacy Boundary
 
-Persisted entries may contain sanitized project identity, repository identity, timing, source kind, session identity, coarse activity, optional narrative, and optional work-item provenance. They must not contain working-directory paths, raw remotes, credentials, prompts, transcripts, artifacts, file paths, model metadata, or custom billing attribution.
+Persisted entries may contain sanitized project identity, repository identity, timing, source kind, session identity, coarse activity, optional narrative, structured GitHub/Jira work-item provenance, and branch/detached state with a one-way worktree hash. They must not contain raw worktree or working-directory paths, raw remotes, credentials, prompts, transcripts, artifacts, model metadata, or custom billing attribution.
 
 ## Downstream Use
 

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [9.5.0] - 2026-10-20
+
+### Added
+
+- Snapshot observed branch or detached HEAD and opaque worktree identity on both evidence streams, with explicit provenance and no persisted worktree path.
+- Retain structured Jira references from prompts or branches and optional verified GitHub PR associations, with bounded cached lookup and explicit-prompt precedence.
+
+### Fixed
+
+- Segment both clocks when observed Git/work-item context changes; do not carry prior tickets across unrelated branches or rewrite earlier context.
+- Keep local repository identity shared across worktrees without an origin, while preserving their distinct worktree identities.
+- Keep delayed callbacks attached to their recorded run owner when OMP replaces the selected session; never copy the old session's activity into fresh session history.
+- Preserve terminal AI intervals while the host unwinds a completed prompt; discard canceled queued prompts instead of assigning them to a replacement session.
+
 ## [9.4.2] - 2026-10-20
 
 ### Fixed

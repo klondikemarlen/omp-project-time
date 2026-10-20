@@ -155,6 +155,7 @@ test("when generating labels, uses recorded repository context and preserves unl
         return {};
       },
       loadConfig: async () => parseProjectTimeConfig(),
+      gitContextResolver: { resolve: async () => ({}) },
       timeLogPath,
     });
     assert.ok(beforeAgentStart);

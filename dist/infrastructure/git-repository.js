@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { realpath } from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
 import { repositoryIdentityFromRemoteUrl } from "../infrastructure/repository-identity.js";
 import { normalizeRepositoryIdentity } from "../utils/parse-repository-identity.js";
@@ -13,7 +15,9 @@ export async function resolveGitRepository(cwd) {
     remoteUrl === undefined
       ? undefined
       : repositoryIdentityFromRemoteUrl(remoteUrl);
-  const identity = remoteIdentity ?? localRepositoryIdentity(rootPath);
+  const identity =
+    remoteIdentity ??
+    localRepositoryIdentity(await repositoryCommonDirectory(rootPath));
   const repositoryId = createHash("sha256")
     .update(identity.value)
     .digest("hex");
@@ -60,8 +64,25 @@ async function originRemoteUrl(rootPath) {
   }
 }
 
-function localRepositoryIdentity(rootPath) {
-  return { project: "local-repository", value: rootPath };
+async function repositoryCommonDirectory(rootPath) {
+  try {
+    const result = await execFileAsync(
+      "git",
+      ["-C", rootPath, "rev-parse", "--git-common-dir"],
+      {
+        timeout: 1_000,
+      },
+    );
+    return await realpath(path.resolve(rootPath, result.stdout.trim()));
+  } catch {
+    return rootPath;
+  }
 }
 
-export default resolveGitRepository;
+function localRepositoryIdentity(commonDirectory) {
+  const repositoryPath =
+    path.basename(commonDirectory) === ".git"
+      ? path.dirname(commonDirectory)
+      : commonDirectory;
+  return { project: "local-repository", value: repositoryPath };
+}

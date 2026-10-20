@@ -1,3 +1,4 @@
+import { parseGitContext } from "@/time-log/domain/git-context.js";
 import type { TimeLogEntry, SourceKind } from "@/time-log/domain/model.js";
 import { parseActivityLabel } from "@/time-log/domain/activity.js";
 import { parseActivityNarrative } from "@/time-log/domain/narrative.js";
@@ -25,6 +26,7 @@ export function parseTimeLogEntry(value: unknown): TimeLogEntry | undefined {
   const createdAtMs = candidate.createdAtMs;
   const activity = parseActivityLabel(candidate.activity);
   const narrative = parseActivityNarrative(candidate.narrative);
+  const gitContext = parseGitContext(candidate.gitContext);
   const workItem = parseWorkItem(candidate.workItem);
   const parsedWorkItemAttribution = parseWorkItemAttribution(
     candidate.workItemAttribution,
@@ -51,6 +53,7 @@ export function parseTimeLogEntry(value: unknown): TimeLogEntry | undefined {
     !isFiniteNumber(createdAtMs) ||
     (candidate.activity !== undefined && activity === undefined) ||
     (candidate.narrative !== undefined && narrative === undefined) ||
+    (candidate.gitContext !== undefined && gitContext === undefined) ||
     (candidate.workItem !== undefined && workItem === undefined) ||
     (candidate.workItemAttribution !== undefined &&
       parsedWorkItemAttribution === undefined) ||
@@ -73,6 +76,7 @@ export function parseTimeLogEntry(value: unknown): TimeLogEntry | undefined {
     ...(sessionId === undefined ? {} : { sessionId }),
     ...(activity === undefined ? {} : { activity }),
     ...(narrative === undefined ? {} : { narrative }),
+    ...(gitContext === undefined ? {} : { gitContext }),
     ...(workItem === undefined ? {} : { workItem }),
     workItemAttribution,
     startAtMs,

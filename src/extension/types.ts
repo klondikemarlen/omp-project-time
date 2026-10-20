@@ -2,6 +2,7 @@ import type { Api, Model } from "@oh-my-pi/pi-ai"
 import type { ActivityNarrative } from "@/time-log/domain/narrative.js"
 
 import type { ProjectTimeConfig } from "@/config/project-time-config.js"
+import type { GitContextResolver } from "@/infrastructure/git-context.js"
 
 export type SessionHeaderLike = {
   parentSession?: unknown
@@ -121,4 +122,5 @@ export type ExtensionOptions = {
   now?: () => Date
   prepareLocalData?: () => Promise<void>
   timeLogPath?: string
+  gitContextResolver?: Pick<GitContextResolver, "resolve">
 }

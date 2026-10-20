@@ -114,18 +114,24 @@ Entries may include `narrative: { text, source }` alongside `activity`, `startAt
 
 `/project-time entries` shows a bounded read-only preview for the selected local dates; `project-time entries` writes the complete, untruncated `omp-project-time/evidence` v1 JSON snapshot to standard output. Its read-only object is `{ format, version, entries }`; `entries` contains raw `human_active` and `agent_turn_elapsed` intervals without combining, allocating, or labelling either as billable.
 
-Every entry preserves its stable `id`, source kind, sanitized project and repository identity, interval bounds, creation time, activity, and optional narrative and work item. `workItemAttribution` makes the work-item provenance explicit:
+Every entry preserves its stable `id`, source kind, sanitized project and repository identity, interval bounds, creation time, activity, and optional narrative, work item, and `gitContext`. `workItemAttribution` makes the work-item provenance explicit:
 
-- `explicit_prompt`: the prompt named exactly one issue or pull request.
-- `carried_forward`: the prior unambiguous work item remained active.
+- `explicit_prompt`: the prompt named exactly one GitHub issue/PR or Jira ticket.
+- `carried_forward`: the prior unambiguous work item remained active in the same Git context.
+- `active_branch`: a single Jira ticket was found in the observed branch.
+- `linked_pull_request`: authenticated GitHub metadata uniquely matched the branch and its origin repository.
 - `unassigned`: no work item is known.
 - `ambiguous`: the prompt named multiple work items, so none was guessed.
 
-An attribution transition creates a new interval segment; Project Time never extends an existing interval across it. SQLite storage is internal: `entries` remains the v1 evidence contract. Valid legacy automatic JSON ledgers without provenance fields are imported with their legacy attribution.
+An attribution, branch, or worktree transition creates a new interval segment at observation time; Project Time never extends an existing interval across changed context. SQLite storage is internal: `entries` remains the v1 evidence contract. Valid legacy automatic JSON ledgers without the optional metadata still import unchanged, with their legacy attribution.
 
 Billing mapping and copyable review-only drafts belong to [Harvest Worklog](https://github.com/klondikemarlen/harvest-worklog). Project Time never maps evidence to billing targets, calculates billable time, or writes Harvest data.
 
-Entries may also include `workItem: { kind, number, repository?, source: "user_provided" }` when a prompt explicitly names a GitHub issue or pull request. The active work item persists through unrelated prompts, and its attribution states above let downstream tools distinguish that carry-forward context from an explicit reference.
+GitHub references use `workItem: { kind: "issue" | "pull_request", number, repository?, source: "user_provided" | "linked_pull_request" }`. Jira references use `{ kind: "jira", key: "APP-42", source: "user_provided" | "active_branch" }`. An explicit prompt wins over branch inference; prior references carry forward only within the same observed Git context. Ambiguous explicit references remain unassigned.
+
+`gitContext` contains `head: { kind: "branch", name, source: "active_branch" }` or `head: { kind: "detached", source: "active_branch" }`, plus `worktree: { id, source: "local_git" }`. The worktree ID is a stable one-way hash of its canonical Git administrative directory: concurrent worktrees differ without storing their paths. The context is sampled at prompts, turn boundaries, status refreshes, and terminal observations; unavailable context remains absent.
+
+Linked-PR lookup is optional, bounded, and cached for one minute per repository/worktree/branch, including failures. It uses `gh` only for GitHub origins, validates the exact head branch and repository, and never guesses PR numbers from a branch name. Missing `gh`, authentication, or a unique match leaves the PR unassigned; Jira branch context can still be recorded. No raw worktree path, working directory, credentials, raw remote URL, or CLI output is retained.
 
 SQLite migration ignores v7.7 manual timer state and manual entries while preserving valid automatic evidence. Earlier incompatible legacy data is intentionally not imported.
 
