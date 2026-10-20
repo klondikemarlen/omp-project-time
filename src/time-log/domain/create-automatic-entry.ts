@@ -1,3 +1,5 @@
+import { gitContextKey, type GitContext } from "@/time-log/domain/git-context.js"
+import { workItemKey } from "@/time-log/domain/work-item.js"
 import type { ProjectTimeState } from "@/time-log/domain/state.js"
 import type { ActivityNarrative } from "@/time-log/domain/narrative.js"
 import type {
@@ -14,6 +16,7 @@ type AutomaticEntryOptions = {
   activity?: string
   narrative?: ActivityNarrative
   workItem?: WorkItem
+  gitContext?: GitContext
   workItemAttribution?: WorkItemAttribution
   activityStartedAtMs?: number
   stateBeforeSettlement: ProjectTimeState
@@ -62,8 +65,9 @@ export function createAutomaticTimeLogEntry(
     ...(options.activity === undefined ? {} : { activity: options.activity }),
     ...(options.narrative === undefined ? {} : { narrative: options.narrative }),
     ...(options.workItem === undefined ? {} : { workItem: options.workItem }),
+    ...(options.gitContext === undefined ? {} : { gitContext: options.gitContext }),
     workItemAttribution,
-    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}:${workItemAttribution}:${options.workItem?.kind ?? ""}:${options.workItem?.number ?? ""}:${options.workItem?.repository ?? ""}`,
+    sourceKey: `${options.sessionId}:${options.repository.repositoryId}:${options.sourceStartedAtMs}:${activityStartedAtMs ?? options.sourceStartedAtMs}:${workItemAttribution}:${options.workItem?.kind ?? ""}:${options.workItem?.kind === "jira" ? options.workItem.key : options.workItem?.number ?? ""}:${options.workItem?.kind === "jira" ? "" : options.workItem?.repository ?? ""}${options.gitContext === undefined ? "" : `:${workItemKey(options.workItem)}:${gitContextKey(options.gitContext)}`}`,
     startAtMs: entryStartAtMs,
     endAtMs: settledUntilMs,
   }

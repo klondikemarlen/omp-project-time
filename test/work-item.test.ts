@@ -1,45 +1,156 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { resolveWorkItemAssociation } from "../src/time-log/domain/work-item.js"
 
-test("resolves explicit, carried-forward, unassigned, and ambiguous work items", () => {
+import {
+  resolveBranchWorkItem,
+  resolveWorkItemAssociation,
+} from "../src/time-log/domain/work-item.js"
+
+test("when an explicit prompt references a GitHub work item, explicit attribution is returned", () => {
+  // Arrange
   const explicit = {
     kind: "pull_request" as const,
     number: 84,
     source: "user_provided" as const,
   }
-  assert.deepEqual(resolveWorkItemAssociation("Review PR #84"), {
+
+  // Act
+  const association = resolveWorkItemAssociation("Review PR #84")
+
+  // Assert
+  assert.deepEqual(association, {
     workItem: explicit,
     workItemAttribution: "explicit_prompt",
   })
-  assert.deepEqual(
-    resolveWorkItemAssociation("Continue the review.", explicit),
-    {
-      workItem: explicit,
-      workItemAttribution: "carried_forward",
-    },
-  )
-  assert.deepEqual(
-    resolveWorkItemAssociation("https://github.com/acme/app/issues/99"),
-    {
-      workItem: {
-        kind: "issue",
-        number: 99,
-        repository: "github.com/acme/app",
-        source: "user_provided",
-      },
-      workItemAttribution: "explicit_prompt",
-    },
-  )
-  assert.deepEqual(resolveWorkItemAssociation("No ticket reference."), {
-    workItemAttribution: "unassigned",
+})
+
+test("when a prompt has no ticket reference, the existing association is carried forward", () => {
+  // Arrange
+  const current = {
+    kind: "pull_request" as const,
+    number: 84,
+    source: "user_provided" as const,
+  }
+
+  // Act
+  const association = resolveWorkItemAssociation("Continue the review.", current)
+
+  // Assert
+  assert.deepEqual(association, {
+    workItem: current,
+    workItemAttribution: "carried_forward",
   })
-  assert.deepEqual(
-    resolveWorkItemAssociation("Review PR #999999999999999999999."),
-    { workItemAttribution: "unassigned" },
-  )
-  assert.deepEqual(
-    resolveWorkItemAssociation("Review PR #84 and PR #85.", explicit),
-    { workItemAttribution: "ambiguous" },
-  )
+})
+
+test("when a prompt contains a repository-qualified GitHub issue, repository identity is retained", () => {
+  // Arrange
+  const prompt = "https://github.com/acme/app/issues/99"
+
+  // Act
+  const association = resolveWorkItemAssociation(prompt)
+
+  // Assert
+  assert.deepEqual(association, {
+    workItem: {
+      kind: "issue",
+      number: 99,
+      repository: "github.com/acme/app",
+      source: "user_provided",
+    },
+    workItemAttribution: "explicit_prompt",
+  })
+})
+
+test("when a prompt references a Jira key, user-provided attribution is returned", () => {
+  // Arrange
+  const prompt = "Implement PROJ-123 in this change."
+
+  // Act
+  const association = resolveWorkItemAssociation(prompt)
+
+  // Assert
+  assert.deepEqual(association, {
+    workItem: { kind: "jira", key: "PROJ-123", source: "user_provided" },
+    workItemAttribution: "explicit_prompt",
+  })
+})
+
+test("when a prompt contains multiple work item references, association is ambiguous", () => {
+  // Arrange
+  const prompt = "Review PR #84 and PROJ-123."
+
+  // Act
+  const association = resolveWorkItemAssociation(prompt)
+
+  // Assert
+  assert.deepEqual(association, { workItemAttribution: "ambiguous" })
+})
+
+test("when a prompt contains multiple Jira keys, association is ambiguous", () => {
+  // Arrange
+  const prompt = "Work on PROJ-123 and OTHER-45."
+
+  // Act
+  const association = resolveWorkItemAssociation(prompt)
+
+  // Assert
+  assert.deepEqual(association, { workItemAttribution: "ambiguous" })
+})
+
+test("when no reference is present, association is unassigned", () => {
+  // Arrange
+  const prompt = "No ticket reference."
+
+  // Act
+  const association = resolveWorkItemAssociation(prompt)
+
+  // Assert
+  assert.deepEqual(association, { workItemAttribution: "unassigned" })
+})
+
+test("when a Jira key appears in a branch, active-branch provenance is returned", () => {
+  // Arrange
+  const branch = "feature/PROJ-123-add-support"
+
+  // Act
+  const association = resolveBranchWorkItem(branch)
+
+  // Assert
+  assert.deepEqual(association, {
+    workItem: { kind: "jira", key: "PROJ-123", source: "active_branch" },
+    workItemAttribution: "active_branch",
+  })
+})
+
+test("when a branch contains multiple Jira keys, association is ambiguous", () => {
+  // Arrange
+  const branch = "PROJ-123-OTHER-45"
+
+  // Act
+  const association = resolveBranchWorkItem(branch)
+
+  // Assert
+  assert.deepEqual(association, { workItemAttribution: "ambiguous" })
+})
+
+test("when a branch has no Jira key, association is unassigned", () => {
+  // Arrange
+  const branch = "feature/no-ticket"
+
+  // Act
+  const association = resolveBranchWorkItem(branch)
+
+  // Assert
+  assert.deepEqual(association, { workItemAttribution: "unassigned" })
+})
+
+test("when a GitHub reference includes an oversized number, association remains unassigned", () => {
+  // Arrange
+  const prompt = "Review PR #999999999999999999999."
+
+  // Act
+  const association = resolveWorkItemAssociation(prompt)
+
+  // Assert
+  assert.deepEqual(association, { workItemAttribution: "unassigned" })
 })

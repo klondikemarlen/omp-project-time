@@ -11,6 +11,11 @@ import type {
   WorkItem,
   WorkItemAttribution,
 } from "@/time-log/domain/work-item.js";
+import { workItemKey } from "@/time-log/domain/work-item.js";
+import {
+  gitContextKey,
+  type GitContext,
+} from "@/time-log/domain/git-context.js";
 import {
   resolveGitRepository,
   type GitRepository,
@@ -29,6 +34,7 @@ type AgentTurn = {
   narrative?: ActivityNarrative;
   workItem?: WorkItem;
   workItemAttribution?: WorkItemAttribution;
+  gitContext?: GitContext;
   endAtMs: number;
   sessionId: string;
   startAtMs: number;
@@ -57,6 +63,7 @@ export class AutomaticTimeLogRecorder {
     narrative: ActivityNarrative | undefined,
     workItem?: WorkItem,
     workItemAttribution?: WorkItemAttribution,
+    gitContext?: GitContext,
   ): void {
     const repository = this.repositoryFor(cwd);
     const activity = this.sessionActivityFor(sessionId);
@@ -68,6 +75,7 @@ export class AutomaticTimeLogRecorder {
       narrative,
       workItem,
       workItemAttribution,
+      gitContext,
     );
   }
 
@@ -81,8 +89,10 @@ export class AutomaticTimeLogRecorder {
 
   recordSettlement(settlement: Settlement, notifyError: ErrorNotifier): void {
     const activity = this.sessionActivityFor(settlement.sessionId);
+    const repository = activity.repository;
+    const sourceStartedAtMs = activity.startedAtMs;
     activity.enqueue(
-      () => this.humanEntry(settlement, activity),
+      () => this.humanEntry(settlement, repository, sourceStartedAtMs),
       (entry) => this.ledger.recordAutomatic(entry),
       () => {
         this.lastErrorMessage = undefined;
@@ -119,6 +129,7 @@ export class AutomaticTimeLogRecorder {
     notifyError: ErrorNotifier,
     workItem?: WorkItem,
     workItemAttribution?: WorkItemAttribution,
+    gitContext?: GitContext,
   ): void {
     const activity = this.sessionActivities.get(sessionId);
     if (activity === undefined) return;
@@ -139,6 +150,7 @@ export class AutomaticTimeLogRecorder {
     activity.narrative = narrative;
     activity.workItem = workItem;
     activity.workItemAttribution = workItemAttribution;
+    activity.gitContext = gitContext;
   }
 
   async flush(sessionId: string, notifyError: ErrorNotifier): Promise<void> {
@@ -183,6 +195,7 @@ export class AutomaticTimeLogRecorder {
     const agentNarrative = activity.narrative;
     const agentWorkItem = activity.workItem;
     const agentWorkItemAttribution = activity.workItemAttribution;
+    const agentGitContext = activity.gitContext;
     if (startAtMs === undefined) return;
 
     activity.agentTurnStartAtMs = undefined;
@@ -198,6 +211,7 @@ export class AutomaticTimeLogRecorder {
           narrative: agentNarrative,
           workItem: agentWorkItem,
           workItemAttribution: agentWorkItemAttribution,
+          gitContext: agentGitContext,
         }),
       (entry) => this.ledger.recordAutomatic(entry),
       () => {
@@ -209,7 +223,8 @@ export class AutomaticTimeLogRecorder {
 
   private async humanEntry(
     settlement: Settlement,
-    activity: SessionActivity,
+    repository: Promise<GitRepository | undefined> | undefined,
+    sourceStartedAtMs: number | undefined,
   ): Promise<AutomaticTimeLogInput | undefined> {
     const stateBeforeSettlement = settlement.stateBeforeSettlement;
     if (
@@ -219,19 +234,18 @@ export class AutomaticTimeLogRecorder {
       return undefined;
     }
 
-    const repository = await this.repositoryForSettlement(settlement, activity);
-    if (repository === undefined) return undefined;
+    const resolvedRepository = await (repository ?? this.repositoryFor(settlement.cwd));
+    if (resolvedRepository === undefined) return undefined;
 
-    const sourceStartedAtMs =
-      activity.startedAtMs ?? stateBeforeSettlement.activeStartAtMs;
     const entry = createAutomaticTimeLogEntry({
       nowMs: settlement.nowMs,
-      repository,
+      repository: resolvedRepository,
       sessionId: settlement.sessionId,
-      sourceStartedAtMs,
+      sourceStartedAtMs: sourceStartedAtMs ?? stateBeforeSettlement.activeStartAtMs,
       activity: stateBeforeSettlement.activity,
       narrative: stateBeforeSettlement.narrative,
       workItem: stateBeforeSettlement.workItem,
+      gitContext: stateBeforeSettlement.gitContext,
       workItemAttribution:
         stateBeforeSettlement.workItemAttribution
         ?? (stateBeforeSettlement.workItem === undefined
@@ -265,22 +279,16 @@ export class AutomaticTimeLogRecorder {
       ...(turn.activity === undefined ? {} : { activity: turn.activity }),
       ...(turn.narrative === undefined ? {} : { narrative: turn.narrative }),
       ...(turn.workItem === undefined ? {} : { workItem: turn.workItem }),
+      ...(turn.gitContext === undefined ? {} : { gitContext: turn.gitContext }),
       workItemAttribution:
         turn.workItemAttribution
         ?? (turn.workItem === undefined ? "unassigned" : "legacy_unknown"),
-      sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent:${turn.workItemAttribution ?? (turn.workItem === undefined ? "unassigned" : "legacy_unknown")}:${turn.workItem?.kind ?? ""}:${turn.workItem?.number ?? ""}:${turn.workItem?.repository ?? ""}`,
+      sourceKey: `${turn.sessionId}:${repository.repositoryId}:${turn.startAtMs}:agent:${turn.workItemAttribution ?? (turn.workItem === undefined ? "unassigned" : "legacy_unknown")}:${workItemKey(turn.workItem)}:${gitContextKey(turn.gitContext)}`,
       startAtMs: turn.startAtMs,
       endAtMs: turn.endAtMs,
     };
 
     return entry;
-  }
-
-  private async repositoryForSettlement(
-    settlement: Settlement,
-    activity: SessionActivity,
-  ): Promise<GitRepository | undefined> {
-    return activity.repository ?? this.repositoryFor(settlement.cwd);
   }
 
   private sessionActivityFor(sessionId: string): SessionActivity {
@@ -331,6 +339,8 @@ class SessionActivity {
 
   workItem?: WorkItem;
   workItemAttribution?: WorkItemAttribution;
+  gitContext?: GitContext;
+
   setPromptStart(
     repository: Promise<GitRepository | undefined>,
     startedAtMs: number,
@@ -338,6 +348,7 @@ class SessionActivity {
     narrative: ActivityNarrative | undefined,
     workItem: WorkItem | undefined,
     workItemAttribution: WorkItemAttribution | undefined,
+    gitContext: GitContext | undefined,
   ): void {
     this.repository = repository;
     this.startedAtMs = startedAtMs;
@@ -345,6 +356,7 @@ class SessionActivity {
     this.narrative = narrative;
     this.workItem = workItem;
     this.workItemAttribution = workItemAttribution;
+    this.gitContext = gitContext;
   }
 
   enqueue(

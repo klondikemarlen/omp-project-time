@@ -7,16 +7,24 @@ import { MS_PER_SECOND } from "@/utils/time-constants.js";
 import { loadProjectTimeConfig } from "@/config/loader/load-project-time-config.js";
 import type { ProjectTimeConfig } from "@/config/project-time-config.js";
 import { resolveGitRepository } from "@/infrastructure/git-repository.js";
+import { GitContextResolver } from "@/infrastructure/git-context.js";
 import { isTopLevelSession } from "@/extension/session-classification.js";
 import {
   defaultProjectTimeDataRoot,
   prepareProjectTimeDataRoot,
 } from "@/extension/local-data-root.js";
-import { SessionStateCoordinator } from "@/extension/application/session-state-coordinator.js";
+import {
+  SessionStateCoordinator,
+  type SessionUpdate,
+} from "@/extension/application/session-state-coordinator.js";
 import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js";
 import { parseGeneratedActivityLabel } from "@/time-log/domain/activity.js";
 import { parseActivityNarrative } from "@/time-log/domain/narrative.js";
-import { resolveWorkItemAssociation } from "@/time-log/domain/work-item.js";
+import {
+  resolveWorkItemAssociation,
+  workItemKey,
+} from "@/time-log/domain/work-item.js";
+import { gitContextKey } from "@/time-log/domain/git-context.js";
 import type { TimeLogEntry } from "@/time-log/domain/model.js";
 import type { ProjectTimeState } from "@/time-log/domain/state.js";
 import {
@@ -232,6 +240,7 @@ export class ProjectTimeRuntime {
   private readonly activityGenerationTimeoutMs: number;
   private readonly sessionStateCoordinator: SessionStateCoordinator;
   private readonly timeLogRecorder: AutomaticTimeLogRecorder;
+  private readonly gitContextResolver: Pick<GitContextResolver, "resolve">;
   private readonly usesDefaultDataRoot: boolean;
   private readonly prepareLocalData: () => Promise<void>;
   private readonly now: () => Date;
@@ -328,6 +337,7 @@ export class ProjectTimeRuntime {
       options.activityGenerationTimeoutMs ??
       DEFAULT_ACTIVITY_GENERATION_TIMEOUT_MS;
     this.now = options.now ?? (() => new Date());
+    this.gitContextResolver = options.gitContextResolver ?? new GitContextResolver();
     this.usesDefaultDataRoot =
       options.prepareLocalData !== undefined ||
       options.timeLogPath === undefined;
@@ -473,7 +483,7 @@ export class ProjectTimeRuntime {
     const sessionId = ctx.sessionManager.getSessionId();
     const sessionName = ctx.sessionManager.getSessionName?.();
     const nowMs = Date.now();
-    const settledState = await this.sessionStateCoordinator.settle({
+    const settledState = await this.settleWithGitContext({
       config,
       cwd: ctx.cwd,
       entries: ctx.sessionManager.getEntries(),
@@ -552,7 +562,7 @@ export class ProjectTimeRuntime {
     }
 
     const sessionId = ctx.sessionManager.getSessionId();
-    const settledState = await this.sessionStateCoordinator.settle({
+    const settledState = await this.settleWithGitContext({
       config,
       cwd: ctx.cwd,
       entries: ctx.sessionManager.getEntries(),
@@ -602,24 +612,34 @@ export class ProjectTimeRuntime {
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     };
     const generatedActivity = await this.resolveGeneratedActivity(prompt, ctx);
+    const repository = await this.timeLogRecorder.repositoryFor(ctx.cwd);
+    const git = await this.gitContextResolver.resolve(ctx.cwd, repository);
     const currentState = this.sessionStateCoordinator.stateFor(
       update.sessionId,
       update.entries,
     );
-    const { workItem, workItemAttribution } = resolveWorkItemAssociation(
+    const sameGitContext =
+      gitContextKey(currentState.gitContext) === gitContextKey(git.gitContext);
+    const explicitOrCarried = resolveWorkItemAssociation(
       prompt,
-      currentState.workItem,
+      sameGitContext ? currentState.workItem : undefined,
     );
+    const { workItem, workItemAttribution } =
+      explicitOrCarried.workItemAttribution === "unassigned"
+        ? {
+            workItem: git.workItem,
+            workItemAttribution: git.workItemAttribution ?? "unassigned",
+          }
+        : explicitOrCarried;
     const activity = parseGeneratedActivityLabel(generatedActivity.activity);
     const narrative = parseActivityNarrative(generatedActivity.narrative);
     const stateChanged =
       currentState.activity !== activity ||
       currentState.narrative?.text !== narrative?.text ||
       currentState.narrative?.source !== narrative?.source ||
-      currentState.workItem?.kind !== workItem?.kind ||
-      currentState.workItem?.number !== workItem?.number ||
-      currentState.workItem?.repository !== workItem?.repository ||
-      currentState.workItemAttribution !== workItemAttribution;
+      workItemKey(currentState.workItem) !== workItemKey(workItem) ||
+      currentState.workItemAttribution !== workItemAttribution ||
+      !sameGitContext;
     if (stateChanged) {
       await this.sessionStateCoordinator.setActivity(
         update,
@@ -627,10 +647,45 @@ export class ProjectTimeRuntime {
         narrative,
         workItem,
         workItemAttribution,
+        git.gitContext,
       );
     }
     const nextState = await this.sessionStateCoordinator.recordPrompt(update);
     updateStatus(ctx, nextState, config);
+  }
+
+  private async settleWithGitContext(update: SessionUpdate): Promise<ProjectTimeState> {
+    const repository = await this.timeLogRecorder.repositoryFor(update.cwd);
+    const git = await this.gitContextResolver.resolve(update.cwd, repository);
+    const current = this.sessionStateCoordinator.stateFor(update.sessionId, update.entries);
+    const contextChanged =
+      gitContextKey(current.gitContext) !== gitContextKey(git.gitContext);
+    const refreshAssociation =
+      contextChanged ||
+      current.workItemAttribution === "unassigned" ||
+      current.workItem?.source === "active_branch" ||
+      current.workItem?.source === "linked_pull_request";
+    const workItem = refreshAssociation ? git.workItem : current.workItem;
+    const attribution = refreshAssociation
+      ? git.workItemAttribution ?? "unassigned"
+      : current.workItemAttribution;
+
+    if (
+      contextChanged ||
+      workItemKey(current.workItem) !== workItemKey(workItem) ||
+      current.workItemAttribution !== attribution
+    ) {
+      return this.sessionStateCoordinator.setActivity(
+        update,
+        current.activity,
+        current.narrative,
+        workItem,
+        attribution,
+        git.gitContext,
+      );
+    }
+
+    return this.sessionStateCoordinator.settle(update);
   }
 
   private resolveGeneratedActivity(
@@ -675,7 +730,7 @@ export class ProjectTimeRuntime {
     }
 
     const nowMs = Date.now();
-    const settledState = await this.sessionStateCoordinator.settle({
+    const settledState = await this.settleWithGitContext({
       config,
       cwd: ctx.cwd,
       entries: ctx.sessionManager.getEntries(),
@@ -720,22 +775,21 @@ export class ProjectTimeRuntime {
   }
 
   private async refreshActiveStatus(): Promise<number> {
-    if (
-      this.runtimeState.activeContext === undefined ||
-      this.runtimeState.activeSessionId === undefined
-    ) {
+    const activeContext =
+      this.runtimeState.activeContext ?? this.runningAgentSession?.context;
+    const activeSessionId =
+      this.runtimeState.activeSessionId ?? this.runningAgentSession?.sessionId;
+    if (activeContext === undefined || activeSessionId === undefined) {
       return ProjectTimeRuntime.defaultRefreshIntervalMs;
     }
 
-    const activeContext = this.runtimeState.activeContext;
-    const activeSessionId = this.runtimeState.activeSessionId;
     const config = await this.loadConfigForStatus(activeContext);
     if (config === undefined) {
       this.clearActiveStatus(activeContext);
       return ProjectTimeRuntime.defaultRefreshIntervalMs;
     }
 
-    const settledState = await this.sessionStateCoordinator.settle({
+    const settledState = await this.settleWithGitContext({
       config,
       cwd: activeContext.cwd,
       entries: activeContext.sessionManager.getEntries(),

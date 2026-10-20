@@ -14,6 +14,7 @@ import {
 } from "@/time-log/domain/state.js"
 import { AutomaticTimeLogRecorder } from "@/time-log/recorder.js"
 import type { ActivityNarrative } from "@/time-log/domain/narrative.js"
+import type { GitContext } from "@/time-log/domain/git-context.js"
 import type {
   WorkItem,
   WorkItemAttribution,
@@ -21,7 +22,7 @@ import type {
 
 type TimeLogErrorNotifier = (message: string) => void
 
-type SessionUpdate = {
+export type SessionUpdate = {
   config: ProjectTimeConfig
   cwd: string
   entries: readonly SessionEntryLike[]
@@ -61,6 +62,7 @@ export class SessionStateCoordinator {
       state.narrative,
       state.workItem,
       state.workItemAttribution,
+      state.gitContext,
     )
     this.persist(update.sessionId, state)
     return state
@@ -82,6 +84,7 @@ export class SessionStateCoordinator {
     narrative: ActivityNarrative | undefined,
     workItem: WorkItem | undefined,
     workItemAttribution: WorkItemAttribution | undefined,
+    gitContext?: GitContext,
   ): Promise<ProjectTimeState> {
     const stateBeforeSettlement = {
       ...this.stateFor(update.sessionId, update.entries),
@@ -98,6 +101,7 @@ export class SessionStateCoordinator {
       workItem,
       workItemAttribution,
       update.nowMs,
+      gitContext,
     )
     this.timeLogRecorder.recordActivityChange(
       update.sessionId,
@@ -107,6 +111,7 @@ export class SessionStateCoordinator {
       update.notifyTimeLogError,
       workItem,
       workItemAttribution,
+      gitContext,
     )
     this.persist(update.sessionId, state)
     return state
