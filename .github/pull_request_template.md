@@ -1,19 +1,21 @@
-<!-- Fixes #123 -->
+## Related Links
 
-Relates to:
+<!-- Link the authoritative issue. Use closing keywords only when completion is actually established. -->
 
-<!-- - #456 -->
+## Context
 
-# Context
+<!-- What user problem does this solve, and what is intentionally out of scope? -->
 
-<!-- What user-facing problem does this solve? -->
+## Maintainer Approval
 
-# Implementation
+<!-- For an externally requested feature, link the explicit scope approval authored by @klondikemarlen, or identify the direct maintainer instruction authorizing this work. If absent, state 'Not approved; review only'. A self-checked box, issue classification, or bot-applied label is not authorization. See https://github.com/klondikemarlen/omp-project-time/blob/main/.github/CONTRIBUTING.md. -->
 
-<!-- What changed at a high level? -->
+## Implementation
 
-# Testing Instructions
+<!-- Summarize the change and relevant tradeoffs. -->
 
-1. Run the smallest tests that cover the change.
-2. Run `npm run build` when TypeScript behavior changes.
-3. Run `npm pack --dry-run` when package contents or public docs change.
+## Testing Instructions
+
+<!-- Give reproducible checks and observed results. Name unrun checks or blockers honestly. Follow the repository's documented development/test wrapper and release gates. -->
+
+1. 
