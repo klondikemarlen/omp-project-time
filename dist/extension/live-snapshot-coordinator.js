@@ -53,6 +53,12 @@ function humanIntervalAtObservation(state, observedAtMs) {
   };
 }
 
+function localDayStartAtMs(timestampMs) {
+  const localDay = new Date(timestampMs);
+  localDay.setHours(0, 0, 0, 0);
+  return localDay.getTime();
+}
+
 export class LiveSnapshotCoordinator {
   events;
 
@@ -163,11 +169,13 @@ export class LiveSnapshotCoordinator {
               endAtMs: observedAtMs,
             }
           : undefined;
+      const dayStartAtMs = localDayStartAtMs(observedAtMs);
       const totals = liveTimeTotals(
         entries,
         sessionId,
         project,
         observedAtMs,
+        dayStartAtMs,
         openHuman.interval,
         openAgentInProject,
       );
@@ -180,6 +188,10 @@ export class LiveSnapshotCoordinator {
         project,
         humanMilliseconds: totals.humanMilliseconds,
         agentMilliseconds: totals.agentMilliseconds,
+        todayHumanMilliseconds: totals.todayHumanMilliseconds,
+        todayAgentMilliseconds: totals.todayAgentMilliseconds,
+        dayStartAtMs,
+        ...(state.activity === undefined ? {} : { activity: state.activity }),
         humanActive: openHuman.active,
         agentActive: openAgentInProject !== undefined,
         observedAtMs,

@@ -1024,6 +1024,17 @@ export class ProjectTimeRuntime {
     const activeSessionId =
       this.runtimeState.activeSessionId ?? this.runningAgentSession?.sessionId;
     if (activeContext === undefined || activeSessionId === undefined) {
+      const selected = this.selectedContext;
+      if (
+        selected?.active === true &&
+        this.isCurrentSession(selected.context, selected.sessionId)
+      ) {
+        await this.liveSnapshotCoordinator.publish(
+          selected.context,
+          selected.sessionId,
+          nowMs,
+        );
+      }
       return ProjectTimeRuntime.defaultRefreshIntervalMs;
     }
     if (!this.isCurrentSession(activeContext, activeSessionId)) {
