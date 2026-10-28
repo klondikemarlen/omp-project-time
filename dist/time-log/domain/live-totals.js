@@ -3,18 +3,23 @@ export function liveTimeTotals(
   sessionId,
   project,
   observedAtMs,
+  dayStartAtMs,
   openHumanInterval,
   openAgentInterval,
 ) {
   if (
     sessionId.trim() === "" ||
     project.trim() === "" ||
-    !Number.isFinite(observedAtMs)
+    !Number.isFinite(observedAtMs) ||
+    !Number.isFinite(dayStartAtMs) ||
+    dayStartAtMs > observedAtMs
   ) {
     return undefined;
   }
   const humanIntervals = [];
   const agentIntervals = [];
+  const todayHumanIntervals = [];
+  const todayAgentIntervals = [];
   for (const entry of entries) {
     if (entry.sessionId !== sessionId || entry.project !== project) continue;
     const intervals = intervalsForSource(
@@ -22,39 +27,76 @@ export function liveTimeTotals(
       humanIntervals,
       agentIntervals,
     );
-    if (intervals === undefined) continue;
-    addObservedInterval(
+    const todayIntervals = intervalsForSource(
+      entry.sourceKind,
+      todayHumanIntervals,
+      todayAgentIntervals,
+    );
+    if (intervals === undefined || todayIntervals === undefined) continue;
+    addLiveInterval(
       intervals,
+      todayIntervals,
       entry.startAtMs,
       entry.endAtMs,
       observedAtMs,
+      dayStartAtMs,
     );
   }
   if (openHumanInterval !== undefined) {
-    addObservedInterval(
+    addLiveInterval(
       humanIntervals,
+      todayHumanIntervals,
       openHumanInterval.startAtMs,
       openHumanInterval.endAtMs,
       observedAtMs,
+      dayStartAtMs,
     );
   }
   if (openAgentInterval !== undefined) {
-    addObservedInterval(
+    addLiveInterval(
       agentIntervals,
+      todayAgentIntervals,
       openAgentInterval.startAtMs,
       openAgentInterval.endAtMs,
       observedAtMs,
+      dayStartAtMs,
     );
   }
   const humanMilliseconds = unionMilliseconds(humanIntervals);
   const agentMilliseconds = unionMilliseconds(agentIntervals);
+  const todayHumanMilliseconds = unionMilliseconds(todayHumanIntervals);
+  const todayAgentMilliseconds = unionMilliseconds(todayAgentIntervals);
   if (
     !Number.isFinite(humanMilliseconds) ||
-    !Number.isFinite(agentMilliseconds)
+    !Number.isFinite(agentMilliseconds) ||
+    !Number.isFinite(todayHumanMilliseconds) ||
+    !Number.isFinite(todayAgentMilliseconds)
   ) {
     return undefined;
   }
-  return { humanMilliseconds, agentMilliseconds };
+  return {
+    humanMilliseconds,
+    agentMilliseconds,
+    todayHumanMilliseconds,
+    todayAgentMilliseconds,
+  };
+}
+
+function addLiveInterval(
+  intervals,
+  todayIntervals,
+  startAtMs,
+  endAtMs,
+  observedAtMs,
+  dayStartAtMs,
+) {
+  addObservedInterval(intervals, startAtMs, endAtMs, observedAtMs);
+  addObservedInterval(
+    todayIntervals,
+    Math.max(startAtMs, dayStartAtMs),
+    endAtMs,
+    observedAtMs,
+  );
 }
 
 function intervalsForSource(sourceKind, humanIntervals, agentIntervals) {

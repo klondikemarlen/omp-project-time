@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Include local-day human-active and agent-turn durations, local midnight, idle rollover refresh, and the existing activity label in live snapshots while preserving separate lifetime totals.
+
 ## [9.6.0] - 2026-10-28
 
 ### Added

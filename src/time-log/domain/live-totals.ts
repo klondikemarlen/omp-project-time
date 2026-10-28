@@ -8,6 +8,8 @@ export type LiveInterval = {
 export type LiveTimeTotals = {
   humanMilliseconds: number;
   agentMilliseconds: number;
+  todayHumanMilliseconds: number;
+  todayAgentMilliseconds: number;
 };
 
 export function liveTimeTotals(
@@ -15,19 +17,24 @@ export function liveTimeTotals(
   sessionId: string,
   project: string,
   observedAtMs: number,
+  dayStartAtMs: number,
   openHumanInterval?: LiveInterval,
   openAgentInterval?: LiveInterval,
 ): LiveTimeTotals | undefined {
   if (
     sessionId.trim() === "" ||
     project.trim() === "" ||
-    !Number.isFinite(observedAtMs)
+    !Number.isFinite(observedAtMs) ||
+    !Number.isFinite(dayStartAtMs) ||
+    dayStartAtMs > observedAtMs
   ) {
     return undefined;
   }
 
   const humanIntervals: LiveInterval[] = [];
   const agentIntervals: LiveInterval[] = [];
+  const todayHumanIntervals: LiveInterval[] = [];
+  const todayAgentIntervals: LiveInterval[] = [];
 
   for (const entry of entries) {
     if (entry.sessionId !== sessionId || entry.project !== project) continue;
@@ -37,44 +44,81 @@ export function liveTimeTotals(
       humanIntervals,
       agentIntervals,
     );
-    if (intervals === undefined) continue;
+    const todayIntervals = intervalsForSource(
+      entry.sourceKind,
+      todayHumanIntervals,
+      todayAgentIntervals,
+    );
+    if (intervals === undefined || todayIntervals === undefined) continue;
 
-    addObservedInterval(
+    addLiveInterval(
       intervals,
+      todayIntervals,
       entry.startAtMs,
       entry.endAtMs,
       observedAtMs,
+      dayStartAtMs,
     );
   }
 
   if (openHumanInterval !== undefined) {
-    addObservedInterval(
+    addLiveInterval(
       humanIntervals,
+      todayHumanIntervals,
       openHumanInterval.startAtMs,
       openHumanInterval.endAtMs,
       observedAtMs,
+      dayStartAtMs,
     );
   }
 
   if (openAgentInterval !== undefined) {
-    addObservedInterval(
+    addLiveInterval(
       agentIntervals,
+      todayAgentIntervals,
       openAgentInterval.startAtMs,
       openAgentInterval.endAtMs,
       observedAtMs,
+      dayStartAtMs,
     );
   }
 
   const humanMilliseconds = unionMilliseconds(humanIntervals);
   const agentMilliseconds = unionMilliseconds(agentIntervals);
+  const todayHumanMilliseconds = unionMilliseconds(todayHumanIntervals);
+  const todayAgentMilliseconds = unionMilliseconds(todayAgentIntervals);
   if (
     !Number.isFinite(humanMilliseconds) ||
-    !Number.isFinite(agentMilliseconds)
+    !Number.isFinite(agentMilliseconds) ||
+    !Number.isFinite(todayHumanMilliseconds) ||
+    !Number.isFinite(todayAgentMilliseconds)
   ) {
     return undefined;
   }
 
-  return { humanMilliseconds, agentMilliseconds };
+  return {
+    humanMilliseconds,
+    agentMilliseconds,
+    todayHumanMilliseconds,
+    todayAgentMilliseconds,
+  };
+}
+
+function addLiveInterval(
+  intervals: LiveInterval[],
+  todayIntervals: LiveInterval[],
+  startAtMs: number,
+  endAtMs: number,
+  observedAtMs: number,
+  dayStartAtMs: number,
+): void {
+  addObservedInterval(intervals, startAtMs, endAtMs, observedAtMs);
+  addObservedInterval(
+    todayIntervals,
+    Math.max(startAtMs, dayStartAtMs),
+    endAtMs,
+    observedAtMs,
+  );
 }
 
 function intervalsForSource(

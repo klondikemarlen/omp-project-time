@@ -92,6 +92,10 @@ export type ProjectTimeLiveSnapshot = {
   project?: string
   humanMilliseconds?: number
   agentMilliseconds?: number
+  todayHumanMilliseconds?: number
+  todayAgentMilliseconds?: number
+  dayStartAtMs?: number
+  activity?: string
   humanActive: boolean
   agentActive: boolean
   observedAtMs: number

@@ -30,6 +30,7 @@ type EventListener = (data: unknown) => unknown;
 
 type FixtureOptions = {
   activeWindowMinutes?: number;
+  captureRefreshTimers?: boolean;
 };
 
 async function createFixture(t: TestContext, options: FixtureOptions = {}) {
@@ -58,8 +59,25 @@ async function createFixture(t: TestContext, options: FixtureOptions = {}) {
   let currentSessionId = "current";
   let failSessionRead = false;
   let nowMs = 1_000_000;
+  const refreshCallbacks: Array<() => Promise<void>> = [];
 
   t.mock.method(Date, "now", () => nowMs);
+
+  if (options.captureRefreshTimers === true) {
+    t.mock.method(
+      globalThis,
+      "setTimeout",
+      ((callback: () => Promise<void>) => {
+        refreshCallbacks.push(callback);
+        return { unref() {} } as unknown as NodeJS.Timeout;
+      }) as typeof setTimeout,
+    );
+    t.mock.method(
+      globalThis,
+      "clearTimeout",
+      (() => undefined) as typeof clearTimeout,
+    );
+  }
 
   const events = {
     emit(channel: string, data: unknown) {
@@ -168,6 +186,11 @@ async function createFixture(t: TestContext, options: FixtureOptions = {}) {
         ),
       );
     },
+    async runRefresh() {
+      const callback = refreshCallbacks.shift();
+      assert.ok(callback);
+      await callback();
+    },
   };
 }
 
@@ -188,6 +211,26 @@ async function recordEntry(
     startAtMs,
     endAtMs,
   });
+}
+
+function localDayStartAtMs(timestampMs: number): number {
+  const localDay = new Date(timestampMs);
+  localDay.setHours(0, 0, 0, 0);
+  return localDay.getTime();
+}
+
+function dailySnapshotFields(
+  timestampMs: number,
+  humanMilliseconds: number,
+  agentMilliseconds: number,
+  activity?: string,
+) {
+  return {
+    todayHumanMilliseconds: humanMilliseconds,
+    todayAgentMilliseconds: agentMilliseconds,
+    dayStartAtMs: localDayStartAtMs(timestampMs),
+    ...(activity === undefined ? {} : { activity }),
+  };
 }
 
 test("when Worklog requests live totals, filters by session and project", async (t) => {
@@ -264,11 +307,229 @@ test("when Worklog requests live totals, filters by session and project", async 
     project: fixture.project,
     humanMilliseconds: 300,
     agentMilliseconds: 250,
+    ...dailySnapshotFields(400, 300, 250),
     humanActive: false,
     agentActive: false,
     observedAtMs: 400,
   });
   assert.equal(JSON.stringify(snapshot ?? {}).includes(fixture.context.cwd), false);
+});
+
+test("when persisted source intervals cross local midnight, unions overlaps before clipping today's totals", async (t) => {
+  // Arrange
+  const fixture = await createFixture(t);
+  const dayStartAtMs = new Date(2026, 5, 18).getTime();
+  const observedAtMs = dayStartAtMs + 60_000;
+  fixture.setSessionEntries("current", [
+    {
+      type: "custom",
+      customType: "project-time.state",
+      data: {
+        promptCount: 1,
+        activeMilliseconds: 0,
+        activity: "Review Snapshot",
+      },
+    },
+  ]);
+  await recordEntry(
+    fixture.ledger,
+    "human_active",
+    fixture.project,
+    "current",
+    dayStartAtMs - 10_000,
+    dayStartAtMs + 30_000,
+  );
+  await recordEntry(
+    fixture.ledger,
+    "human_active",
+    fixture.project,
+    "current",
+    dayStartAtMs + 20_000,
+    dayStartAtMs + 40_000,
+  );
+  await recordEntry(
+    fixture.ledger,
+    "agent_turn_elapsed",
+    fixture.project,
+    "current",
+    dayStartAtMs - 20_000,
+    dayStartAtMs + 10_000,
+  );
+  await recordEntry(
+    fixture.ledger,
+    "agent_turn_elapsed",
+    fixture.project,
+    "current",
+    dayStartAtMs + 5_000,
+    dayStartAtMs + 25_000,
+  );
+  await recordEntry(
+    fixture.ledger,
+    "human_active",
+    fixture.project,
+    "other-session",
+    dayStartAtMs,
+    dayStartAtMs + 60_000,
+  );
+  await recordEntry(
+    fixture.ledger,
+    "agent_turn_elapsed",
+    "other-project",
+    "current",
+    dayStartAtMs,
+    dayStartAtMs + 60_000,
+  );
+  fixture.setNow(observedAtMs);
+
+  // Act
+  await fixture.emit("session_start", fixture.context);
+  await fixture.request({ sessionId: "current", presentation: "worklog" });
+
+  // Assert
+  assert.deepEqual(fixture.snapshots.at(-1), {
+    version: 1,
+    sessionId: "current",
+    project: fixture.project,
+    humanMilliseconds: 50_000,
+    agentMilliseconds: 45_000,
+    ...dailySnapshotFields(observedAtMs, 40_000, 25_000, "Review Snapshot"),
+    humanActive: false,
+    agentActive: false,
+    observedAtMs,
+  });
+});
+
+test("when ongoing clocks cross local midnight, clips each source at local midnight", async (t) => {
+  // Arrange
+  const fixture = await createFixture(t, { activeWindowMinutes: 1 });
+  const dayStartAtMs = new Date(2026, 5, 18).getTime();
+  fixture.setNow(dayStartAtMs - 5_000);
+
+  // Act
+  await fixture.emit("session_start", fixture.context);
+  await fixture.emit("before_agent_start", fixture.context);
+  await fixture.emit("agent_start", fixture.context);
+  const observedAtMs = dayStartAtMs + 10_000;
+  fixture.setNow(observedAtMs);
+  await fixture.request({ sessionId: "current", presentation: "worklog" });
+
+  // Assert
+  assert.deepEqual(fixture.snapshots.at(-1), {
+    version: 1,
+    sessionId: "current",
+    project: fixture.project,
+    humanMilliseconds: 15_000,
+    agentMilliseconds: 15_000,
+    ...dailySnapshotFields(observedAtMs, 10_000, 10_000),
+    humanActive: true,
+    agentActive: true,
+    observedAtMs,
+  });
+});
+
+test("when local time crosses DST, clips daily totals to calendar midnight", async (t) => {
+  // Arrange
+  const originalTimeZone = process.env.TZ;
+  process.env.TZ = "America/Los_Angeles";
+  t.after(() => {
+    if (originalTimeZone === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTimeZone;
+    }
+  });
+  const fixture = await createFixture(t);
+  const springDayStartAtMs = Date.parse("2026-03-08T08:00:00.000Z");
+  const springObservedAtMs = Date.parse("2026-03-08T19:00:00.000Z");
+  const fallDayStartAtMs = Date.parse("2026-11-01T07:00:00.000Z");
+  const fallObservedAtMs = Date.parse("2026-11-01T20:00:00.000Z");
+  await recordEntry(
+    fixture.ledger,
+    "human_active",
+    fixture.project,
+    "current",
+    springDayStartAtMs - 10_000,
+    springDayStartAtMs + 30_000,
+  );
+  await recordEntry(
+    fixture.ledger,
+    "agent_turn_elapsed",
+    fixture.project,
+    "current",
+    springDayStartAtMs - 20_000,
+    springDayStartAtMs + 40_000,
+  );
+  await recordEntry(
+    fixture.ledger,
+    "human_active",
+    fixture.project,
+    "current",
+    fallDayStartAtMs - 10_000,
+    fallDayStartAtMs + 30_000,
+  );
+  await recordEntry(
+    fixture.ledger,
+    "agent_turn_elapsed",
+    fixture.project,
+    "current",
+    fallDayStartAtMs - 20_000,
+    fallDayStartAtMs + 40_000,
+  );
+
+  // Act
+  fixture.setNow(springObservedAtMs);
+  await fixture.emit("session_start", fixture.context);
+  await fixture.request({ sessionId: "current", presentation: "worklog" });
+  const springSnapshot = fixture.snapshots.at(-1);
+  fixture.setNow(fallObservedAtMs);
+  await fixture.request({ sessionId: "current", presentation: "worklog" });
+  const fallSnapshot = fixture.snapshots.at(-1);
+
+  // Assert
+  assert.equal(springSnapshot?.dayStartAtMs, springDayStartAtMs);
+  assert.equal(springSnapshot?.todayHumanMilliseconds, 30_000);
+  assert.equal(springSnapshot?.todayAgentMilliseconds, 40_000);
+  assert.equal(fallSnapshot?.dayStartAtMs, fallDayStartAtMs);
+  assert.equal(fallSnapshot?.todayHumanMilliseconds, 30_000);
+  assert.equal(fallSnapshot?.todayAgentMilliseconds, 40_000);
+});
+
+test("when both activity clocks stop before midnight, refreshes the selected session's snapshot for the new day", async (t) => {
+  // Arrange
+  const fixture = await createFixture(t, {
+    activeWindowMinutes: 1,
+    captureRefreshTimers: true,
+  });
+  const dayStartAtMs = new Date(2026, 6, 15).getTime();
+  fixture.setNow(dayStartAtMs - 120_000);
+
+  // Act
+  await fixture.emit("session_start", fixture.context);
+  await fixture.emit("before_agent_start", fixture.context);
+  await fixture.emit("agent_start", fixture.context);
+  fixture.setNow(dayStartAtMs - 5_000);
+  await fixture.emit("agent_end", fixture.context);
+
+  const stoppedSnapshot = fixture.snapshots.at(-1);
+
+  const observedAtMs = dayStartAtMs + 10_000;
+  fixture.setNow(observedAtMs);
+  await fixture.runRefresh();
+
+  // Assert
+  assert.equal(stoppedSnapshot?.humanActive, false);
+  assert.equal(stoppedSnapshot?.agentActive, false);
+  assert.deepEqual(fixture.snapshots.at(-1), {
+    version: 1,
+    sessionId: "current",
+    project: fixture.project,
+    humanMilliseconds: 60_000,
+    agentMilliseconds: 115_000,
+    ...dailySnapshotFields(observedAtMs, 0, 0),
+    humanActive: false,
+    agentActive: false,
+    observedAtMs,
+  });
 });
 
 test("when a session resumes during an active window, preserves observed activity", async (t) => {
@@ -299,6 +560,7 @@ test("when a session resumes during an active window, preserves observed activit
     project: active.project,
     humanMilliseconds: 50_000,
     agentMilliseconds: 0,
+    ...dailySnapshotFields(1_000_000, 50_000, 0),
     humanActive: true,
     agentActive: false,
     observedAtMs: 1_000_000,
@@ -334,6 +596,7 @@ test("when a session resumes after the active window, bounds activity at expiry"
     project: expired.project,
     humanMilliseconds: 100_000,
     agentMilliseconds: 0,
+    ...dailySnapshotFields(1_060_000, 100_000, 0),
     humanActive: false,
     agentActive: false,
     observedAtMs: 1_060_000,
@@ -362,6 +625,7 @@ test("when an agent run outlasts the human window, refreshes agent totals", asyn
     project: fixture.project,
     humanMilliseconds: 60_000,
     agentMilliseconds: 60_000,
+    ...dailySnapshotFields(1_060_000, 60_000, 60_000),
     humanActive: false,
     agentActive: true,
     observedAtMs: 1_060_000,
@@ -420,4 +684,7 @@ test("when live evidence reading fails, emits unavailable rather than stale tota
   assert.equal(unavailable?.agentActive, false);
   assert.equal(unavailable?.humanMilliseconds, undefined);
   assert.equal(unavailable?.agentMilliseconds, undefined);
+  assert.equal(unavailable?.todayHumanMilliseconds, undefined);
+  assert.equal(unavailable?.todayAgentMilliseconds, undefined);
+  assert.equal(unavailable?.dayStartAtMs, undefined);
 });
