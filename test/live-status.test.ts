@@ -486,30 +486,12 @@ test("when local time crosses DST, clips daily totals to calendar midnight", asy
   const fallSnapshot = fixture.snapshots.at(-1);
 
   // Assert
-  assert.deepEqual(
-    {
-      dayStartAtMs: springSnapshot?.dayStartAtMs,
-      todayHumanMilliseconds: springSnapshot?.todayHumanMilliseconds,
-      todayAgentMilliseconds: springSnapshot?.todayAgentMilliseconds,
-    },
-    {
-      dayStartAtMs: springDayStartAtMs,
-      todayHumanMilliseconds: 30_000,
-      todayAgentMilliseconds: 40_000,
-    },
-  );
-  assert.deepEqual(
-    {
-      dayStartAtMs: fallSnapshot?.dayStartAtMs,
-      todayHumanMilliseconds: fallSnapshot?.todayHumanMilliseconds,
-      todayAgentMilliseconds: fallSnapshot?.todayAgentMilliseconds,
-    },
-    {
-      dayStartAtMs: fallDayStartAtMs,
-      todayHumanMilliseconds: 30_000,
-      todayAgentMilliseconds: 40_000,
-    },
-  );
+  assert.equal(springSnapshot?.dayStartAtMs, springDayStartAtMs);
+  assert.equal(springSnapshot?.todayHumanMilliseconds, 30_000);
+  assert.equal(springSnapshot?.todayAgentMilliseconds, 40_000);
+  assert.equal(fallSnapshot?.dayStartAtMs, fallDayStartAtMs);
+  assert.equal(fallSnapshot?.todayHumanMilliseconds, 30_000);
+  assert.equal(fallSnapshot?.todayAgentMilliseconds, 40_000);
 });
 
 test("when both activity clocks stop before midnight, refreshes the selected session's snapshot for the new day", async (t) => {
