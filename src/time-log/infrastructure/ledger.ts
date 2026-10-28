@@ -135,6 +135,22 @@ export class TimeLogLedger {
     );
   }
 
+  async entriesForSessionAndProject(
+    sessionId: string,
+    project: string,
+  ): Promise<TimeLogEntry[]> {
+    return this.withLock(() =>
+      this.withDatabase((database) =>
+        statement(
+          database,
+          "SELECT entry_json FROM entries WHERE project = ? AND json_extract(entry_json, '$.sessionId') = ? ORDER BY rowid",
+        )
+          .all(project, sessionId)
+          .map((row) => this.parseDatabaseEntry(row.entry_json)),
+      ),
+    );
+  }
+
   async storageBytes(): Promise<number> {
     return this.withLock(async () => this.storageBytesWithoutLock());
   }

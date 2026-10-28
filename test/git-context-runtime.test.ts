@@ -41,6 +41,12 @@ async function createFixture(
     Array<{ type: string; customType: string; data?: unknown }>
   >([[currentSessionId, []]]);
   const api: ExtensionApi = {
+    events: {
+      emit() {},
+      on() {
+        return () => {};
+      },
+    },
     registerCommand() {},
     appendEntry(customType, data) {
       sessionEntries

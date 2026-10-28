@@ -31,6 +31,12 @@ test("when viewing entries and statistics, shows bounded evidence and source-sep
     ((argumentPrefix: string) => CommandCompletion[] | null) | undefined;
   let handler: CommandHandler | undefined;
   const extensionApi: ExtensionApi = {
+    events: {
+      emit() {},
+      on() {
+        return () => {};
+      },
+    },
     registerCommand(_name, options) {
       handler = options.handler;
       argumentCompletions = options.getArgumentCompletions;

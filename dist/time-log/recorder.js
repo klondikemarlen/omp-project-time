@@ -48,6 +48,23 @@ export class AutomaticTimeLogRecorder {
     activity.agentRepository = activity.repository;
   }
 
+  async openAgentInterval(sessionId) {
+    const activity = this.sessionActivities.get(sessionId);
+    if (
+      activity === undefined ||
+      activity.agentTurnStartAtMs === undefined ||
+      activity.agentRepository === undefined
+    ) {
+      return undefined;
+    }
+    const repository = await activity.agentRepository;
+    if (repository === undefined) return undefined;
+    return {
+      project: repository.project,
+      startAtMs: activity.agentTurnStartAtMs,
+    };
+  }
+
   recordSettlement(settlement, notifyError) {
     const activity = this.sessionActivityFor(settlement.sessionId);
     const repository = activity.repository;
@@ -126,6 +143,10 @@ export class AutomaticTimeLogRecorder {
 
   async entries() {
     return this.ledger.entries();
+  }
+
+  async entriesForSessionAndProject(sessionId, project) {
+    return this.ledger.entriesForSessionAndProject(sessionId, project);
   }
 
   async storageBytes() {

@@ -23,9 +23,11 @@ Maintainer reference material is in the [Project Time knowledge base](docs/READM
 - Concurrent repositories retain their full independent automatic intervals. Totals can exceed the OMP-active union; that is recorded evidence, not an error.
 - Prompt activity does not claim literal desk time or billable duration. Project Time has no manual timer and never writes external time-entry data.
 - AI intervals start at `agent_start` and close on terminal `agent_end`, not the first `turn_end`. Cancellation closes on its observed terminal event; shutdown or a completed session switch closes an unfinished interval at that boundary. Missing terminal observations are unknown, not extrapolated to export time. Versions before 9.4.2 can omit later turns; upgrading does not repair historical evidence or certify elapsed time as productive or billable.
-- The status is a dim, keyed OMP hook-status line such as `5m 12s (dev)`. OMP owns its placement and layout.
+- The status is a keyed OMP hook-status line such as `5m 12s (dev)`. OMP owns its placement and layout.
+- The shared `pi.events` bus provides a transient, read-only snapshot for the current top-level session and sanitized project. Human-active and agent-turn totals remain separate, overlap-unioned within each source, and bounded at observation; snapshots add no persisted evidence or paths.
+- A Worklog presentation request hides Project Time's duplicate status for that session. Collection remains in Project Time, and its standalone status returns when Worklog releases presentation.
 
-The plugin writes only through `ctx.ui.setStatus(...)`. OMP renders each extension status in its own keyed line; placement is controlled by OMP's status layout and segment registry.
+The plugin writes its standalone status through `ctx.ui.setStatus(...)` and emits live snapshots on OMP's shared `pi.events` bus. OMP renders each extension status in its own keyed line; placement is controlled by OMP's status layout and segment registry.
 
 ## Defaults
 
@@ -152,4 +154,4 @@ Source modules use `@/` imports rooted at `src/`. `tsc-alias` rewrites them to r
 
 - `omp plugin list` should show `omp-project-time`.
 - `omp plugin config list omp-project-time` shows current settings.
-- Status placement is OMP-managed; Project Time only writes its keyed hook status.
+- Status placement is OMP-managed; Project Time uses a keyed hook status for standalone display and shared events for transient Worklog snapshots.

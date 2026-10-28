@@ -8,6 +8,8 @@ The architecture records automatic Project Time evidence without coupling OMP ev
 flowchart LR
   OMP[OMP top-level hooks] --> Runtime[ProjectTimeRuntime]
   Runtime --> Coordinator[SessionStateCoordinator]
+  Runtime -->|live snapshot| EventBus[OMP shared pi.events bus]
+  EventBus --> Worklog[Worklog presentation]
   Runtime --> Recorder[AutomaticTimeLogRecorder]
   Recorder --> Domain[Automatic entry domain rules]
   Recorder --> Git[Repository identity adapter]
@@ -21,7 +23,7 @@ flowchart LR
 | Owner                                                    | Responsibility                                                                                                 | Depends on                                           |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | `src/index.ts` and `src/omp-extension.ts`                | Public extension entrypoint and default activity generator wiring                                              | OMP extension API                                    |
-| `src/extension/runtime.ts`                               | Registers OMP hooks and commands; coordinates status, activity generation, state, and recorder calls           | Extension interfaces and application/domain services |
+| `src/extension/runtime.ts`                               | Registers OMP hooks, commands, and live snapshots; coordinates status, activity, state, and recorder calls         | Extension interfaces and application/domain services |
 | `src/extension/application/session-state-coordinator.ts` | Owns active-window session-state transitions                                                                   | Domain state                                         |
 | `src/time-log/recorder.ts`                               | Converts session settlements and agent turns into automatic-entry inputs; serializes per-session activity work | Git adapter, domain entry creation, ledger           |
 | `src/time-log/domain/`                                   | Entry shape, validation, source keys, attribution, and interval rules                                          | Scalar utilities only                                |
@@ -43,6 +45,14 @@ The runtime starts AI evidence at OMP's `agent_start`. Per-turn `turn_end` event
 Terminal notifications are valid even while OMP is unwinding an in-flight prompt and `isIdle()` is still false. Run ownership and callback timestamps are captured before asynchronous observation work; a later run cannot adopt an already queued terminal callback.
 
 An observed `session_shutdown` or completed `session_switch` closes and flushes an unfinished run exactly once at that boundary; neither proves normal completion or meaningful productivity. A new prompt discards an older in-memory run whose terminal event was not observed rather than inventing its end. A crash loses unclosed AI evidence: reads, restarts, and upgrades never extrapolate it or repair the incomplete intervals recorded before 9.4.2.
+
+### Live Worklog Snapshots
+
+Project Time listens for `omp-project-time:live-request` and publishes `omp-project-time:live` on OMP's shared `pi.events` bus. A request with `{ sessionId, presentation: "worklog" }` acquires presentation ownership and returns a snapshot; a request with only `{ sessionId }` releases ownership. Once a session is selected, requests and releases for a stale session do not change presentation or produce current-session snapshots. Switching sessions releases ownership from the previous selection.
+
+Each available version 1 snapshot identifies the selected top-level session and sanitized current project, with `humanMilliseconds`, `agentMilliseconds`, `humanActive`, `agentActive`, and finite `observedAtMs`. The totals are filtered to that exact session and project, union overlaps separately by source, and clip open or future-ending intervals at observation time. An open agent interval is refreshed independently of the human-active window. Errors or missing project state publish an unavailable snapshot without duration fields, so consumers clear old values instead of displaying stale totals or invented zeroes.
+
+Snapshots are read-only and transient; they neither add ledger entries nor expose filesystem paths. Presentation ownership only suppresses Project Time's own keyed status line. It does not pause collection, and a valid release restores the standalone status for the still-selected session.
 
 ### Git Context Observation
 

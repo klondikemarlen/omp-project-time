@@ -27,6 +27,12 @@ test("when optional generation never settles, records unlabeled automatic eviden
   let sessionShutdown: SessionHandler | undefined;
   let agentStart: AgentRunHandler | undefined;
   const pi: ExtensionApi = {
+    events: {
+      emit() {},
+      on() {
+        return () => {};
+      },
+    },
     registerCommand() {},
     on(event, handler) {
       if (event === "before_agent_start") {
@@ -107,6 +113,12 @@ test("when generating labels, uses recorded repository context and preserves unl
   let sessionShutdown: SessionHandler | undefined;
   let agentStart: AgentRunHandler | undefined;
   const pi: ExtensionApi = {
+    events: {
+      emit() {},
+      on() {
+        return () => {};
+      },
+    },
     registerCommand() {},
     on(event, handler) {
       if (event === "before_agent_start") {
