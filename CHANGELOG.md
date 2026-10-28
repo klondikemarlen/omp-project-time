@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [9.6.0] - 2026-10-28
+
+### Added
+
+- Provide transient, current-session and current-project live snapshots with separate human-active and agent-turn totals for downstream presentation.
+- Let Worklog own the selected session's status presentation without changing Project Time collection or persistence.
+
 ## [9.5.0] - 2026-10-20
 
 ### Added
