@@ -37,6 +37,13 @@ These scenarios protect the public evidence contract. They are behavior checks, 
 - Product authority: [`spec/project-time.yml`](../../spec/project-time.yml)
 - Domain and persistence evidence: [`test/time-log.test.ts`](../../test/time-log.test.ts)
 
+## Current-session Worklog Snapshots
+
+**Given** a selected top-level session with retained or ongoing evidence, **when** Worklog requests a live snapshot, **then** version 1 preserves source-separated lifetime totals and includes source-separated local-day totals clipped at local midnight and observation time, the epoch for local midnight, and only the existing sanitized activity label. Exact session and project scope is preserved; unavailable evidence omits duration fields. **When** both activity clocks stop and midnight passes, **then** the selected idle session receives fresh local-day totals without another collector or persisted snapshot.
+
+- Automated evidence: [`test/live-status.test.ts`](../../test/live-status.test.ts)
+- Focused command: `node --import tsx --test test/live-status.test.ts`
+
 ## Git and Work-Item Context
 
 **Given** a branch or worktree transition, **when** the runtime observes it, **then** both clocks retain separate segments with their original context and explicit provenance. Explicit prompt references override branch inference; unrelated branches never inherit a prior ticket. A detached HEAD remains explicit; unavailable Git/GitHub observations are never guessed.

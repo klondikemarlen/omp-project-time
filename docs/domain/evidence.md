@@ -16,14 +16,14 @@ Project Time records local OMP activity as reviewable evidence of project work. 
 | Activity and narrative   | Coarse activity label and optional detailed work description                 | Narrative is review evidence, not billing attribution                                |
 | Work item attribution    | Provenance of an optional GitHub issue/PR or Jira ticket                      | Explicit prompts win; carry-forward stays within the same Git context; branch and linked-PR inference retain provenance |
 | Git context              | Observed branch or detached HEAD plus opaque per-worktree identity           | Context changes segment both clocks; no worktree path or working directory is stored |
-| Live snapshot            | Transient view of current-session evidence                                  | Filters by exact top-level session and sanitized project; keeps source totals separate and exposes no path |
+| Live snapshot            | Transient view of current-session evidence                                  | Filters by exact top-level session and sanitized project; retains lifetime and local-day source totals, optional activity, and exposes no path |
 
 ## Evidence Rules
 
 - Only top-level OMP sessions create entries. Subagents and artifacts belong to their parent session and must not create their own evidence.
 - A work-item attribution, branch, or worktree transition ends the prior interval segment at observation time rather than extending it across changed context.
 - Concurrent repositories retain their full independent intervals. Their totals may exceed elapsed wall-clock time; that is evidence, not an error or an allocation decision.
-- A live Worklog snapshot is a read-only observation, not another evidence entry. It unions overlaps independently within each source, clips intervals at its observation timestamp, and reports no totals when evidence cannot be read.
+- A live Worklog snapshot is a read-only observation, not another evidence entry. It independently unions source intervals, bounds lifetime totals at observation time, clips local-day totals at local midnight, and omits durations when evidence cannot be read.
 - The public snapshot is `omp-project-time/evidence` version 1 and contains raw entries. SQLite is an internal storage detail.
 - Malformed persisted input is rejected rather than treated as absent.
 
@@ -37,7 +37,7 @@ Evidence remains in the local ledger until an explicit CLI prune. `project-time 
 
 Persisted entries may contain sanitized project identity, repository identity, timing, source kind, session identity, coarse activity, optional narrative, structured GitHub/Jira work-item provenance, and branch/detached state with a one-way worktree hash. They must not contain raw worktree or working-directory paths, raw remotes, credentials, prompts, transcripts, artifacts, model metadata, or custom billing attribution.
 
-Live snapshots expose only the selected session, sanitized project label, source totals, activity flags, and observation time. They are transient event-bus data; they do not add stored fields or reveal local paths.
+Live snapshots expose only the selected session, sanitized project label, separate lifetime and local-day source totals, optional existing activity label, activity flags, local day start, and observation time. They are transient event-bus data; they do not add stored fields or reveal local paths.
 
 ## Downstream Use
 

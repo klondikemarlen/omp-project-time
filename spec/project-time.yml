@@ -50,13 +50,18 @@ requirements:
     requirement: >-
       Listen for omp-project-time:live-request on the OMP shared pi.events bus and publish
       omp-project-time:live version 1 snapshots for the current selected top-level session.
-      Available snapshots include sessionId, sanitized project, finite nonnegative
-      humanMilliseconds and agentMilliseconds, humanActive, agentActive, and observedAtMs.
-      Filter totals by exact session and current project, union overlaps separately per
-      source, and bound intervals at observation time. Emit unavailable snapshots without
-      duration fields when state cannot be read or a project is unavailable; consumers can
-      then clear stale values rather than treating errors as zero. Do not persist snapshots
-      or expose filesystem paths.
+      Available snapshots include sessionId, sanitized project, lifetime
+      humanMilliseconds and agentMilliseconds, local-day todayHumanMilliseconds and
+      todayAgentMilliseconds, dayStartAtMs as local midnight, optional activity from the
+      existing sanitized activity label, humanActive, agentActive, and observedAtMs.
+      Filter lifetime and local-day totals by exact session and current project, union
+      overlaps separately per source, and bound intervals at observation time. Local-day
+      totals additionally begin at local calendar midnight, respecting timezone and DST,
+      and include persisted and ongoing intervals. Refresh the selected session's snapshot
+      while idle so a local-day rollover appears after both activity clocks stop. Emit
+      unavailable snapshots without duration fields when state cannot be read or a project
+      is unavailable; consumers can then clear stale values rather than treating errors as
+      zero. Do not persist snapshots or expose filesystem paths.
     rationale: A downstream presentation can read current source-separated evidence without taking over collection or persistence.
   - id: worklog_presentation_handoff
     title: Single status presentation

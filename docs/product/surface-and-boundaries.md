@@ -9,7 +9,7 @@ An OMP user can see the current local Project Time state and export complete raw
 | Surface                 | Behavior                                                                                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | OMP status              | A keyed hook-status line shows the active local interval and configured label. OMP owns placement and layout.                                                                |
-| OMP `pi.events`         | Provides current-session, current-project source totals to Worklog without persisting or exposing paths.                                                                  |
+| OMP `pi.events`         | Provides current-session, current-project lifetime and local-day source totals, local midnight, and the existing activity label to Worklog without persisting or exposing paths. |
 | `/project-time`         | Shows current top-level session state; `--project NAME` selects a persisted local project dashboard.                                                                      |
 | `/project-time entries` | Opens a bounded, read-only local-date preview. It supports `today`, `yesterday`, one `YYYY-MM-DD` date, or an inclusive date range followed by an exact `--project NAME`. |
 | `/project-time stats`   | Shows concise retained-entry counts, source-separated observed durations, time bounds, and the complete managed local-storage footprint.                                  |
@@ -20,7 +20,7 @@ An OMP user can see the current local Project Time state and export complete raw
 
 The interactive preview clips cross-midnight intervals to its selected local dates and shows human and agent totals separately. Statistics intentionally report the same sources separately. The direct binary intentionally exports the complete persisted snapshot instead of applying interactive date filtering.
 
-The live event snapshot is transient and read-only. Its two duration totals are independently overlap-unioned and clipped at observation time; an unavailable read omits totals so a consumer can clear its previous display.
+The live event snapshot is transient and read-only. Its lifetime and local-day human and agent totals are independently overlap-unioned per source and bounded at observation time; daily totals begin at local calendar midnight, including timezone/DST changes. An unavailable read omits duration fields so consumers can clear previous values.
 
 The storage total includes the SQLite ledger, present journal/WAL/SHM sidecars, and retained legacy JSON backup. It is a physical local-store total, not per-project attribution: `--project NAME` filters evidence only.
 
@@ -44,7 +44,7 @@ The selected dashboard and every export read the local ledger. They do not claim
 
 ### Shared live snapshots, not persisted exports
 
-The cross-extension snapshot is limited to the selected top-level session and current sanitized project. It is a view of local Project Time evidence, not remote state, and it does not change ledger contents or expose a working-directory path. Worklog may own the status presentation while it requests snapshots; Project Time continues collecting evidence and suppresses only its duplicate status line.
+The cross-extension snapshot is limited to the selected top-level session and current sanitized project. It is a view of local Project Time evidence, not remote state, and it does not change ledger contents or expose a working-directory path. Lifetime and local-day totals remain separate by source; the daily boundary follows local midnight and refreshes while the selected session is idle. Worklog may own the status presentation while it requests snapshots; Project Time continues collecting evidence and suppresses only its duplicate status line.
 
 ### Intentional local retention
 
