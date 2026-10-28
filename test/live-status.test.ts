@@ -233,7 +233,6 @@ function dailySnapshotFields(
   };
 }
 
-
 test("when Worklog requests live totals, filters by session and project", async (t) => {
   // Arrange
   const fixture = await createFixture(t);
@@ -521,6 +520,7 @@ test("when both activity clocks stop before midnight, refreshes the selected ses
   });
   const dayStartAtMs = new Date(2026, 6, 15).getTime();
   fixture.setNow(dayStartAtMs - 120_000);
+
   // Act
   await fixture.emit("session_start", fixture.context);
   await fixture.emit("before_agent_start", fixture.context);
