@@ -2,10 +2,7 @@ import { summarizeTimeLogEntries } from "../time-log/domain/statistics.js";
 
 export const STATUS_KEY = "project-time";
 export function updateStatus(ctx, state, config) {
-  ctx.ui.setStatus(
-    STATUS_KEY,
-    ctx.ui.theme.fg("dim", statusText(state, config)),
-  );
+  ctx.ui.setStatus(STATUS_KEY, statusText(state, config));
 }
 
 export function clearStatus(ctx) {

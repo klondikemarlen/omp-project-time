@@ -20,6 +20,12 @@ async function createFixture(t: TestContext) {
     (event: never, ctx: ExtensionContext) => Promise<void>
   >();
   const api: ExtensionApi = {
+    events: {
+      emit() {},
+      on() {
+        return () => {};
+      },
+    },
     registerCommand() {},
     appendEntry() {},
     on(event, handler) {

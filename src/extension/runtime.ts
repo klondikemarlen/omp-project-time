@@ -27,21 +27,22 @@ import {
 import { gitContextKey } from "@/time-log/domain/git-context.js";
 import type { TimeLogEntry } from "@/time-log/domain/model.js";
 import type { ProjectTimeState } from "@/time-log/domain/state.js";
+import { LiveSnapshotCoordinator } from "@/extension/live-snapshot-coordinator.js";
+import type { SelectedSessionContext } from "@/extension/live-snapshot-coordinator.js";
 import {
   clearStatus,
   dashboardText,
   projectDashboardText,
   statisticsText,
-  updateStatus,
 } from "@/extension/status-presenter.js";
-import type {
-  ActivityGenerator,
-  GeneratedActivity,
-  ConfigLoader,
-  ExtensionApi,
-  ExtensionContext,
-  ExtensionOptions,
-  SessionEntryLike,
+import {
+  type ActivityGenerator,
+  type ConfigLoader,
+  type ExtensionApi,
+  type ExtensionContext,
+  type ExtensionOptions,
+  type GeneratedActivity,
+  type SessionEntryLike,
 } from "@/extension/types.js";
 
 type RefreshTimer = NodeJS.Timeout;
@@ -257,6 +258,9 @@ export class ProjectTimeRuntime {
   // Git lookups can outlive a later hook; apply observations in callback order.
   private observations: Promise<unknown> = Promise.resolve();
   private selectedSessionManager?: ExtensionContext["sessionManager"];
+  // Session managers are reused across switches, so keep the selected ID with its context.
+  private selectedContext?: SelectedSessionContext;
+  private readonly liveSnapshotCoordinator: LiveSnapshotCoordinator;
   // Run ownership is independent of the expiring human-active status.
   private runningAgentSession?: {
     context: ExtensionContext;
@@ -367,11 +371,25 @@ export class ProjectTimeRuntime {
         }
       },
     );
+    this.liveSnapshotCoordinator = new LiveSnapshotCoordinator({
+      events: this.pi.events,
+      timeLogRecorder: this.timeLogRecorder,
+      sessionStateCoordinator: this.sessionStateCoordinator,
+      selectedContext: () => this.selectedContext,
+      isCurrentSession: (context, sessionId) =>
+        this.isCurrentSession(context, sessionId),
+      observeInOrder: <T>(observe: () => Promise<T>) =>
+        this.observeInOrder(observe),
+      activateSession: (context, nowMs, sessionId) =>
+        this.activateSession(context, nowMs, sessionId),
+    });
     this.prepareLocalData =
       options.prepareLocalData ?? prepareProjectTimeDataRoot;
   }
 
   register(): void {
+    this.liveSnapshotCoordinator.register();
+
     this.scheduleNextRefresh();
 
     this.pi.registerCommand("project-time", {
@@ -381,7 +399,7 @@ export class ProjectTimeRuntime {
       handler: async (args, ctx) => {
         const nowMs = Date.now();
         if (isTopLevelSession(ctx.sessionManager)) {
-          this.selectedSessionManager = ctx.sessionManager;
+          this.selectSession(ctx, ctx.sessionManager.getSessionId());
         }
         if (!(await this.localDataReady(ctx))) return;
         await this.observeInOrder(() =>
@@ -393,49 +411,115 @@ export class ProjectTimeRuntime {
     this.pi.on("session_start", async (_event, ctx) => {
       const nowMs = Date.now();
       if (!isTopLevelSession(ctx.sessionManager)) return;
-      this.selectedSessionManager = ctx.sessionManager;
-      if (!(await this.localDataReady(ctx))) return;
-      await this.observeInOrder(() => this.activateSession(ctx, nowMs));
+      const sessionId = ctx.sessionManager.getSessionId();
+      this.selectSession(ctx, sessionId);
+      if (!(await this.localDataReady(ctx))) {
+        this.liveSnapshotCoordinator.emitUnavailable(sessionId, nowMs, undefined, ctx);
+        return;
+      }
+      await this.observeInOrder(async () => {
+        try {
+          await this.activateSession(ctx, nowMs, sessionId);
+        } catch {
+          this.liveSnapshotCoordinator.emitUnavailable(
+            sessionId,
+            Date.now(),
+            undefined,
+            ctx,
+          );
+          return;
+        }
+        await this.liveSnapshotCoordinator.publish(
+          ctx,
+          sessionId,
+          Date.now(),
+        );
+      });
     });
 
     this.pi.on("session_switch", async (_event, ctx) => {
       const nowMs = Date.now();
       if (!isTopLevelSession(ctx.sessionManager)) return;
-      this.selectedSessionManager = ctx.sessionManager;
-      if (!(await this.localDataReady(ctx))) return;
+      const sessionId = ctx.sessionManager.getSessionId();
+      this.selectSession(ctx, sessionId);
+      if (!(await this.localDataReady(ctx))) {
+        this.liveSnapshotCoordinator.emitUnavailable(
+          sessionId,
+          nowMs,
+          undefined,
+          ctx,
+        );
+        return;
+      }
       await this.observeInOrder(async () => {
-        const previous = this.runningAgentSession;
-        if (previous !== undefined) {
-          await this.finishAgentRun(
-            previous.context,
-            previous.sessionId,
-            nowMs,
+        try {
+          const previous = this.runningAgentSession;
+          if (previous !== undefined) {
+            await this.finishAgentRun(
+              previous.context,
+              previous.sessionId,
+              nowMs,
+            );
+            await this.sessionStateCoordinator.flush(
+              previous.sessionId,
+              (message) =>
+                previous.context.ui.notify(
+                  `Project Time log error: ${message}`,
+                  "error",
+                ),
+            );
+          }
+          await this.activateSession(ctx, nowMs, sessionId);
+        } catch {
+          this.liveSnapshotCoordinator.emitUnavailable(
+            sessionId,
+            Date.now(),
+            undefined,
+            ctx,
           );
-          await this.sessionStateCoordinator.flush(
-            previous.sessionId,
-            (message) =>
-              previous.context.ui.notify(
-                `Project Time log error: ${message}`,
-                "error",
-              ),
-          );
+          return;
         }
-        await this.activateSession(ctx, nowMs);
+        await this.liveSnapshotCoordinator.publish(
+          ctx,
+          sessionId,
+          Date.now(),
+        );
       });
     });
 
     this.pi.on("before_agent_start", async (event, ctx) => {
       const nowMs = Date.now();
       if (!isTopLevelSession(ctx.sessionManager)) return;
+      const sessionId = ctx.sessionManager.getSessionId();
+      this.selectSession(ctx, sessionId);
+      let entries: SessionEntryLike[];
+      try {
+        entries = ctx.sessionManager.getEntries();
+      } catch {
+        this.liveSnapshotCoordinator.emitUnavailable(
+          sessionId,
+          nowMs,
+          undefined,
+          ctx,
+        );
+        return;
+      }
       const observation: PromptObservation = {
         prompt: event.prompt,
         context: ctx,
-        sessionId: ctx.sessionManager.getSessionId(),
-        entries: ctx.sessionManager.getEntries(),
+        sessionId,
+        entries,
         atMs: nowMs,
       };
-      this.selectedSessionManager = ctx.sessionManager;
-      if (!(await this.localDataReady(ctx))) return;
+      if (!(await this.localDataReady(ctx))) {
+        this.liveSnapshotCoordinator.emitUnavailable(
+          sessionId,
+          nowMs,
+          undefined,
+          ctx,
+        );
+        return;
+      }
       await this.observeInOrder(() => this.recordPrompt(observation));
     });
 
@@ -443,52 +527,141 @@ export class ProjectTimeRuntime {
       const nowMs = Date.now();
       if (!isTopLevelSession(ctx.sessionManager)) return;
       const sessionId = ctx.sessionManager.getSessionId();
+      this.selectSession(ctx, sessionId);
       const current = this.runningAgentSession;
       const run =
         current !== undefined && current.sessionId === sessionId
           ? current
           : { context: ctx, sessionId };
       this.runningAgentSession = run;
-      if (!(await this.localDataReady(ctx))) return;
+      if (!(await this.localDataReady(ctx))) {
+        this.liveSnapshotCoordinator.emitUnavailable(sessionId, nowMs, undefined, ctx);
+        return;
+      }
 
       await this.observeInOrder(async () => {
         if (this.runningAgentSession !== run) return;
         this.timeLogRecorder.recordAgentStart(sessionId, nowMs);
+        await this.liveSnapshotCoordinator.publish(ctx, sessionId, Date.now());
       });
     });
 
     this.pi.on("turn_end", async (_event, ctx) => {
       const nowMs = Date.now();
       const run = this.runningAgentSession;
-      if (run === undefined || !(await this.localDataReady(ctx))) return;
+      if (run === undefined) return;
+      if (!(await this.localDataReady(ctx))) {
+        this.liveSnapshotCoordinator.emitUnavailable(
+          run.sessionId,
+          nowMs,
+          undefined,
+          ctx,
+        );
+        return;
+      }
       await this.observeInOrder(async () => {
         if (this.runningAgentSession !== run) return;
-        await this.settleCurrentTurn(run.context, run.sessionId, nowMs);
+        try {
+          await this.settleCurrentTurn(run.context, run.sessionId, nowMs);
+        } catch {
+          this.liveSnapshotCoordinator.emitUnavailable(
+            run.sessionId,
+            Date.now(),
+            undefined,
+            run.context,
+          );
+          return;
+        }
+        await this.liveSnapshotCoordinator.publish(
+          run.context,
+          run.sessionId,
+          Date.now(),
+        );
       });
     });
 
     this.pi.on("agent_end", async (event, ctx) => {
       const nowMs = Date.now();
-      if (event.willContinue === true) return;
       const run = this.runningAgentSession;
-      if (run === undefined || !(await this.localDataReady(ctx))) return;
+      if (run === undefined) return;
+      if (!(await this.localDataReady(ctx))) {
+        this.liveSnapshotCoordinator.emitUnavailable(
+          run.sessionId,
+          nowMs,
+          undefined,
+          ctx,
+        );
+        return;
+      }
       await this.observeInOrder(async () => {
         if (this.runningAgentSession !== run) return;
-        await this.finishAgentRun(run.context, run.sessionId, nowMs);
+        try {
+          if (event.willContinue === true) {
+            await this.liveSnapshotCoordinator.publish(
+              run.context,
+              run.sessionId,
+              Date.now(),
+            );
+            return;
+          }
+          await this.finishAgentRun(run.context, run.sessionId, nowMs);
+        } catch {
+          this.liveSnapshotCoordinator.emitUnavailable(
+            run.sessionId,
+            Date.now(),
+            undefined,
+            run.context,
+          );
+          return;
+        }
+        await this.liveSnapshotCoordinator.publish(
+          run.context,
+          run.sessionId,
+          Date.now(),
+        );
       });
     });
 
     this.pi.on("session_shutdown", async (_event, ctx) => {
       const nowMs = Date.now();
       const sessionId = ctx.sessionManager.getSessionId();
-      if (!(await this.localDataReady(ctx))) return;
-      await this.observeInOrder(() => {
-        const run = this.runningAgentSession;
-        return this.shutdownSession(
-          run?.context ?? ctx,
-          nowMs,
-          run?.sessionId ?? sessionId,
+      if (!(await this.localDataReady(ctx))) {
+        this.liveSnapshotCoordinator.emitUnavailable(
+          sessionId,
+          Date.now(),
+          undefined,
+          ctx,
         );
+        if (this.selectedContext?.sessionId === sessionId) {
+          this.selectedContext.active = false;
+        }
+        this.liveSnapshotCoordinator.releaseSession(sessionId);
+        return;
+      }
+      await this.observeInOrder(async () => {
+        const run = this.runningAgentSession;
+        const endingSessionId = run?.sessionId ?? sessionId;
+        const endingContext = run?.context ?? ctx;
+        try {
+          await this.shutdownSession(endingContext, nowMs, endingSessionId);
+          await this.liveSnapshotCoordinator.publish(
+            endingContext,
+            endingSessionId,
+            Date.now(),
+          );
+        } catch {
+          this.liveSnapshotCoordinator.emitUnavailable(
+            endingSessionId,
+            Date.now(),
+            undefined,
+            endingContext,
+          );
+        } finally {
+          this.liveSnapshotCoordinator.releaseSession(endingSessionId);
+          if (this.selectedContext?.sessionId === endingSessionId) {
+            this.selectedContext.active = false;
+          }
+        }
       });
     });
   }
@@ -510,6 +683,30 @@ export class ProjectTimeRuntime {
       ctx.ui.notify(errorMessage(error), "error");
       return false;
     }
+  }
+
+  private selectSession(ctx: ExtensionContext, sessionId: string): void {
+    this.liveSnapshotCoordinator.selectSession(sessionId);
+    this.selectedSessionManager = ctx.sessionManager;
+    this.selectedContext = {
+      active: true,
+      context: ctx,
+      sessionId,
+    };
+  }
+
+  private isCurrentSession(
+    ctx: ExtensionContext,
+    sessionId: string,
+  ): boolean {
+    const selected = this.selectedContext;
+    return (
+      selected !== undefined &&
+      selected.active &&
+      selected.sessionId === sessionId &&
+      selected.context.sessionManager.getSessionId() === sessionId &&
+      ctx.sessionManager.getSessionId() === sessionId
+    );
   }
 
   private async showCurrentStatus(
@@ -643,16 +840,19 @@ export class ProjectTimeRuntime {
   private async activateSession(
     ctx: ExtensionContext,
     nowMs: number,
+    sessionId: string,
   ): Promise<void> {
-    if (!isTopLevelSession(ctx.sessionManager)) return;
+    if (!this.isCurrentSession(ctx, sessionId)) return;
 
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
       this.clearActiveStatus(ctx);
+      this.liveSnapshotCoordinator.emitUnavailable(sessionId, nowMs, undefined, ctx);
       return;
     }
+    if (!this.isCurrentSession(ctx, sessionId)) return;
+    if (!isTopLevelSession(ctx.sessionManager)) return;
 
-    const sessionId = ctx.sessionManager.getSessionId();
     const settledState = await this.settleWithGitContext({
       config,
       cwd: ctx.cwd,
@@ -668,7 +868,7 @@ export class ProjectTimeRuntime {
       return;
     }
 
-    updateStatus(ctx, settledState, config);
+    this.liveSnapshotCoordinator.renderStatus(ctx, sessionId, settledState, config);
   }
 
   private async recordPrompt(observation: PromptObservation): Promise<void> {
@@ -679,14 +879,15 @@ export class ProjectTimeRuntime {
       entries,
       atMs: promptAtMs,
     } = observation;
-    if (sessionId !== ctx.sessionManager.getSessionId()) return;
+    if (!this.isCurrentSession(ctx, sessionId)) return;
 
     const config = await this.loadConfigForStatus(ctx);
     if (config === undefined) {
       this.clearActiveStatus(ctx);
+      this.liveSnapshotCoordinator.emitUnavailable(sessionId, promptAtMs, undefined, ctx);
       return;
     }
-    if (sessionId !== ctx.sessionManager.getSessionId()) return;
+    if (!this.isCurrentSession(ctx, sessionId)) return;
 
     const previous = this.runningAgentSession;
     if (previous !== undefined) {
@@ -713,7 +914,7 @@ export class ProjectTimeRuntime {
     const generatedActivity = await this.resolveGeneratedActivity(prompt, ctx);
     const repository = await this.timeLogRecorder.repositoryFor(ctx.cwd);
     const git = await this.gitContextResolver.resolve(ctx.cwd, repository);
-    if (sessionId !== ctx.sessionManager.getSessionId()) return;
+    if (!this.isCurrentSession(ctx, sessionId)) return;
     const currentState = this.sessionStateCoordinator.stateFor(
       update.sessionId,
       update.entries,
@@ -753,7 +954,8 @@ export class ProjectTimeRuntime {
       );
     }
     const nextState = await this.sessionStateCoordinator.recordPrompt(update);
-    updateStatus(ctx, nextState, config);
+    this.liveSnapshotCoordinator.renderStatus(ctx, sessionId, nextState, config);
+    await this.liveSnapshotCoordinator.publish(ctx, sessionId, Date.now());
   }
 
   private async settleWithGitContext(
@@ -847,7 +1049,7 @@ export class ProjectTimeRuntime {
         ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     });
     this.rememberActiveSession(ctx, sessionId, settledState);
-    updateStatus(ctx, settledState, config);
+    this.liveSnapshotCoordinator.renderStatus(ctx, sessionId, settledState, config);
   }
 
   private async finishAgentRun(
@@ -882,9 +1084,13 @@ export class ProjectTimeRuntime {
       ctx.ui.notify(`Project Time log error: ${message}`, "error"),
     );
 
-    if (this.runtimeState.activeSessionId !== sessionId) return;
-
-    this.clearActiveStatus(ctx);
+    if (this.runtimeState.activeSessionId === sessionId) {
+      this.clearActiveStatus(ctx);
+      return;
+    }
+    if (this.selectedContext?.sessionId === sessionId) {
+      clearStatus(ctx);
+    }
   }
 
   private async refreshActiveStatus(nowMs: number): Promise<number> {
@@ -895,10 +1101,19 @@ export class ProjectTimeRuntime {
     if (activeContext === undefined || activeSessionId === undefined) {
       return ProjectTimeRuntime.defaultRefreshIntervalMs;
     }
+    if (!this.isCurrentSession(activeContext, activeSessionId)) {
+      return ProjectTimeRuntime.defaultRefreshIntervalMs;
+    }
 
     const config = await this.loadConfigForStatus(activeContext);
     if (config === undefined) {
       this.clearActiveStatus(activeContext);
+      this.liveSnapshotCoordinator.emitUnavailable(
+        activeSessionId,
+        nowMs,
+        undefined,
+        activeContext,
+      );
       return ProjectTimeRuntime.defaultRefreshIntervalMs;
     }
 
@@ -911,8 +1126,22 @@ export class ProjectTimeRuntime {
       notifyTimeLogError: (message) =>
         activeContext.ui.notify(`Project Time log error: ${message}`, "error"),
     });
+    if (!this.isCurrentSession(activeContext, activeSessionId)) {
+      return ProjectTimeRuntime.defaultRefreshIntervalMs;
+    }
+
     this.rememberActiveSession(activeContext, activeSessionId, settledState);
-    updateStatus(activeContext, settledState, config);
+    this.liveSnapshotCoordinator.renderStatus(
+      activeContext,
+      activeSessionId,
+      settledState,
+      config,
+    );
+    await this.liveSnapshotCoordinator.publish(
+      activeContext,
+      activeSessionId,
+      Date.now(),
+    );
 
     return ProjectTimeRuntime.refreshIntervalMs(config);
   }
@@ -941,12 +1170,27 @@ export class ProjectTimeRuntime {
   }
 
   private reportUnexpectedRefreshError(error: unknown): void {
-    const activeContext = this.runtimeState.activeContext;
-    if (activeContext === undefined) return;
+    const activeContext =
+      this.runtimeState.activeContext ?? this.runningAgentSession?.context;
+    const activeSessionId =
+      this.runtimeState.activeSessionId ?? this.runningAgentSession?.sessionId;
+    if (
+      activeContext === undefined ||
+      activeSessionId === undefined ||
+      !this.isCurrentSession(activeContext, activeSessionId)
+    ) {
+      return;
+    }
 
     activeContext.ui.notify(
       `Project Time refresh error: ${errorMessage(error)}`,
       "error",
+    );
+    this.liveSnapshotCoordinator.emitUnavailable(
+      activeSessionId,
+      Date.now(),
+      undefined,
+      activeContext,
     );
     this.clearActiveStatus(activeContext);
   }

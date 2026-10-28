@@ -78,7 +78,32 @@ export type AgentRunHandler = (
   ctx: ExtensionContext,
 ) => Promise<void>
 
+export const PROJECT_TIME_LIVE_REQUEST_EVENT = "omp-project-time:live-request"
+export const PROJECT_TIME_LIVE_EVENT = "omp-project-time:live"
+
+export type ProjectTimeLiveRequest = {
+  sessionId: string
+  presentation?: "worklog"
+}
+
+export type ProjectTimeLiveSnapshot = {
+  version: 1
+  sessionId: string
+  project?: string
+  humanMilliseconds?: number
+  agentMilliseconds?: number
+  humanActive: boolean
+  agentActive: boolean
+  observedAtMs: number
+}
+
+type ExtensionEventBus = {
+  emit(channel: string, data: unknown): void
+  on(channel: string, handler: (data: unknown) => void): () => void
+}
+
 export type ExtensionApi = {
+  events: ExtensionEventBus
   pi?: { settings?: Record<string, unknown> }
   registerCommand(
     name: string,

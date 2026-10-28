@@ -41,6 +41,10 @@ type AgentTurn = {
 };
 
 type ErrorNotifier = (message: string) => void;
+export type OpenAgentInterval = {
+  project: string;
+  startAtMs: number;
+};
 
 export class AutomaticTimeLogRecorder {
   private lastErrorMessage: string | undefined;
@@ -85,6 +89,26 @@ export class AutomaticTimeLogRecorder {
 
     activity.agentTurnStartAtMs = startAtMs;
     activity.agentRepository = activity.repository;
+  }
+  async openAgentInterval(
+    sessionId: string,
+  ): Promise<OpenAgentInterval | undefined> {
+    const activity = this.sessionActivities.get(sessionId);
+    if (
+      activity === undefined ||
+      activity.agentTurnStartAtMs === undefined ||
+      activity.agentRepository === undefined
+    ) {
+      return undefined;
+    }
+
+    const repository = await activity.agentRepository;
+    if (repository === undefined) return undefined;
+
+    return {
+      project: repository.project,
+      startAtMs: activity.agentTurnStartAtMs,
+    };
   }
 
   recordSettlement(settlement: Settlement, notifyError: ErrorNotifier): void {
@@ -173,6 +197,13 @@ export class AutomaticTimeLogRecorder {
 
   async entries(): Promise<TimeLogEntry[]> {
     return this.ledger.entries();
+  }
+
+  async entriesForSessionAndProject(
+    sessionId: string,
+    project: string,
+  ): Promise<TimeLogEntry[]> {
+    return this.ledger.entriesForSessionAndProject(sessionId, project);
   }
 
   async storageBytes(): Promise<number> {
